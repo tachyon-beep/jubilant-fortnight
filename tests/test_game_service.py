@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import sqlite3
+
 import pytest
 
 from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation
@@ -130,6 +132,23 @@ def test_recruitment_and_cooldown_flow(tmp_path):
 
     archive = service.state.list_press_releases()
     assert any(item.release.type == "recruitment_report" for item in archive)
+
+
+def test_digest_emits_timeline_update(tmp_path):
+    service = build_service(tmp_path)
+    days_per_year = service.settings.time_scale_days_per_year
+    rewind = datetime.now(timezone.utc) - timedelta(days=days_per_year)
+    with sqlite3.connect(service.state._db_path) as conn:
+        conn.execute(
+            "UPDATE timeline SET last_advanced = ?, current_year = ? WHERE singleton = 1",
+            (rewind.isoformat(), service.settings.timeline_start_year),
+        )
+        conn.commit()
+
+    releases = service.advance_digest()
+
+    assert any(rel.type == "timeline_update" for rel in releases)
+    assert service.state.current_year() >= service.settings.timeline_start_year + 1
 
 
 def test_defection_offer_and_digest(tmp_path):

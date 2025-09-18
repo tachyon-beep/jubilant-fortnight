@@ -9,7 +9,7 @@
 | Provide an asynchronous multiplayer experience supporting between four and eight concurrent players. | Partially Implemented | Discord slash commands let multiple players act asynchronously, but there is no explicit enforcement of player counts or turn management yet.【F:great_work/discord_bot.py†L32-L176】 |
 | Deliver all player moves through a Discord bot. | Partially Implemented | Core actions (theories, expeditions, recruitment, status, archives) are exposed via slash commands, while defection handling and admin moves remain service-only.【F:great_work/discord_bot.py†L32-L176】【F:great_work/service.py†L347-L440】 |
 | Make every action publicly visible to all participants. | Partially Implemented | Major moves emit press releases and events, but Gazette digests are not automatically published to public channels and some responses remain ephemeral.【F:great_work/service.py†L120-L633】【F:great_work/scheduler.py†L12-L64】 |
-| Advance the shared narrative timeline by one in-game year for each real-world day that passes. | Not Implemented | The configuration defines a desired time scale, yet no runtime logic advances years or references the value beyond configuration loading.【F:great_work/config.py†L10-L53】 |
+| Advance the shared narrative timeline by one in-game year for each real-world day that passes. | Implemented | Digest advancement now calls into timeline persistence to convert elapsed real days into in-world years, emitting Gazette updates whenever the calendar rolls forward.【F:great_work/service.py†L480-L528】【F:great_work/state.py†L38-L174】 |
 
 ### Scholar Management
 

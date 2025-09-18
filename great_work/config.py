@@ -16,6 +16,7 @@ class Settings:
     """Typed view over the settings YAML file."""
 
     time_scale_days_per_year: int
+    timeline_start_year: int
     gazette_times: list[str]
     symposium_day: str
     confidence_wagers: Dict[str, Dict[str, int]]
@@ -30,6 +31,7 @@ class Settings:
         influence_caps = data.get("influence_caps", {"base": 5, "per_reputation": 0.0})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
+            timeline_start_year=int(data["time_scale"].get("start_year", 1920)),
             gazette_times=list(data["timing"]["gazette_times"]),
             symposium_day=data["timing"]["symposium_day"],
             confidence_wagers=data["confidence_wagers"],

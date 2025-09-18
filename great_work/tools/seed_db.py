@@ -4,13 +4,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ..config import get_settings
 from ..scholars import ScholarRepository
 from ..state import GameState
 
 
 def seed_database(path: Path) -> None:
     repo = ScholarRepository()
-    state = GameState(path, repository=repo)
+    settings = get_settings()
+    state = GameState(path, repository=repo, start_year=settings.timeline_start_year)
     state.seed_base_scholars()
     print(f"Seeded {len(list(state.all_scholars()))} scholars into {path}")
 
