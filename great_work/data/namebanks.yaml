@@ -1,0 +1,40 @@
+regions:
+  coastal:
+    given:
+      - Elara
+      - Nadiya
+      - Tomas
+      - Liora
+      - Sahar
+      - Orion
+    surname:
+      - Ironquill
+      - Ashraf
+      - Blackstone
+      - Fieldstone
+      - Kassis
+      - Navarro
+  highlands:
+    given:
+      - Mara
+      - Rowan
+      - Idris
+      - Selene
+      - Petra
+    surname:
+      - Stormwatch
+      - Emberfall
+      - Stonetide
+      - Frostwell
+      - Dawnsinger
+  desert:
+    given:
+      - Rashad
+      - Amira
+      - Layla
+      - Samir
+    surname:
+      - Al-Sharif
+      - Zayyad
+      - Bint-Khalid
+      - Al-Hazim

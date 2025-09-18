@@ -1,0 +1,16 @@
+factions:
+  - name: Academic Institutions
+    key: academia
+    description: "Universities and institutes that gatekeep prestige."
+  - name: Government
+    key: government
+    description: "Grants, permits, and national archives."
+  - name: Industry
+    key: industry
+    description: "Equipment suppliers and logistics."
+  - name: Religious Orders
+    key: religion
+    description: "Custodians of sacred sites and texts."
+  - name: Foreign Powers
+    key: foreign
+    description: "International rivals with tempting offers."
