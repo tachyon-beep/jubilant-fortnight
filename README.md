@@ -14,8 +14,10 @@ This repository contains a playable MVP aligned with the provided design:
 
 ## Getting started
 
+Ensure you are running Python 3.12 or newer, then create a virtual environment:
+
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 ```
