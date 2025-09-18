@@ -1,5 +1,6 @@
 time_scale:
   real_days_per_year: 1
+  start_year: 1920
 timing:
   gazette_times:
     - "13:00"

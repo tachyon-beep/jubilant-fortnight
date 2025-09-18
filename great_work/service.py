@@ -92,7 +92,11 @@ class GameService:
     ) -> None:
         self.settings = settings or get_settings()
         self.repository = repository or ScholarRepository()
-        self.state = GameState(db_path, repository=self.repository)
+        self.state = GameState(
+            db_path,
+            repository=self.repository,
+            start_year=self.settings.timeline_start_year,
+        )
         self.resolver = ExpeditionResolver(failure_tables or FailureTables())
         self._rng = DeterministicRNG(seed=42)
         self._pending_expeditions: Dict[str, ExpeditionOrder] = {}
@@ -491,6 +495,35 @@ class GameService:
         """Advance the digest tick, decaying cooldowns and maintaining the roster."""
 
         releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+        years_elapsed, current_year = self.state.advance_timeline(
+            now, self.settings.time_scale_days_per_year
+        )
+        if years_elapsed:
+            timeline_press = PressRelease(
+                type="timeline_update",
+                headline=f"The year turns to {current_year}",
+                body=(
+                    "The Gazette notes the turning of the year. "
+                    f"{years_elapsed} year(s) slip into history and the calendar now reads {current_year}."
+                ),
+                metadata={
+                    "current_year": current_year,
+                    "years_elapsed": years_elapsed,
+                },
+            )
+            self._archive_press(timeline_press, now)
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="timeline_advanced",
+                    payload={
+                        "current_year": current_year,
+                        "years_elapsed": years_elapsed,
+                    },
+                )
+            )
+            releases.append(timeline_press)
         for player in list(self.state.all_players()):
             player.tick_cooldowns()
             self.state.upsert_player(player)

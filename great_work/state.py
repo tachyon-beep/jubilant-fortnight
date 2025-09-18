@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -89,16 +89,29 @@ CREATE TABLE IF NOT EXISTS followups (
     payload TEXT NOT NULL,
     resolve_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS timeline (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    current_year INTEGER NOT NULL,
+    last_advanced TEXT NOT NULL
+);
 """
 
 
 class GameState:
     """High level interface for working with persistent state."""
 
-    def __init__(self, db_path: Path, repository: ScholarRepository | None = None) -> None:
+    def __init__(
+        self,
+        db_path: Path,
+        repository: ScholarRepository | None = None,
+        *,
+        start_year: int,
+    ) -> None:
         self._db_path = db_path
         self._repo = repository or ScholarRepository()
+        self._start_year = start_year
         self._ensure_schema()
+        self._ensure_timeline()
         self._cached_players: Dict[str, Player] = {}
         self._cached_scholars: Dict[str, Scholar] = {}
 
@@ -106,6 +119,19 @@ class GameState:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.executescript(_DB_SCHEMA)
             conn.commit()
+
+    def _ensure_timeline(self) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT current_year, last_advanced FROM timeline WHERE singleton = 1"
+            ).fetchone()
+            if row is None:
+                now = datetime.now(timezone.utc)
+                conn.execute(
+                    "INSERT INTO timeline (singleton, current_year, last_advanced) VALUES (1, ?, ?)",
+                    (self._start_year, now.isoformat()),
+                )
+                conn.commit()
 
     # Player management -------------------------------------------------
     def upsert_player(self, player: Player) -> None:
@@ -282,6 +308,42 @@ class GameState:
                 )
             )
         return events
+
+    # Timeline ----------------------------------------------------------
+    def current_year(self) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT current_year FROM timeline WHERE singleton = 1"
+            ).fetchone()
+        if row is None:
+            return self._start_year
+        return int(row[0])
+
+    def advance_timeline(self, now: datetime, days_per_year: int) -> Tuple[int, int]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT current_year, last_advanced FROM timeline WHERE singleton = 1"
+            ).fetchone()
+        if row is None:
+            # Should not happen, but keep behaviour predictable
+            current_year = self._start_year
+            last_advanced = now
+        else:
+            current_year = int(row[0])
+            last_advanced = datetime.fromisoformat(row[1])
+        delta_days = (now.date() - last_advanced.date()).days
+        if delta_days < days_per_year:
+            return 0, current_year
+        years_elapsed = delta_days // days_per_year
+        new_year = current_year + years_elapsed
+        new_anchor = last_advanced + timedelta(days=years_elapsed * days_per_year)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE timeline SET current_year = ?, last_advanced = ? WHERE singleton = 1",
+                (new_year, new_anchor.isoformat()),
+            )
+            conn.commit()
+        return years_elapsed, new_year
 
     # Theory log --------------------------------------------------------
     def record_theory(self, record: TheoryRecord) -> None:
