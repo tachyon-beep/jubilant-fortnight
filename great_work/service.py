@@ -483,6 +483,680 @@ class GameService:
             "thresholds": thresholds,
         }
 
+    def queue_mentorship(
+        self,
+        player_id: str,
+        scholar_id: str,
+        career_track: str | None = None,
+    ) -> PressRelease:
+        """Queue a mentorship for the next digest resolution."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError("Unknown player")
+
+        scholar = self.state.get_scholar(scholar_id)
+        if not scholar:
+            raise ValueError(f"Scholar {scholar_id} not found")
+
+        # Check if scholar already has an active mentorship
+        existing = self.state.get_active_mentorship(scholar_id)
+        if existing:
+            raise ValueError(f"Scholar {scholar_id} already has an active mentor")
+
+        # Queue the mentorship
+        mentorship_id = self.state.add_mentorship(player_id, scholar_id, career_track)
+
+        # Generate press release
+        quote = f"I shall guide {scholar.name} towards greater achievements."
+        press = academic_gossip(
+            GossipContext(
+                scholar=player.display_name,
+                quote=quote,
+                trigger=f"Mentorship of {scholar.name}",
+            )
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="mentorship_queued",
+                payload={
+                    "player": player_id,
+                    "scholar": scholar_id,
+                    "career_track": career_track,
+                    "mentorship_id": mentorship_id,
+                },
+            )
+        )
+
+        return press
+
+    def assign_lab(
+        self,
+        player_id: str,
+        scholar_id: str,
+        career_track: str,
+    ) -> PressRelease:
+        """Assign a scholar to a new career track (Academia or Industry)."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError("Unknown player")
+
+        scholar = self.state.get_scholar(scholar_id)
+        if not scholar:
+            raise ValueError(f"Scholar {scholar_id} not found")
+
+        if career_track not in self._CAREER_TRACKS:
+            raise ValueError(f"Invalid career track: {career_track}. Choose from {list(self._CAREER_TRACKS.keys())}")
+
+        # Check if player is mentoring this scholar
+        mentorship = self.state.get_active_mentorship(scholar_id)
+        if not mentorship or mentorship[1] != player_id:
+            raise ValueError(f"You must be actively mentoring {scholar.name} to assign their lab")
+
+        # Update scholar's career track
+        old_track = scholar.career.get("track", "Academia")
+        scholar.career["track"] = career_track
+
+        # Reset to first tier of new track if changing tracks
+        if old_track != career_track:
+            scholar.career["tier"] = self._CAREER_TRACKS[career_track][0]
+            scholar.career["ticks"] = 0
+
+        self.state.save_scholar(scholar)
+
+        # Generate press release
+        quote = f"{scholar.name} has been assigned to the {career_track} track under my mentorship."
+        press = academic_gossip(
+            GossipContext(
+                scholar=player.display_name,
+                quote=quote,
+                trigger=f"Lab assignment for {scholar.name}",
+            )
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="lab_assigned",
+                payload={
+                    "player": player_id,
+                    "scholar": scholar_id,
+                    "career_track": career_track,
+                    "old_track": old_track,
+                },
+            )
+        )
+
+        return press
+
+    def launch_conference(
+        self,
+        player_id: str,
+        theory_id: int,
+        confidence: ConfidenceLevel,
+        supporters: List[str],
+        opposition: List[str],
+    ) -> PressRelease:
+        """Queue a conference to debate a theory with public reputation stakes."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError("Unknown player")
+
+        # Check if theory exists
+        theory_data = self.state.get_theory_by_id(theory_id)
+        if not theory_data:
+            raise ValueError(f"Theory {theory_id} not found")
+        _, theory = theory_data
+
+        # Generate unique conference code
+        code = f"CONF-{self._rng.randint(1000, 9999)}"
+
+        # Validate supporters and opposition are scholars
+        all_scholars = {s.id for s in self.state.all_scholars()}
+        for scholar_id in supporters:
+            if scholar_id not in all_scholars:
+                raise ValueError(f"Scholar {scholar_id} not found")
+        for scholar_id in opposition:
+            if scholar_id not in all_scholars:
+                raise ValueError(f"Scholar {scholar_id} not found")
+
+        # Queue the conference
+        self.state.add_conference(
+            code=code,
+            player_id=player_id,
+            theory_id=theory_id,
+            confidence=confidence.value,
+            supporters=supporters,
+            opposition=opposition,
+        )
+
+        # Generate press release
+        supporter_names = [s.name for s in self.state.all_scholars() if s.id in supporters]
+        opposition_names = [s.name for s in self.state.all_scholars() if s.id in opposition]
+
+        quote = f"Conference {code} announced to debate: {theory.theory}"
+        press = academic_gossip(
+            GossipContext(
+                scholar=player.display_name,
+                quote=quote,
+                trigger=f"Conference on theory #{theory_id}",
+            )
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="conference_launched",
+                payload={
+                    "code": code,
+                    "player": player_id,
+                    "theory_id": theory_id,
+                    "confidence": confidence.value,
+                    "supporters": supporters,
+                    "opposition": opposition,
+                },
+            )
+        )
+
+        return press
+
+    def resolve_conferences(self) -> List[PressRelease]:
+        """Resolve all pending conferences during digest."""
+        releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+
+        for code, player_id, theory_id, confidence_str, supporters, opposition in self.state.get_pending_conferences():
+            player = self.state.get_player(player_id)
+            if not player:
+                continue
+
+            theory_data = self.state.get_theory_by_id(theory_id)
+            if not theory_data:
+                continue
+            _, theory = theory_data
+
+            confidence = ConfidenceLevel(confidence_str)
+
+            # Simple resolution: roll d100 with modifiers based on support
+            base_roll = self._rng.randint(1, 100)
+            support_modifier = len(supporters) * 5
+            opposition_modifier = len(opposition) * 5
+            final_roll = base_roll + support_modifier - opposition_modifier
+
+            # Determine outcome based on roll
+            if final_roll >= 60:
+                outcome = ExpeditionOutcome.SUCCESS
+            elif final_roll >= 40:
+                outcome = ExpeditionOutcome.PARTIAL
+            else:
+                outcome = ExpeditionOutcome.FAILURE
+
+            # Apply reputation changes
+            reputation_delta = self._confidence_delta(confidence, outcome)
+            player.adjust_reputation(
+                reputation_delta,
+                self.settings.reputation_bounds["min"],
+                self.settings.reputation_bounds["max"],
+            )
+            self.state.upsert_player(player)
+
+            # Resolve the conference
+            self.state.resolve_conference(
+                code=code,
+                outcome=outcome.value,
+                reputation_delta=reputation_delta,
+                result_payload={
+                    "roll": base_roll,
+                    "support_modifier": support_modifier,
+                    "opposition_modifier": opposition_modifier,
+                    "final_roll": final_roll,
+                },
+            )
+
+            # Generate press release
+            outcome_text = {
+                ExpeditionOutcome.SUCCESS: "The conference concluded with resounding support for the theory",
+                ExpeditionOutcome.PARTIAL: "The conference ended with mixed opinions",
+                ExpeditionOutcome.FAILURE: "The conference thoroughly rejected the theory",
+            }[outcome]
+
+            quote = f"Conference {code} result: {outcome_text}. Reputation change: {reputation_delta:+d}"
+            press = academic_gossip(
+                GossipContext(
+                    scholar="The Academy",
+                    quote=quote,
+                    trigger=f"Conference {code} resolution",
+                )
+            )
+
+            releases.append(press)
+            self._archive_press(press, now)
+
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="conference_resolved",
+                    payload={
+                        "code": code,
+                        "outcome": outcome.value,
+                        "reputation_delta": reputation_delta,
+                        "final_roll": final_roll,
+                    },
+                )
+            )
+
+        return releases
+
+    def start_symposium(self, topic: str, description: str) -> PressRelease:
+        """Start a new symposium with the given topic."""
+        now = datetime.now(timezone.utc)
+
+        # Resolve any previous symposium first
+        current = self.state.get_current_symposium_topic()
+        if current:
+            self.resolve_symposium()
+
+        # Create new symposium topic
+        topic_id = self.state.create_symposium_topic(
+            symposium_date=now,
+            topic=topic,
+            description=description,
+        )
+
+        # Generate press release
+        press = PressRelease(
+            type="symposium_announcement",
+            headline=f"Symposium Topic: {topic}",
+            body=(
+                f"The Academy announces this week's symposium topic: {topic}\n\n"
+                f"{description}\n\n"
+                "Cast your votes with /symposium_vote:\n"
+                "Option 1: Support the proposition\n"
+                "Option 2: Oppose the proposition\n"
+                "Option 3: Call for further study"
+            ),
+            metadata={"topic_id": topic_id, "topic": topic},
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="symposium_started",
+                payload={"topic_id": topic_id, "topic": topic},
+            )
+        )
+
+        return press
+
+    def vote_symposium(self, player_id: str, vote_option: int) -> PressRelease:
+        """Record a player's vote on the current symposium topic."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError("Unknown player")
+
+        current = self.state.get_current_symposium_topic()
+        if not current:
+            raise ValueError("No symposium is currently active")
+
+        topic_id, topic, description, options = current
+
+        if vote_option not in options:
+            raise ValueError(f"Invalid vote option. Choose from {options}")
+
+        # Record the vote
+        self.state.record_symposium_vote(topic_id, player_id, vote_option)
+
+        # Generate press release
+        vote_text = {
+            1: "supports the proposition",
+            2: "opposes the proposition",
+            3: "calls for further study",
+        }[vote_option]
+
+        press = academic_gossip(
+            GossipContext(
+                scholar=player.display_name,
+                quote=f"I {vote_text} regarding {topic}.",
+                trigger="Symposium vote",
+            )
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="symposium_vote",
+                payload={
+                    "player": player_id,
+                    "topic_id": topic_id,
+                    "vote_option": vote_option,
+                },
+            )
+        )
+
+        return press
+
+    def resolve_symposium(self) -> PressRelease:
+        """Resolve the current symposium and announce the results."""
+        current = self.state.get_current_symposium_topic()
+        if not current:
+            return PressRelease(
+                type="symposium_notice",
+                headline="No Active Symposium",
+                body="There is no symposium currently requiring resolution.",
+                metadata={},
+            )
+
+        topic_id, topic, description, _ = current
+        votes = self.state.get_symposium_votes(topic_id)
+
+        # Determine winner
+        if not votes:
+            winner_text = "No consensus (no votes received)"
+            winner = "none"
+        else:
+            winner_option = max(votes.keys(), key=lambda x: votes.get(x, 0))
+            winner_count = votes[winner_option]
+            total_votes = sum(votes.values())
+            winner_text = {
+                1: f"The proposition is supported ({winner_count}/{total_votes} votes)",
+                2: f"The proposition is opposed ({winner_count}/{total_votes} votes)",
+                3: f"Further study is required ({winner_count}/{total_votes} votes)",
+            }[winner_option]
+            winner = str(winner_option)
+
+        # Resolve the topic
+        self.state.resolve_symposium_topic(topic_id, winner)
+
+        # Generate press release
+        press = PressRelease(
+            type="symposium_resolution",
+            headline=f"Symposium Resolved: {topic}",
+            body=(
+                f"The symposium on '{topic}' has concluded.\n\n"
+                f"Result: {winner_text}\n\n"
+                "The Academy thanks all participants for their thoughtful contributions."
+            ),
+            metadata={
+                "topic_id": topic_id,
+                "topic": topic,
+                "winner": winner,
+                "votes": votes,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="symposium_resolved",
+                payload={
+                    "topic_id": topic_id,
+                    "winner": winner,
+                    "votes": votes,
+                },
+            )
+        )
+
+        return press
+
+    # Admin tools ---------------------------------------------------
+    def admin_adjust_reputation(
+        self,
+        admin_id: str,
+        player_id: str,
+        delta: int,
+        reason: str,
+    ) -> PressRelease:
+        """Admin command to adjust a player's reputation."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+
+        old_reputation = player.reputation
+        player.adjust_reputation(
+            delta,
+            self.settings.reputation_bounds["min"],
+            self.settings.reputation_bounds["max"],
+        )
+        self.state.upsert_player(player)
+
+        # Generate press release
+        press = PressRelease(
+            type="admin_action",
+            headline=f"Administrative Reputation Adjustment",
+            body=(
+                f"Player {player.display_name}'s reputation adjusted by {delta:+d} "
+                f"(from {old_reputation} to {player.reputation})\n"
+                f"Reason: {reason}\n"
+                f"Admin: {admin_id}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "player": player_id,
+                "delta": delta,
+                "reason": reason,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_reputation_adjustment",
+                payload={
+                    "admin": admin_id,
+                    "player": player_id,
+                    "delta": delta,
+                    "old": old_reputation,
+                    "new": player.reputation,
+                    "reason": reason,
+                },
+            )
+        )
+
+        return press
+
+    def admin_adjust_influence(
+        self,
+        admin_id: str,
+        player_id: str,
+        faction: str,
+        delta: int,
+        reason: str,
+    ) -> PressRelease:
+        """Admin command to adjust a player's influence."""
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+
+        if faction not in self._FACTIONS:
+            raise ValueError(f"Invalid faction: {faction}")
+
+        self._ensure_influence_structure(player)
+        old_influence = player.influence.get(faction, 0)
+
+        # Direct adjustment for admin, bypassing soft caps
+        player.influence[faction] = max(0, player.influence.get(faction, 0) + delta)
+        self.state.upsert_player(player)
+
+        # Generate press release
+        press = PressRelease(
+            type="admin_action",
+            headline=f"Administrative Influence Adjustment",
+            body=(
+                f"Player {player.display_name}'s {faction} influence adjusted by {delta:+d} "
+                f"(from {old_influence} to {player.influence[faction]})\n"
+                f"Reason: {reason}\n"
+                f"Admin: {admin_id}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "player": player_id,
+                "faction": faction,
+                "delta": delta,
+                "reason": reason,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_influence_adjustment",
+                payload={
+                    "admin": admin_id,
+                    "player": player_id,
+                    "faction": faction,
+                    "delta": delta,
+                    "old": old_influence,
+                    "new": player.influence[faction],
+                    "reason": reason,
+                },
+            )
+        )
+
+        return press
+
+    def admin_force_defection(
+        self,
+        admin_id: str,
+        scholar_id: str,
+        new_faction: str,
+        reason: str,
+    ) -> PressRelease:
+        """Admin command to force a scholar defection."""
+        scholar = self.state.get_scholar(scholar_id)
+        if not scholar:
+            raise ValueError(f"Scholar {scholar_id} not found")
+
+        old_faction = scholar.contract.get("employer", "Unknown")
+
+        # Force the defection
+        defection_triggered, press = self.evaluate_defection_offer(
+            scholar_id=scholar_id,
+            offer_quality=10.0,  # Maximum quality to guarantee defection
+            mistreatment=0.0,
+            alignment=1.0,
+            plateau=0.0,
+            new_faction=new_faction,
+        )
+
+        # Add admin note to the press release
+        admin_press = PressRelease(
+            type="admin_action",
+            headline=f"Administrative Defection Order",
+            body=(
+                f"Scholar {scholar.name} has been ordered to defect from {old_faction} to {new_faction}\n"
+                f"Reason: {reason}\n"
+                f"Admin: {admin_id}\n\n"
+                f"Original Press:\n{press.body}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "scholar": scholar_id,
+                "old_faction": old_faction,
+                "new_faction": new_faction,
+                "reason": reason,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(admin_press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_force_defection",
+                payload={
+                    "admin": admin_id,
+                    "scholar": scholar_id,
+                    "new_faction": new_faction,
+                    "reason": reason,
+                },
+            )
+        )
+
+        return admin_press
+
+    def admin_cancel_expedition(
+        self,
+        admin_id: str,
+        expedition_code: str,
+        reason: str,
+    ) -> PressRelease:
+        """Admin command to cancel a pending expedition."""
+        # Check if expedition exists in pending expeditions
+        if expedition_code not in self._pending_expeditions:
+            raise ValueError(f"Expedition {expedition_code} not found or already resolved")
+
+        expedition = self._pending_expeditions[expedition_code]
+
+        # Remove from pending expeditions
+        del self._pending_expeditions[expedition_code]
+
+        # Record cancellation in database
+        self.state.record_expedition(
+            ExpeditionRecord(
+                code=expedition_code,
+                timestamp=datetime.now(timezone.utc),
+                player_id=expedition.player_id,
+                expedition_type=expedition.expedition_type,
+                objective=expedition.objective,
+                team=expedition.team,
+                funding=expedition.funding,
+                prep_depth=expedition.prep_depth,
+                confidence=expedition.confidence.value,
+                outcome=ExpeditionOutcome.FAILURE,
+                reputation_delta=0,
+            ),
+            result_payload={"cancelled": True, "admin": admin_id, "reason": reason},
+        )
+
+        # Generate press release
+        press = PressRelease(
+            type="admin_action",
+            headline=f"Expedition Cancelled by Administration",
+            body=(
+                f"Expedition {expedition_code} has been cancelled\n"
+                f"Reason: {reason}\n"
+                f"Admin: {admin_id}\n"
+                f"No reputation changes will be applied."
+            ),
+            metadata={
+                "admin": admin_id,
+                "expedition_code": expedition_code,
+                "reason": reason,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_cancel_expedition",
+                payload={
+                    "admin": admin_id,
+                    "expedition_code": expedition_code,
+                    "reason": reason,
+                },
+            )
+        )
+
+        return press
+
     def wager_reference(self) -> Dict[str, object]:
         """Expose wager tuning, thresholds, and reputation bounds for UX surfaces."""
 
@@ -551,6 +1225,7 @@ class GameService:
         self._ensure_roster()
         releases.extend(self._progress_careers())
         releases.extend(self._resolve_followups())
+        releases.extend(self.resolve_conferences())
         return releases
 
     def _confidence_delta(self, confidence: ConfidenceLevel, outcome: ExpeditionOutcome) -> int:
@@ -615,9 +1290,19 @@ class GameService:
             )
 
     def _progress_careers(self) -> List[PressRelease]:
+        """Progress careers only for scholars with active mentorships."""
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
+
+        # First resolve pending mentorships
+        releases.extend(self._resolve_mentorships())
+
         for scholar in list(self.state.all_scholars()):
+            # Check if scholar has an active mentorship
+            mentorship = self.state.get_active_mentorship(scholar.id)
+            if not mentorship:
+                continue  # No mentor, no progression
+
             track = scholar.career.get("track", "Academia")
             ladder = self._CAREER_TRACKS.get(track, self._CAREER_TRACKS["Academia"])
             tier = scholar.career.get("tier", ladder[0])
@@ -631,9 +1316,14 @@ class GameService:
             if idx < len(ladder) - 1 and ticks >= self._CAREER_TICKS_REQUIRED:
                 scholar.career["tier"] = ladder[idx + 1]
                 scholar.career["ticks"] = 0
-                quote = f"Advanced to {scholar.career['tier']} after diligent mentorship."
+
+                # Get mentor's name for the press release
+                mentor_player = self.state.get_player(mentorship[1])
+                mentor_name = mentor_player.display_name if mentor_player else "their mentor"
+
+                quote = f"Advanced to {scholar.career['tier']} under the guidance of {mentor_name}."
                 press = academic_gossip(
-                    GossipContext(scholar=scholar.name, quote=quote, trigger="Digest advancement"),
+                    GossipContext(scholar=scholar.name, quote=quote, trigger="Career advancement"),
                 )
                 releases.append(press)
                 self._archive_press(press, now)
@@ -641,10 +1331,85 @@ class GameService:
                     Event(
                         timestamp=now,
                         action="career_progression",
-                        payload={"scholar": scholar.id, "new_tier": scholar.career["tier"]},
+                        payload={
+                            "scholar": scholar.id,
+                            "new_tier": scholar.career["tier"],
+                            "mentor": mentorship[1],
+                        },
                     )
                 )
+
+                # Complete mentorship after max tier reached
+                if idx == len(ladder) - 2:  # Just reached final tier
+                    self.state.complete_mentorship(mentorship[0], now)
+                    complete_press = academic_gossip(
+                        GossipContext(
+                            scholar=mentor_name,
+                            quote=f"My mentorship of {scholar.name} is complete. They have reached the pinnacle of their field.",
+                            trigger="Mentorship completed",
+                        )
+                    )
+                    releases.append(complete_press)
+                    self._archive_press(complete_press, now)
+
             self.state.save_scholar(scholar)
+        return releases
+
+    def _resolve_mentorships(self) -> List[PressRelease]:
+        """Resolve pending mentorships at digest time."""
+        releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+
+        for mentorship_id, player_id, scholar_id, career_track in self.state.get_pending_mentorships():
+            scholar = self.state.get_scholar(scholar_id)
+            if not scholar:
+                continue
+
+            player = self.state.get_player(player_id)
+            if not player:
+                continue
+
+            # Check if scholar already has an active mentorship (shouldn't happen but be safe)
+            existing = self.state.get_active_mentorship(scholar_id)
+            if existing:
+                continue
+
+            # Activate the mentorship
+            self.state.activate_mentorship(mentorship_id)
+
+            # Update scholar's career track if specified
+            if career_track and career_track in self._CAREER_TRACKS:
+                old_track = scholar.career.get("track", "Academia")
+                if old_track != career_track:
+                    scholar.career["track"] = career_track
+                    scholar.career["tier"] = self._CAREER_TRACKS[career_track][0]
+                    scholar.career["ticks"] = 0
+                    self.state.save_scholar(scholar)
+
+            # Generate press release
+            quote = f"The mentorship between {player.display_name} and {scholar.name} has officially commenced."
+            press = academic_gossip(
+                GossipContext(
+                    scholar="The Academy",
+                    quote=quote,
+                    trigger="Mentorship activation",
+                )
+            )
+            releases.append(press)
+            self._archive_press(press, now)
+
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="mentorship_activated",
+                    payload={
+                        "player": player_id,
+                        "scholar": scholar_id,
+                        "mentorship_id": mentorship_id,
+                    },
+                )
+            )
+
         return releases
 
     def _resolve_followups(self) -> List[PressRelease]:

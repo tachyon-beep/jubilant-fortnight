@@ -240,6 +240,113 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
 
+    @app_commands.command(name="mentor", description="Begin mentoring a scholar")
+    @app_commands.describe(
+        scholar_id="Scholar identifier",
+        career_track="Optional career track (Academia or Industry)",
+    )
+    async def mentor(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        career_track: str | None = None,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            press = service.queue_mentorship(
+                player_id=str(interaction.user.display_name),
+                scholar_id=scholar_id,
+                career_track=career_track,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @app_commands.command(name="assign_lab", description="Assign a mentored scholar to a new career track")
+    @app_commands.describe(
+        scholar_id="Scholar identifier",
+        career_track="Career track (Academia or Industry)",
+    )
+    async def assign_lab(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        career_track: str,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            press = service.assign_lab(
+                player_id=str(interaction.user.display_name),
+                scholar_id=scholar_id,
+                career_track=career_track,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @app_commands.command(name="conference", description="Launch a conference to debate a theory")
+    @app_commands.describe(
+        theory_id="Theory ID to debate",
+        confidence="Confidence wager level",
+        supporters="Comma-separated scholar IDs supporting the theory",
+        opposition="Comma-separated scholar IDs opposing the theory",
+    )
+    async def conference(
+        interaction: discord.Interaction,
+        theory_id: int,
+        confidence: str,
+        supporters: str,
+        opposition: str,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            confidence_level = ConfidenceLevel(confidence)
+        except ValueError:
+            await interaction.response.send_message(
+                f"Invalid confidence {confidence}. Choose from {[c.value for c in ConfidenceLevel]}",
+                ephemeral=True,
+            )
+            return
+
+        supporter_list = [s.strip() for s in supporters.split(",") if s.strip()]
+        opposition_list = [s.strip() for s in opposition.split(",") if s.strip()]
+
+        try:
+            press = service.launch_conference(
+                player_id=str(interaction.user.display_name),
+                theory_id=theory_id,
+                confidence=confidence_level,
+                supporters=supporter_list,
+                opposition=opposition_list,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @app_commands.command(name="symposium_vote", description="Cast your vote on the current symposium topic")
+    @app_commands.describe(
+        vote="Your vote: 1 (support), 2 (oppose), 3 (further study)",
+    )
+    async def symposium_vote(
+        interaction: discord.Interaction,
+        vote: int,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            press = service.vote_symposium(
+                player_id=str(interaction.user.display_name),
+                vote_option=vote,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
     async def status(interaction: discord.Interaction) -> None:
         service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
@@ -320,15 +427,131 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await _post_to_channel(bot, router.table_talk, payload, purpose="table-talk")
         await interaction.response.send_message("Posted to table-talk.", ephemeral=True)
 
+    # Admin command group
+    gw_admin = app_commands.Group(
+        name="gw_admin",
+        description="Administrative commands for game management"
+    )
+
+    @gw_admin.command(name="adjust_reputation", description="Adjust a player's reputation")
+    @app_commands.describe(
+        player_id="Player identifier",
+        delta="Reputation change amount",
+        reason="Reason for adjustment",
+    )
+    async def admin_reputation(
+        interaction: discord.Interaction,
+        player_id: str,
+        delta: int,
+        reason: str,
+    ) -> None:
+        # Check for admin role (simplified - you may want proper role checking)
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_adjust_reputation(
+                admin_id=admin_id,
+                player_id=player_id,
+                delta=delta,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @gw_admin.command(name="adjust_influence", description="Adjust a player's influence")
+    @app_commands.describe(
+        player_id="Player identifier",
+        faction="Faction name",
+        delta="Influence change amount",
+        reason="Reason for adjustment",
+    )
+    async def admin_influence(
+        interaction: discord.Interaction,
+        player_id: str,
+        faction: str,
+        delta: int,
+        reason: str,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_adjust_influence(
+                admin_id=admin_id,
+                player_id=player_id,
+                faction=faction,
+                delta=delta,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @gw_admin.command(name="force_defection", description="Force a scholar to defect")
+    @app_commands.describe(
+        scholar_id="Scholar identifier",
+        new_faction="New faction for the scholar",
+        reason="Reason for forced defection",
+    )
+    async def admin_defection(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        new_faction: str,
+        reason: str,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_force_defection(
+                admin_id=admin_id,
+                scholar_id=scholar_id,
+                new_faction=new_faction,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @gw_admin.command(name="cancel_expedition", description="Cancel a pending expedition")
+    @app_commands.describe(
+        expedition_code="Expedition code",
+        reason="Reason for cancellation",
+    )
+    async def admin_cancel(
+        interaction: discord.Interaction,
+        expedition_code: str,
+        reason: str,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_cancel_expedition(
+                admin_id=admin_id,
+                expedition_code=expedition_code,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)
     bot.tree.add_command(recruit)
+    bot.tree.add_command(mentor)
+    bot.tree.add_command(assign_lab)
+    bot.tree.add_command(conference)
+    bot.tree.add_command(symposium_vote)
     bot.tree.add_command(status)
     bot.tree.add_command(wager)
     bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
     bot.tree.add_command(table_talk)
+    bot.tree.add_command(gw_admin)
     return bot
 
 

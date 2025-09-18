@@ -1,10 +1,23 @@
 # Qdrant Usage Guide for AI Agents
 
+## IMPORTANT: Permanent Memory Storage
+
+**AI agents should use Qdrant to permanently store any information they generate or discover that should be remembered across sessions.** This includes:
+- Implementation decisions and rationale
+- Bug fixes and their solutions
+- Feature implementations and how they work
+- Test results and coverage improvements
+- Performance optimizations made
+- Architectural decisions
+- Any other knowledge that future AI agents should be aware of
+
+Without storing information in Qdrant, all context is lost between sessions and work may be duplicated or contradicted.
+
 ## Overview
 
 This guide provides comprehensive instructions for AI agents working with The Great Work's Qdrant vector database.
 Qdrant enables semantic search and knowledge management for game mechanics, scholar relationships, press archives,
-and expedition outcomes.
+expedition outcomes, and **AI agent memory across sessions**.
 
 ## MCP Commands
 
@@ -71,7 +84,40 @@ mcp__qdrant-great-work__qdrant-find(
 
 ## Content Schema and Best Practices
 
-### 1. Game Mechanics
+### 1. AI Agent Memory and Context
+
+**What to Store**:
+
+- Implementation decisions and their rationale
+- Bug fixes with root causes and solutions
+- Test improvements and coverage changes
+- Performance optimizations and their impact
+- Architectural decisions and design patterns used
+- Refactoring work and why it was needed
+- Integration points and how they work
+- Any gotchas or non-obvious behaviors discovered
+
+**Schema Pattern**:
+
+```plaintext
+[DATE] - [AGENT TYPE] - [TASK]: [What was done].
+Context: [Why it was needed].
+Implementation: [How it was achieved].
+Impact: [What changed as a result].
+Notes: [Important details for future agents].
+```
+
+**Example**:
+
+```plaintext
+2025-09-19 - architecture-reviewer - Documentation Review: Updated gap analysis, implementation plan, and requirements evaluation.
+Context: Documentation was out of sync with actual implementation.
+Implementation: Compared all docs/ files against great_work/ codebase systematically.
+Impact: Found 44% fully implemented, 22% partial, identified missing Discord commands.
+Notes: Conference, mentor, and symposium_vote commands are missing but have backend support.
+```
+
+### 2. Game Mechanics
 
 **What to Store**:
 
@@ -222,6 +268,8 @@ Follow-ups: [Scheduled consequences].
 3. **Historical Queries**: "What happened with [event/person] in [timeframe]?"
 4. **Mechanical Queries**: "What are the rules for [gameplay element]?"
 5. **Status Queries**: "Current status of [scholar/player/expedition]?"
+6. **AI Context Queries**: "What work has been done on [feature/bug/system]?"
+7. **Implementation Queries**: "How was [X] implemented by previous agents?"
 
 ### Multi-Step Research
 
@@ -242,7 +290,17 @@ results3 = qdrant_find("spectacular failures with sideways discoveries")
 
 ### 1. Regular Information Updates
 
-After game events, store:
+**For AI Agents - Store after completing work**:
+
+- Implementation decisions with rationale
+- Bug fixes with solutions and root causes
+- Test improvements with coverage metrics
+- Performance optimizations with benchmarks
+- Architectural changes with design reasoning
+- Integration work with API documentation
+- Configuration changes with impact analysis
+
+**For Game Events - Store after occurrence**:
 
 - New press releases immediately after generation
 - Scholar relationship changes after defections

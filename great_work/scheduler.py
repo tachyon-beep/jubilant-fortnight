@@ -48,15 +48,26 @@ class GazetteScheduler:
             self._emit_release(press)
 
     def _host_symposium(self) -> None:
-        message = f"Symposium event triggered at {datetime.now(timezone.utc).isoformat()}"
-        self._emit_release(
-            PressRelease(
-                type="symposium_heartbeat",
-                headline="Symposium heartbeat",
-                body=message,
-                metadata={},
-            )
-        )
+        """Host weekly symposium with randomly selected topic."""
+        # List of potential symposium topics
+        topics = [
+            ("The Nature of Truth", "Does objective truth exist in scientific inquiry, or is all knowledge relative to the observer?"),
+            ("Ethics of Discovery", "Should there be limits on what knowledge humanity pursues?"),
+            ("Collaboration vs Competition", "Does competition or collaboration lead to greater scientific advancement?"),
+            ("The Role of Intuition", "What place does intuition have in rigorous academic work?"),
+            ("Funding Priorities", "Should research funding favor practical applications or pure discovery?"),
+            ("The Great Work Itself", "What is the true purpose of our collective academic endeavor?"),
+            ("Knowledge Ownership", "Can ideas truly be owned, or does all knowledge belong to humanity?"),
+            ("Academic Hierarchy", "Do traditional academic structures help or hinder progress?"),
+        ]
+
+        # Randomly select a topic
+        import random
+        topic, description = random.choice(topics)
+
+        # Start the symposium
+        press = self.service.start_symposium(topic, description)
+        self._emit_release(press)
 
     def _emit_release(self, press: PressRelease) -> None:
         if self._publisher is not None:

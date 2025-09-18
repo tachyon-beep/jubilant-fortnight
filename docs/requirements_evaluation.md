@@ -1,14 +1,14 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-09-19
+Last Updated: 2025-09-19 (Post-Implementation Review)
 
 ## Executive Summary
 
 Of the 72 documented requirements, the implementation currently satisfies:
 
-- **Fully Implemented**: 31 requirements (43%)
-- **Partially Implemented**: 17 requirements (24%)
-- **Not Implemented**: 22 requirements (30%)
+- **Fully Implemented**: 32 requirements (44%)
+- **Partially Implemented**: 16 requirements (22%)
+- **Not Implemented**: 22 requirements (31%)
 - **Not Evaluated**: 2 requirements (3%)
 
 ## Functional Requirements Status
@@ -37,8 +37,9 @@ Of the 72 documented requirements, the implementation currently satisfies:
 
 **Key Gaps:**
 
-- **Mentorship system completely missing** - critical gameplay feature
-- Defection return arcs limited to single-step follow-ups
+- **Mentorship system completely missing** - no `/mentor` or `/assign_lab` commands, only automatic career progression via `_progress_careers()`
+- Defection return arcs limited to single-step follow-ups (followups table exists but underutilized)
+- Backend defection logic exists (`evaluate_defection_offer`) but not exposed via Discord
 
 ### Confidence Wagering (3 requirements)
 
@@ -56,6 +57,12 @@ Of the 72 documented requirements, the implementation currently satisfies:
 
 **Status:** All expedition types fully functional including Great Projects
 
+- Think tanks: -5 reputation threshold
+- Field expeditions: 0 reputation threshold
+- Great Projects: 10 reputation threshold
+- d100 resolution with modifiers working correctly
+- Failure tables (shallow/deep) properly implemented
+
 ### Influence Economy (3 requirements)
 
 | Status | Count | Percentage |
@@ -63,6 +70,10 @@ Of the 72 documented requirements, the implementation currently satisfies:
 | Fully Implemented | 3 | 100% |
 
 **Fully Functional:** Five-faction economy with reputation-based soft caps
+
+- Base cap: 6 influence
+- Additional cap: 0.2 per reputation point
+- Properly enforced in `_apply_influence_change()` method
 
 ### Press Artifacts and Gazette (6 requirements)
 
@@ -74,8 +85,9 @@ Of the 72 documented requirements, the implementation currently satisfies:
 **Key Gaps:**
 
 - Not all actions generate press (admin actions, some events)
-- **Symposium only has heartbeat**, no actual implementation
-- Single artefacts per action instead of multiple types
+- **Symposium only has heartbeat** (`_host_symposium` in scheduler.py), no topic selection or voting mechanics
+- Single artefacts per action instead of multiple types (bulletins/manifestos/reports)
+- Press templates exist but no LLM integration for persona voices
 
 ### Discord UX and Commands (8 requirements)
 
@@ -83,7 +95,9 @@ Of the 72 documented requirements, the implementation currently satisfies:
 |--------|-------|------------|
 | Fully Implemented | 8 | 100% |
 
-**Note:** All documented commands implemented except `/conference`
+**Note:** Implemented commands: `/submit_theory`, `/launch_expedition`, `/resolve_expeditions`, `/recruit`, `/status`, `/wager`, `/gazette`, `/export_log`, `/table_talk`
+
+Missing commands: `/conference`, `/mentor`, `/assign_lab`, `/symposium_vote`, `/gw_admin`
 
 ## Non-Functional Requirements Status
 
@@ -177,26 +191,30 @@ Based on requirements analysis, the most critical gaps are:
 
 ### 1. Mentorship System (HIGH PRIORITY)
 
-- Core gameplay mechanic completely absent
-- Only automatic career progression exists
+- Core gameplay mechanic completely absent from Discord interface
+- Backend has `_progress_careers()` but only automatic progression
+- No `/mentor` or `/assign_lab` commands implemented
 - Blocks player agency in scholar development
 
 ### 2. Conference Mechanics (HIGH PRIORITY)
 
 - `/conference` command not implemented
-- Public wager system incomplete
-- Major gameplay feature missing
+- No conference data structures or service methods
+- Public wager system incomplete despite confidence wagers working
+- Major gameplay feature missing entirely
 
 ### 3. Symposium Implementation (MEDIUM PRIORITY)
 
-- Only heartbeat exists, no actual functionality
-- Weekly community engagement feature absent
-- No topic selection, voting, or participation
+- Only heartbeat exists in `scheduler.py` (`_host_symposium` method)
+- Weekly trigger works but no actual functionality
+- No `/symposium_vote` command
+- No topic selection, voting, or participation mechanics
 
 ### 4. Admin Tools (MEDIUM PRIORITY)
 
-- No Discord admin commands
-- No moderation capabilities
+- No `/gw_admin` command group implemented
+- Backend has `evaluate_defection_offer()` but not exposed
+- No moderation or hotfix capabilities via Discord
 - Critical for operational management
 
 ### 5. Public Archive (LOW PRIORITY)
@@ -207,22 +225,32 @@ Based on requirements analysis, the most critical gaps are:
 
 ### 6. LLM Integration (LOW PRIORITY)
 
-- All narrative is template-based
-- No persona voices
-- Missing narrative richness
+- All narrative is template-based (see `press.py`)
+- Templates work well but lack persona voices
+- No LLM API integration code exists
+- Missing narrative richness and scholar personality
 
 ## Implementation Readiness
 
 The codebase demonstrates strong foundations:
 
-- ✅ Robust data persistence layer
-- ✅ Clean service architecture
-- ✅ Deterministic game mechanics
-- ✅ Discord bot framework
-- ✅ Press generation system
-- ✅ Scheduled digest processing
+- ✅ Robust data persistence layer (SQLite with proper schemas)
+- ✅ Clean service architecture (GameService with clear separation of concerns)
+- ✅ Deterministic game mechanics (RNG seeding, reproducible outcomes)
+- ✅ Discord bot framework (slash commands, channel posting)
+- ✅ Press generation system (templated with extensible structure)
+- ✅ Scheduled digest processing (APScheduler integration working)
+- ✅ Event sourcing (complete audit trail)
+- ✅ Influence economy (5-faction system with soft caps)
 
-These foundations make implementing the missing features straightforward.
+### Existing But Unused Infrastructure
+
+- ❓ Offers table created but no INSERT/SELECT operations
+- ❓ Defection evaluation logic exists but not exposed via Discord
+- ❓ Followups system working but underutilized for complex arcs
+- ❓ Career progression automatic only, needs player control
+
+These foundations and partial implementations make completing the missing features more straightforward than starting from scratch.
 
 ## Recommendations
 
@@ -244,4 +272,14 @@ These foundations make implementing the missing features straightforward.
 
 ## Conclusion
 
-The implementation has successfully delivered the core game engine and Discord interface, achieving 43% full implementation and 67% partial or full implementation of requirements. The major gaps are in player agency features (mentorship, conferences) and community features (symposiums, admin tools) rather than technical infrastructure. With the solid foundation in place, closing these gaps should be achievable within the proposed 6-week timeline.
+The implementation has successfully delivered the core game engine and Discord interface, achieving 44% full implementation and 66% partial or full implementation of requirements. The major gaps are in player agency features (mentorship, conferences) and community features (symposiums, admin tools) rather than technical infrastructure.
+
+Key strengths:
+
+- Expedition system fully operational with all three types
+- Influence economy working as designed
+- Scholar roster management automated and functional
+- Press generation system extensible and working
+- Database schema comprehensive with some unused tables ready for expansion
+
+The solid foundation in place, combined with existing but unused infrastructure (offers table, defection logic in service layer), means that closing the gaps should be achievable within the proposed 6-week timeline. Most missing features require Discord command exposure and integration rather than fundamental backend development.

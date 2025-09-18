@@ -1,14 +1,28 @@
 # Implementation Plan - Full Design Build
 
-Last Updated: 2025-09-19
+Last Updated: 2025-09-19 (Post-Review Update)
 
 ## Design Commitment
 
 We're building the full design vision with no deferrals. Great Projects are already implemented correctly. Focus is on completing missing features to deliver the complete game experience.
 
+## Existing Infrastructure to Leverage
+
+The codebase has several partially implemented or unused components that can accelerate development:
+
+1. **Offers Table**: Database table exists but unused - ready for offer/contract mechanics
+2. **Followups System**: Working infrastructure for delayed actions (currently used for defection grudges)
+3. **Defection Logic**: `evaluate_defection_offer()` method exists in service layer, needs Discord exposure
+4. **Career Progression**: `_progress_careers()` method exists, needs player-driven control added
+5. **Press Templates**: Robust template system in place, easy to extend for new event types
+6. **Event Sourcing**: Complete event log infrastructure for audit trails
+7. **Influence System**: Fully functional 5-faction economy with soft caps
+
 ## Priority Order
 
-Implementation should proceed in phases to deliver core functionality first:
+Implementation should proceed in phases to deliver core functionality first.
+
+**Note**: Some backend infrastructure exists (defection evaluation, follow-ups table, offers table) but lacks Discord exposure and full implementation.
 
 ### Phase 1 - Core Gameplay (Weeks 1-2)
 
@@ -42,8 +56,8 @@ Implementation should proceed in phases to deliver core functionality first:
 **Deliverables:**
 
 - Database: Add `mentorships` table with mentor_id, scholar_id, start_date, status
-- Service: `queue_mentorship()`, `resolve_mentorships()` methods
-- Discord: `/mentor <scholar>` and `/assign_lab <scholar> <lab>` commands
+- Service: `queue_mentorship()`, `resolve_mentorships()` methods (note: `_progress_careers()` exists but is automatic only)
+- Discord: `/mentor <scholar>` and `/assign_lab <scholar> <lab>` commands (currently missing)
 - Press: Mentorship announcements and career advancement notices
 
 **Implementation Steps:**
@@ -71,11 +85,11 @@ Implementation should proceed in phases to deliver core functionality first:
 
 **Implementation Steps:**
 
-1. Create conferences table (similar to expeditions)
-2. Add ConferenceOrder dataclass
-3. Implement launch/queue/resolve logic
-4. Add Discord slash command
-5. Create conference press templates
+1. Create conferences table (similar to expeditions table structure)
+2. Add ConferenceOrder dataclass (similar to existing ExpeditionOrder)
+3. Implement launch/queue/resolve logic in GameService
+4. Add `/conference` Discord slash command
+5. Create conference press templates (extend press.py)
 
 ## 3. Generic Order Batching Infrastructure
 
@@ -87,10 +101,10 @@ Implementation should proceed in phases to deliver core functionality first:
 
 **Deliverables:**
 
-- Database: Generic `orders` table with type, payload, scheduled_for
+- Database: Generic `orders` table with type, payload, scheduled_for (note: expeditions table already exists)
 - Service: `queue_order()`, `resolve_orders()` methods
 - Model: OrderType enum, Order base class
-- Integration: Update digest processing to resolve all order types
+- Integration: Update digest processing to resolve all order types (currently only handles expeditions and followups)
 
 **Implementation Steps:**
 
@@ -126,7 +140,7 @@ Implementation should proceed in phases to deliver core functionality first:
 ## 5. Symposium Implementation
 
 - **Priority: MEDIUM** - Weekly community engagement feature
-- Replace heartbeat with full topic selection system
+- Replace existing heartbeat (`_host_symposium` in scheduler.py) with full topic selection system
 - Add voting mechanics and participation tracking
 - Generate outcomes based on community consensus
 - Archive symposium proceedings
@@ -156,8 +170,8 @@ Implementation should proceed in phases to deliver core functionality first:
 
 **Deliverables:**
 
-- Discord: `/gw_admin` command group with subcommands
-- Service: Admin override methods with audit logging
+- Discord: `/gw_admin` command group with subcommands (completely missing)
+- Service: Admin override methods with audit logging (note: `evaluate_defection_offer` exists but not exposed)
 - Security: Permission checks for admin-only commands
 - Audit: Admin action event types and press releases
 
@@ -180,9 +194,9 @@ Implementation should proceed in phases to deliver core functionality first:
 **Deliverables:**
 
 - Model: Stateful follow-up payloads for negotiations
-- Service: Multi-step defection resolution logic
-- Database: Enhanced followups table with state tracking
-- Press: Negotiation updates, counter-offer announcements
+- Service: Multi-step defection resolution logic (note: `_resolve_followups` exists but is single-step)
+- Database: Enhanced followups table with state tracking (table exists with basic schema)
+- Press: Negotiation updates, counter-offer announcements (note: `defection_notice` template exists)
 
 **Implementation Steps:**
 
@@ -238,9 +252,21 @@ Implementation should proceed in phases to deliver core functionality first:
 4. Add configuration options
 5. Test with gradual rollout
 
+## Current Test Coverage
+
+Existing test files:
+
+- `test_scholar_generation.py` - Scholar generation
+- `test_expedition_resolver.py` - d100 mechanics
+- `test_defection_probability.py` - Loyalty curves
+- `test_game_service.py` - Service integration
+- `test_press_templates.py` - Press generation
+- `test_rng_determinism.py` - RNG consistency
+- Additional coverage tests for edge cases
+
 ## Testing Strategy
 
-Each feature should include:
+Each new feature should include:
 
 - Unit tests for new service methods
 - Integration tests for Discord commands

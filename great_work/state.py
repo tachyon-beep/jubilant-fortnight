@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import (
+    ConfidenceLevel,
     Event,
     ExpeditionRecord,
     Player,
@@ -93,6 +94,48 @@ CREATE TABLE IF NOT EXISTS timeline (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     current_year INTEGER NOT NULL,
     last_advanced TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mentorships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    scholar_id TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    status TEXT NOT NULL,
+    career_track TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+CREATE TABLE IF NOT EXISTS conferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    timestamp TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    theory_id INTEGER NOT NULL,
+    confidence TEXT NOT NULL,
+    supporters TEXT NOT NULL,
+    opposition TEXT NOT NULL,
+    outcome TEXT,
+    reputation_delta INTEGER NOT NULL DEFAULT 0,
+    result_payload TEXT,
+    FOREIGN KEY (theory_id) REFERENCES theories (id)
+);
+CREATE TABLE IF NOT EXISTS symposium_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symposium_date TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'voting',
+    winner TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS symposium_votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    vote_option INTEGER NOT NULL,
+    voted_at TEXT NOT NULL,
+    FOREIGN KEY (topic_id) REFERENCES symposium_topics (id),
+    UNIQUE (topic_id, player_id)
 );
 """
 
@@ -346,9 +389,10 @@ class GameState:
         return years_elapsed, new_year
 
     # Theory log --------------------------------------------------------
-    def record_theory(self, record: TheoryRecord) -> None:
+    def record_theory(self, record: TheoryRecord) -> int:
+        """Record a theory and return its ID."""
         with closing(sqlite3.connect(self._db_path)) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "INSERT INTO theories (timestamp, player_id, theory, confidence, supporters, deadline)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -361,6 +405,7 @@ class GameState:
                 ),
             )
             conn.commit()
+            return cursor.lastrowid
 
     # Expedition log ----------------------------------------------------
     def record_expedition(self, record: ExpeditionRecord, result_payload: Dict[str, object] | None = None) -> None:
@@ -415,6 +460,276 @@ class GameState:
             release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
             records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))
         return records
+
+    # Mentorship management ---------------------------------------------
+    def add_mentorship(
+        self,
+        player_id: str,
+        scholar_id: str,
+        career_track: str | None = None,
+        created_at: datetime | None = None,
+    ) -> int:
+        """Add a new mentorship relationship."""
+        now = created_at or datetime.now(timezone.utc)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO mentorships
+                   (player_id, scholar_id, start_date, status, career_track, created_at, resolved_at)
+                   VALUES (?, ?, ?, 'pending', ?, ?, NULL)""",
+                (
+                    player_id,
+                    scholar_id,
+                    now.isoformat(),
+                    career_track,
+                    now.isoformat(),
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_active_mentorship(self, scholar_id: str) -> Optional[Tuple[int, str, str, str]]:
+        """Get active mentorship for a scholar if it exists."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, player_id, career_track, start_date
+                   FROM mentorships
+                   WHERE scholar_id = ? AND status = 'active'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (scholar_id,),
+            ).fetchone()
+            return row if row else None
+
+    def get_pending_mentorships(self) -> List[Tuple[int, str, str, str | None]]:
+        """Get all pending mentorships for resolution."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, player_id, scholar_id, career_track
+                   FROM mentorships
+                   WHERE status = 'pending'
+                   ORDER BY created_at""",
+            ).fetchall()
+            return rows
+
+    def activate_mentorship(self, mentorship_id: int) -> None:
+        """Mark a mentorship as active."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE mentorships SET status = 'active' WHERE id = ?",
+                (mentorship_id,),
+            )
+            conn.commit()
+
+    def complete_mentorship(self, mentorship_id: int, resolved_at: datetime | None = None) -> None:
+        """Mark a mentorship as completed."""
+        now = resolved_at or datetime.now(timezone.utc)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE mentorships SET status = 'completed', resolved_at = ? WHERE id = ?",
+                (now.isoformat(), mentorship_id),
+            )
+            conn.commit()
+
+    # Conference management ---------------------------------------------
+    def add_conference(
+        self,
+        code: str,
+        player_id: str,
+        theory_id: int,
+        confidence: str,
+        supporters: List[str],
+        opposition: List[str],
+        timestamp: datetime | None = None,
+    ) -> None:
+        """Queue a conference for resolution."""
+        now = timestamp or datetime.now(timezone.utc)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """INSERT INTO conferences
+                   (code, timestamp, player_id, theory_id, confidence, supporters, opposition)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    code,
+                    now.isoformat(),
+                    player_id,
+                    theory_id,
+                    confidence,
+                    json.dumps(supporters),
+                    json.dumps(opposition),
+                ),
+            )
+            conn.commit()
+
+    def get_pending_conferences(self) -> List[Tuple[str, str, int, str, List[str], List[str]]]:
+        """Get conferences awaiting resolution."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT code, player_id, theory_id, confidence, supporters, opposition
+                   FROM conferences
+                   WHERE outcome IS NULL
+                   ORDER BY timestamp""",
+            ).fetchall()
+            return [
+                (code, player_id, theory_id, confidence, json.loads(supporters), json.loads(opposition))
+                for code, player_id, theory_id, confidence, supporters, opposition in rows
+            ]
+
+    def resolve_conference(
+        self,
+        code: str,
+        outcome: str,
+        reputation_delta: int,
+        result_payload: Dict[str, object] | None = None,
+    ) -> None:
+        """Mark a conference as resolved with outcome."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE conferences
+                   SET outcome = ?, reputation_delta = ?, result_payload = ?
+                   WHERE code = ?""",
+                (
+                    outcome,
+                    reputation_delta,
+                    json.dumps(result_payload) if result_payload else None,
+                    code,
+                ),
+            )
+            conn.commit()
+
+    def get_theory_by_id(self, theory_id: int) -> Optional[Tuple[int, TheoryRecord]]:
+        """Retrieve a theory by ID, returning (id, record) tuple."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, timestamp, player_id, theory, confidence, supporters, deadline
+                   FROM theories WHERE id = ?""",
+                (theory_id,),
+            ).fetchone()
+            if row:
+                record = TheoryRecord(
+                    timestamp=datetime.fromisoformat(row[1]),
+                    player_id=row[2],
+                    theory=row[3],
+                    confidence=row[4],
+                    supporters=json.loads(row[5]),
+                    deadline=row[6],
+                )
+                return row[0], record
+            return None
+
+    def list_theories(self, limit: int | None = None) -> List[Tuple[int, TheoryRecord]]:
+        """List all theories with their IDs, optionally limited."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            query = "SELECT id, timestamp, player_id, theory, confidence, supporters, deadline FROM theories ORDER BY id DESC"
+            if limit is not None:
+                query += f" LIMIT {limit}"
+            rows = conn.execute(query).fetchall()
+            theories = []
+            for row in rows:
+                record = TheoryRecord(
+                    timestamp=datetime.fromisoformat(row[1]),
+                    player_id=row[2],
+                    theory=row[3],
+                    confidence=row[4],
+                    supporters=json.loads(row[5]),
+                    deadline=row[6],
+                )
+                theories.append((row[0], record))
+            return theories
+
+    # Symposium management ----------------------------------------------
+    def create_symposium_topic(
+        self,
+        symposium_date: datetime,
+        topic: str,
+        description: str,
+        created_at: datetime | None = None,
+    ) -> int:
+        """Create a new symposium topic for voting."""
+        now = created_at or datetime.now(timezone.utc)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO symposium_topics
+                   (symposium_date, topic, description, status, created_at)
+                   VALUES (?, ?, ?, 'voting', ?)""",
+                (
+                    symposium_date.isoformat(),
+                    topic,
+                    description,
+                    now.isoformat(),
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_current_symposium_topic(self) -> Optional[Tuple[int, str, str, List[int]]]:
+        """Get the current symposium topic if in voting phase.
+
+        Returns: (topic_id, topic, description, list of vote options) or None
+        """
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, topic, description
+                   FROM symposium_topics
+                   WHERE status = 'voting'
+                   ORDER BY created_at DESC
+                   LIMIT 1""",
+            ).fetchone()
+            if row:
+                # Generate 3 voting options
+                return (row[0], row[1], row[2], [1, 2, 3])
+            return None
+
+    def record_symposium_vote(
+        self,
+        topic_id: int,
+        player_id: str,
+        vote_option: int,
+        voted_at: datetime | None = None,
+    ) -> None:
+        """Record a player's vote on a symposium topic."""
+        now = voted_at or datetime.now(timezone.utc)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO symposium_votes
+                   (topic_id, player_id, vote_option, voted_at)
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    topic_id,
+                    player_id,
+                    vote_option,
+                    now.isoformat(),
+                ),
+            )
+            conn.commit()
+
+    def get_symposium_votes(self, topic_id: int) -> Dict[int, int]:
+        """Get vote counts for a symposium topic.
+
+        Returns: Dict mapping vote option to count
+        """
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT vote_option, COUNT(*) as count
+                   FROM symposium_votes
+                   WHERE topic_id = ?
+                   GROUP BY vote_option""",
+                (topic_id,),
+            ).fetchall()
+            return {option: count for option, count in rows}
+
+    def resolve_symposium_topic(
+        self,
+        topic_id: int,
+        winner: str,
+    ) -> None:
+        """Mark a symposium topic as resolved with a winner."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE symposium_topics
+                   SET status = 'resolved', winner = ?
+                   WHERE id = ?""",
+                (winner, topic_id),
+            )
+            conn.commit()
 
 
 __all__ = ["GameState"]

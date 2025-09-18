@@ -1,18 +1,18 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-19
+Last Updated: 2025-09-19 (Comprehensive Review)
 
 ## 1. Scholar Lifecycle and Memory
 
 - **Design intent:** Maintain a roster of 20–30 memorable scholars blending handcrafted legends with procedurally generated additions, spawn sidecast scholars from expeditions, nurture mentorship-driven career growth, and track defections with scars and public fallout.【F:docs/HLD.md†L24-L177】
 - **Implementation status:** `GameService` seeds the roster on boot, enforces the 20–30 headcount window by generating or retiring scholars, archives the resulting events, and during each digest advances careers automatically, resolves scheduled follow-ups, and spawns sidecasts when expeditions succeed.【F:great_work/service.py†L60-L61】【F:great_work/service.py†L581-L616】【F:great_work/service.py†L728-L759】
-- **Gap:** Mentorship and placement actions are missing (only automatic career progression exists), sidecasts conclude after a single gossip artefact, and follow-up resolutions only adjust feelings instead of progressing the multi-step defection arcs outlined in the design.【F:docs/HLD.md†L145-L213】【F:great_work/service.py†L617-L686】
+- **Gap:** Mentorship and placement actions are missing (only automatic career progression exists), no Discord commands for `/mentor` or `/assign_lab`, sidecasts conclude after a single gossip artefact, and follow-up resolutions only adjust feelings instead of progressing the multi-step defection arcs outlined in the design.【F:docs/HLD.md†L145-L213】【F:great_work/service.py†L617-L686】
 
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
 
 - **Design intent:** Confidence wagers must follow the tuned reward/penalty table, clamp reputation within bounds, and impose recruitment cooldowns on high-stakes wagers while recruitment odds reflect cooldowns, faction influence, and unlock thresholds.【F:docs/HLD.md†L44-L138】
 - **Implementation status:** Reputation changes use the configured wager table and bounds, expedition and recruitment commands enforce reputation thresholds, recruitment odds incorporate cooldown and influence modifiers, and `/status` plus `/wager` expose the thresholds, bounds, and stake payouts in Discord.【F:great_work/service.py†L214-L392】【F:great_work/service.py†L468-L505】【F:great_work/discord_bot.py†L236-L272】
-- **Gap:** Conference command (`/conference`) and conference resolution mechanics remain completely unimplemented, leaving public wager features without command surface or backend handling.【F:docs/HLD.md†L90-L138】【F:great_work/discord_bot.py†L114-L324】
+- **Gap:** Conference command (`/conference`) and conference resolution mechanics remain completely unimplemented, leaving public wager features without command surface or backend handling. No conference data structures or service methods exist.【F:docs/HLD.md†L90-L138】【F:great_work/discord_bot.py†L114-L324】
 
 ## 3. Expedition Structure and Outcomes
 
@@ -60,13 +60,13 @@ Last Updated: 2025-09-19
 
 - **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events with exports available through a bot command.【F:docs/HLD.md†L203-L385】
 - **Implementation status:** The SQLite schema stores all listed entities, including offers and follow-ups, and the service exposes both the press archive and `/export_log` command for retrieval.【F:great_work/state.py†L18-L417】【F:great_work/service.py†L486-L513】【F:great_work/discord_bot.py†L289-L301】
-- **Gap:** Offer records and contracts are unused, faction standings beyond influence remain absent, and lifecycle events like mentorship or symposium outcomes cannot be persisted because those mechanics do not yet exist.【F:docs/HLD.md†L203-L346】【F:great_work/state.py†L77-L212】【F:great_work/service.py†L617-L686】
+- **Gap:** Offers table exists but is completely unused (no INSERT or SELECT operations), contracts field exists but unused, faction standings beyond influence remain absent, and lifecycle events like mentorship or symposium outcomes cannot be persisted because those mechanics do not yet exist.【F:docs/HLD.md†L203-L346】【F:great_work/state.py†L77-L212】【F:great_work/service.py†L617-L686】
 
 ## 8. Discord Command Surface and Admin Tools
 
 - **Design intent:** Provide slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log exports, and at least one admin hotfix interface.【F:docs/HLD.md†L248-L386】
 - **Implementation status:** The bot offers slash commands for theory submission, expedition launch/resolution, recruitment, wager lookups, status, Gazette browsing, log export, and table-talk, and the scheduler mirrors gameplay updates into the configured channels.【F:great_work/discord_bot.py†L114-L324】【F:great_work/scheduler.py†L20-L59】
-- **Gap:** `/conference` and admin/hotfix flows are still missing, and defection tooling remains callable only from the service layer without Discord triggers or audit trails.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L316-L324】【F:great_work/service.py†L394-L466】
+- **Gap:** `/conference`, `/mentor`, `/assign_lab`, `/symposium_vote`, and `/gw_admin` commands are completely missing from Discord implementation. Defection mechanics exist in service layer (evaluate_defection_offer) but have no Discord interface or audit trails.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L114-L324】【F:great_work/service.py†L394-L466】
 
 ### 8.1 Credentials and application configuration
 
@@ -84,19 +84,19 @@ Last Updated: 2025-09-19
 
 ### Critical Missing Features
 
-1. **Mentorship System**: No player-driven mentorship or lab assignments - only automatic career progression
+1. **Mentorship System**: No player-driven mentorship or lab assignments - only automatic career progression, missing `/mentor` and `/assign_lab` commands
 2. **Conference Mechanics**: `/conference` command and resolution logic completely absent
 3. **Symposium Implementation**: Only heartbeat exists, no topics/voting/participation mechanics
 4. **Public Archive**: No web presence or permanent archive beyond Discord exports
-5. **Admin Tools**: No moderation or hotfix Discord commands
+5. **Admin Tools**: No `/gw_admin` command group or any moderation/hotfix Discord commands
 6. **LLM Integration**: Complete absence of AI-driven narrative generation
 
 ### Correctly Implemented Features
 
 1. **Great Projects**: Fully implemented as designed
-2. **Influence Economy**: Five-faction system with reputation-based caps
-3. **Confidence Wagers**: Complete with reputation stakes and cooldowns
-4. **Expedition Resolution**: d100 system with modifiers and failure tables
+2. **Influence Economy**: Five-faction system with reputation-based soft caps (base 6 + 0.2 per reputation point)
+3. **Confidence Wagers**: Complete with reputation stakes (suspect +2/-1, certain +5/-7, stake_my_career +15/-25) and cooldowns
+4. **Expedition Resolution**: d100 system with modifiers, failure tables (shallow/deep), and sideways discoveries
 
 ### Partially Complete
 
@@ -104,3 +104,26 @@ Last Updated: 2025-09-19
 2. **Order Batching**: Expeditions only, no generic order queue infrastructure
 3. **Press Generation**: Single artefacts per action, not layered bulletins/manifestos/reports
 4. **Sideways Discoveries**: Text-only, no mechanical effects or queued follow-ups
+
+## Additional Implementation Details
+
+### Database Infrastructure
+
+- **Offers Table**: Created but completely unused - no code references INSERT or SELECT operations
+- **Followups Table**: Actively used for defection grudges and recruitment follow-ups with delays
+- **Timeline Table**: Properly tracks game year progression based on real-time days
+- **Relationships Table**: Stores scholar-to-scholar and scholar-to-player relationships
+
+### Service Layer Capabilities
+
+- **Defection Evaluation**: `evaluate_defection_offer()` method exists but not exposed via Discord
+- **Career Progression**: `_progress_careers()` runs automatically during digests only
+- **Influence Management**: `_apply_influence_change()` enforces soft caps correctly
+- **Roster Management**: `_ensure_roster()` maintains 20-30 scholar count automatically
+
+### Configuration Details
+
+- **Reputation Bounds**: -50 to +50 as designed
+- **Influence Caps**: Base 6 + 0.2 per reputation point
+- **Expedition Thresholds**: think_tank (-5 rep), field (0 rep), great_project (10 rep)
+- **Cooldown Delays**: defection_grudge (2 days), defection_return (3 days), recruitment_grudge (1 day)
