@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import (
     Event,
@@ -81,6 +81,13 @@ CREATE TABLE IF NOT EXISTS offers (
     payload TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS followups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scholar_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    resolve_at TEXT NOT NULL
 );
 """
 
@@ -171,6 +178,14 @@ class GameState:
             conn.commit()
         self._cached_scholars[scholar.id] = scholar
 
+    def remove_scholar(self, scholar_id: str) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("DELETE FROM scholars WHERE id = ?", (scholar_id,))
+            conn.execute("DELETE FROM relationships WHERE scholar_id = ? OR subject_id = ?", (scholar_id, scholar_id))
+            conn.execute("DELETE FROM followups WHERE scholar_id = ?", (scholar_id,))
+            conn.commit()
+        self._cached_scholars.pop(scholar_id, None)
+
     def get_scholar(self, scholar_id: str) -> Optional[Scholar]:
         if scholar_id in self._cached_scholars:
             return self._cached_scholars[scholar_id]
@@ -218,6 +233,38 @@ class GameState:
                 "INSERT INTO events (timestamp, action, payload) VALUES (?, ?, ?)",
                 (event.timestamp.isoformat(), event.action, json.dumps(event.payload)),
             )
+            conn.commit()
+
+    # Follow-up queue ---------------------------------------------------
+    def schedule_followup(
+        self, scholar_id: str, kind: str, resolve_at: datetime, payload: Dict[str, object]
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO followups (scholar_id, kind, payload, resolve_at) VALUES (?, ?, ?, ?)",
+                (scholar_id, kind, json.dumps(payload), resolve_at.isoformat()),
+            )
+            conn.commit()
+
+    def due_followups(self, now: datetime) -> List[Tuple[int, str, str, Dict[str, object]]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT id, scholar_id, kind, payload FROM followups WHERE resolve_at <= ? ORDER BY id ASC",
+                (now.isoformat(),),
+            ).fetchall()
+        return [
+            (
+                row[0],
+                row[1],
+                row[2],
+                json.loads(row[3]),
+            )
+            for row in rows
+        ]
+
+    def clear_followup(self, followup_id: int) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("DELETE FROM followups WHERE id = ?", (followup_id,))
             conn.commit()
 
     def export_events(self) -> List[Event]:
@@ -292,12 +339,16 @@ class GameState:
             )
             conn.commit()
 
-    def list_press_releases(self) -> List[PressRecord]:
+    def list_press_releases(self, limit: int | None = None, offset: int = 0) -> List[PressRecord]:
         records: List[PressRecord] = []
+        query = "SELECT timestamp, type, headline, body, metadata FROM press_releases ORDER BY id DESC"
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params = (limit, offset)
+        else:
+            params = ()
         with closing(sqlite3.connect(self._db_path)) as conn:
-            rows = conn.execute(
-                "SELECT timestamp, type, headline, body, metadata FROM press_releases ORDER BY id ASC"
-            ).fetchall()
+            rows = conn.execute(query, params).fetchall()
         for ts, type_, headline, body, metadata in rows:
             release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
             records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))

@@ -112,16 +112,75 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
     @app_commands.command(name="resolve_expeditions", description="Resolve all pending expeditions")
     async def resolve_expeditions(interaction: discord.Interaction) -> None:
-        releases = service.resolve_pending_expeditions()
+        digest_releases = service.advance_digest()
+        releases = digest_releases + service.resolve_pending_expeditions()
         if not releases:
             await interaction.response.send_message("No expeditions waiting.")
             return
         text = "\n\n".join(f"{press.headline}\n{press.body}" for press in releases)
         await interaction.response.send_message(text)
 
+    @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
+    @app_commands.describe(
+        scholar_id="Scholar identifier",
+        faction="Faction making the offer",
+    )
+    async def recruit(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        faction: str,
+    ) -> None:
+        try:
+            success, press = service.attempt_recruitment(
+                player_id=str(interaction.user.display_name),
+                scholar_id=scholar_id,
+                faction=faction,
+            )
+        except PermissionError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        prefix = "Success" if success else "Failure"
+        await interaction.response.send_message(f"{prefix}: {press.headline}\n{press.body}")
+
+    @app_commands.command(name="status", description="Show your current influence and cooldowns")
+    async def status(interaction: discord.Interaction) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        data = service.player_status(str(interaction.user.display_name))
+        lines = [f"Reputation: {data['reputation']} (cap {data['influence_cap']})"]
+        lines.append("Influence:")
+        for faction, value in sorted(data["influence"].items()):
+            lines.append(f" - {faction}: {value}")
+        if data["cooldowns"]:
+            lines.append("Cooldowns:")
+            for key, value in data["cooldowns"].items():
+                lines.append(f" - {key}: {value} digests")
+        else:
+            lines.append("No active cooldowns.")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="export_log", description="Export recent events and press")
+    async def export_log(interaction: discord.Interaction, limit: int = 10) -> None:
+        if limit <= 0 or limit > 50:
+            await interaction.response.send_message("Limit must be between 1 and 50", ephemeral=True)
+            return
+        log = service.export_log(limit=limit)
+        press_lines = [f"Press ({len(log['press'])} entries):"]
+        for record in log["press"]:
+            press_lines.append(f" - {record.timestamp.isoformat()} | {record.release.headline}")
+        event_lines = [f"Events ({len(log['events'])} entries):"]
+        for event in log["events"]:
+            event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
+        await interaction.response.send_message("\n".join(press_lines + [""] + event_lines), ephemeral=True)
+
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)
+    bot.tree.add_command(recruit)
+    bot.tree.add_command(status)
+    bot.tree.add_command(export_log)
     return bot
 
 

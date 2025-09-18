@@ -1,6 +1,8 @@
 """Tests covering the high level game service orchestration."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation
@@ -106,7 +108,9 @@ def test_recruitment_and_cooldown_flow(tmp_path):
     player = service.state.get_player("sarah")
     assert player is not None
     assert player.influence["academia"] >= 1
+    assert player.cooldowns["recruitment"] >= 2
 
+    service._FOLLOWUP_DELAYS["recruitment_grudge"] = timedelta(seconds=0)
     failure, press_fail = service.attempt_recruitment(
         player_id="sarah",
         scholar_id="s.ironquill",
@@ -117,6 +121,13 @@ def test_recruitment_and_cooldown_flow(tmp_path):
     assert failure is False
     assert press_fail.type == "recruitment_report"
 
+    followups = service.advance_digest()
+    assert any(rel.type == "academic_gossip" for rel in followups)
+
+    status = service.player_status("sarah")
+    assert status["reputation"] == service.state.get_player("sarah").reputation
+    assert status["influence"]["academia"] <= status["influence_cap"]
+
     archive = service.state.list_press_releases()
     assert any(item.release.type == "recruitment_report" for item in archive)
 
@@ -124,6 +135,9 @@ def test_recruitment_and_cooldown_flow(tmp_path):
 def test_defection_offer_and_digest(tmp_path):
     service = build_service(tmp_path)
     scholar_id = "s.ironquill"
+
+    service._FOLLOWUP_DELAYS["defection_return"] = timedelta(seconds=0)
+    service._FOLLOWUP_DELAYS["defection_grudge"] = timedelta(seconds=0)
 
     defected, notice = service.evaluate_defection_offer(
         scholar_id=scholar_id,
@@ -153,8 +167,41 @@ def test_defection_offer_and_digest(tmp_path):
     if player:
         player.cooldowns["recruitment"] = 2
         service.state.upsert_player(player)
-    service.advance_digest()
+    releases = service.advance_digest()
+    assert isinstance(releases, list)
+    assert any(rel.type == "academic_gossip" for rel in releases)
     updated = service.state.get_player("sarah")
     if updated:
         assert updated.cooldowns.get("recruitment", 0) <= 1
+
+
+def test_followup_queue_can_be_seeded(tmp_path):
+    service = build_service(tmp_path)
+    scholar_id = "s.ironquill"
+    service.state.schedule_followup(
+        scholar_id,
+        "defection_grudge",
+        datetime.now(timezone.utc) - timedelta(minutes=5),
+        {"faction": "industry"},
+    )
+    releases = service.advance_digest()
+    assert releases
+    assert any(rel.type == "academic_gossip" for rel in releases)
+
+
+def test_reputation_gating_blocks_high_tier_actions(tmp_path):
+    service = build_service(tmp_path)
+    service.ensure_player("sarah")
+    with pytest.raises(PermissionError):
+        service.queue_expedition(
+            code="AR-99",
+            player_id="sarah",
+            expedition_type="great_project",
+            objective="Ambitious", 
+            team=["s.ironquill"],
+            funding=["academia"],
+            preparation=ExpeditionPreparation(),
+            prep_depth="deep",
+            confidence=ConfidenceLevel.CERTAIN,
+        )
 

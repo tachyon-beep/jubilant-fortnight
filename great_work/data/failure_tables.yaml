@@ -1,21 +1,80 @@
 failure_tables:
-  shallow:
-    - weight: 60
-      result: nothing
-      description: "No meaningful findings beyond bruised egos."
-    - weight: 30
-      result: minor_clue
-      description: "A fragmentary clue hints at an adjacent site."
-    - weight: 10
-      result: disaster
-      description: "A dramatic mishap becomes campus gossip."
-  deep:
-    - weight: 40
-      result: minor_clue
-      description: "Careful prep yields a small but usable lead."
-    - weight: 40
-      result: adjacent_field
-      description: "Unexpected insight in a neighbouring discipline."
-    - weight: 20
-      result: major_unlock
-      description: "Failure uncovers a new research domain."
+  think_tank:
+    shallow:
+      - weight: 60
+        result: nothing
+        description: "The roundtable adjourns with only polite applause."
+      - weight: 30
+        result: minor_clue
+        description: "An offhand comment hints at a promising citation trail."
+      - weight: 10
+        result: scandal
+        description: "A mentor-pupil feud spills into the faculty lounge."
+    deep:
+      - weight: 40
+        result: minor_clue
+        description: "Workshop notes reveal a new collaboration lead."
+      - weight: 40
+        result: adjacent_field
+        description: "Unexpected synergy with another department emerges."
+      - weight: 20
+        result: prestige_hit
+        description: "The symposium lambastes the institute's methods."
+  field:
+    shallow:
+      - weight: 55
+        result: nothing
+        description: "Weather and bureaucracy stall the expedition."
+      - weight: 35
+        result: minor_clue
+        description: "A local contact whispers about a hidden archive."
+      - weight: 10
+        result: disaster
+        description: "Equipment loss sparks faction blame games."
+    deep:
+      - weight: 30
+        result: minor_clue
+        description: "Samples contradict the working theory but inspire debate."
+      - weight: 50
+        result: adjacent_field
+        description: "Side-channel intelligence reshapes faction priorities."
+      - weight: 20
+        result: major_unlock
+        description: "Catastrophic failure reveals a rival cabal's weakness."
+  great_project:
+    shallow:
+      - weight: 50
+        result: nothing
+        description: "Committees defer the project pending more assurances."
+      - weight: 35
+        result: minor_clue
+        description: "Funding bodies leak new compliance hurdles."
+      - weight: 15
+        result: disaster
+        description: "A faction walk-out forces emergency arbitration."
+    deep:
+      - weight: 25
+        result: minor_clue
+        description: "Audits expose structural inefficiencies at the institute."
+      - weight: 45
+        result: adjacent_field
+        description: "Political scrutiny unlocks foreign research dossiers."
+      - weight: 30
+        result: major_unlock
+        description: "Spectacular failure births a breakaway program."
+sideways:
+  think_tank:
+    shallow:
+      - "Coffeehouse gossip surfaces about a forgotten thesis."
+    deep:
+      - "Symposium attendees demand a follow-up colloquium." 
+  field:
+    shallow:
+      - "Local dignitaries offer provisional support if appeased." 
+    deep:
+      - "A rival faction quietly invites joint stewardship." 
+  great_project:
+    shallow:
+      - "Internal auditors flag an innovation council review." 
+    deep:
+      - "Foreign observers float a transnational summit." 
