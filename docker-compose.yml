@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: great-work-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage:z
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+      - QDRANT__SERVICE__GRPC_PORT=6334
+
+  # Optional: PostgreSQL for future expansion beyond SQLite
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: great-work-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: greatwork
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+  #     POSTGRES_DB: greatwork
+  #   volumes:
+  #     - ./postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+networks:
+  default:
+    name: great-work-network

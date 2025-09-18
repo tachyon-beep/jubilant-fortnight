@@ -10,6 +10,10 @@ build/
 dist/
 the_great_work.egg-info/
 
+# Qdrant vector database storage
+qdrant_storage/
+postgres_data/
 
+# IDE and tools
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
