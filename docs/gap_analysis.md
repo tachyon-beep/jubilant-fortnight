@@ -44,3 +44,7 @@
 - **Design intent:** Generate press and scholar reactions through persona-driven LLM prompts with batching and moderation safeguards.【F:docs/HLD.md†L318-L369】
 - **Implementation status:** Scholar reactions and press copy remain templated string substitutions without any LLM calls or safety layers.【F:great_work/service.py†L553-L569】【F:great_work/press.py†L14-L122】
 - **Gap:** Introduce the planned persona prompt pipeline, batching strategies, and moderation checks to reach the intended narrative richness.【F:docs/HLD.md†L318-L369】
+
+## Remediation Progress Snapshot
+- **Gazette delivery:** The scheduler now accepts an optional publisher so digest and symposium artefacts can be routed directly to Discord or other channels instead of relying solely on logs.【F:great_work/scheduler.py†L15-L64】
+- **Public archive access:** Players can browse recent Gazette headlines through the `/gazette` slash command, which surfaces stored press releases via the `GameService` archive helpers.【F:great_work/discord_bot.py†L118-L156】【F:great_work/service.py†L473-L501】

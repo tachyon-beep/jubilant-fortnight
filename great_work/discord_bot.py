@@ -161,6 +161,21 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             lines.append("No active cooldowns.")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
+    @app_commands.command(name="gazette", description="Show recent Gazette headlines")
+    async def gazette(interaction: discord.Interaction, limit: int = 5) -> None:
+        if limit <= 0 or limit > 20:
+            await interaction.response.send_message("Limit must be between 1 and 20", ephemeral=True)
+            return
+        records = service.export_press_archive(limit=limit)
+        if not records:
+            await interaction.response.send_message("No Gazette entries recorded yet.", ephemeral=True)
+            return
+        lines = ["Recent Gazette entries:"]
+        for record in records:
+            timestamp = record.timestamp.strftime("%Y-%m-%d %H:%M")
+            lines.append(f" - {timestamp} | {record.release.headline}")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
     @app_commands.command(name="export_log", description="Export recent events and press")
     async def export_log(interaction: discord.Interaction, limit: int = 10) -> None:
         if limit <= 0 or limit > 50:
@@ -180,6 +195,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(resolve_expeditions)
     bot.tree.add_command(recruit)
     bot.tree.add_command(status)
+    bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
     return bot
 
