@@ -65,7 +65,7 @@ failure_tables:
 sideways:
   think_tank:
     shallow:
-      - "Coffeehouse gossip surfaces about a forgotten thesis." 
+      - "Coffeehouse gossip surfaces about a forgotten thesis."
     deep:
       - "Symposium attendees demand a follow-up colloquium." 
   field:
