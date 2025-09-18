@@ -8,8 +8,8 @@
 | --- | --- | --- |
 | Provide an asynchronous multiplayer experience supporting between four and eight concurrent players. | Partially Implemented | Discord slash commands let multiple players act asynchronously, but there is no explicit enforcement of player counts or turn management yet.【F:great_work/discord_bot.py†L19-L200】 |
 | Deliver all player moves through a Discord bot. | Partially Implemented | Core actions (theories, expeditions, recruitment, status, archives) are exposed via slash commands, while defection handling and admin moves remain service-only.【F:great_work/discord_bot.py†L33-L191】【F:great_work/service.py†L320-L466】 |
-| Make every action publicly visible to all participants. | Partially Implemented | Major moves emit press releases and events, but Gazette digests are not automatically published to public channels and some responses remain ephemeral.【F:great_work/service.py†L125-L666】【F:great_work/scheduler.py†L41-L69】 |
-| Advance the shared narrative timeline by one in-game year for each real-world day that passes. | Implemented | Digest advancement calls into timeline persistence to convert elapsed real days into in-world years, emitting Gazette updates whenever the calendar rolls forward.【F:great_work/service.py†L494-L533】【F:great_work/state.py†L312-L346】 |
+| Make every action publicly visible to all participants. | Partially Implemented | Core orders and Gazette updates now post to their dedicated Discord channels, though some utility commands still reply ephemerally and symposium beats remain undeveloped.【F:great_work/discord_bot.py†L112-L253】【F:great_work/scheduler.py†L30-L58】 |
+| Advance the shared narrative timeline by one in-game year for each real-world day that passes. | Implemented | Digest advancement calls into timeline persistence to convert elapsed real days into in-world years, emitting Gazette updates whenever the calendar rolls forward.【F:great_work/service.py†L515-L533】【F:great_work/state.py†L312-L346】 |
 
 ### Scholar Management
 
@@ -61,16 +61,16 @@
 | Auto-generate a manifest for every recorded action. | Partially Implemented | Expedition launches create research manifestos, though other action types reuse different templates or none at all.【F:great_work/service.py†L170-L318】【F:great_work/press.py†L20-L48】 |
 | Auto-generate a report for every recorded action. | Partially Implemented | Expedition resolutions produce discovery or retraction reports, but other gameplay actions may only log events without reports.【F:great_work/service.py†L226-L392】【F:great_work/press.py†L61-L145】 |
 | Auto-generate a gossip item for every recorded action. | Partially Implemented | Recruitment, follow-ups, and promotions emit gossip, yet numerous actions remain gossip-free today.【F:great_work/service.py†L320-L666】【F:great_work/press.py†L100-L145】 |
-| Publish Gazette digests twice per real day summarizing actions. | Partially Implemented | The scheduler fires twice daily and processes digests, but publishing still depends on providing an external publisher hook.【F:great_work/scheduler.py†L30-L69】 |
+| Publish Gazette digests twice per real day summarizing actions. | Implemented | Scheduled digests now publish to the configured Gazette channel automatically while processing queued orders through `advance_digest`.【F:great_work/scheduler.py†L30-L58】【F:great_work/discord_bot.py†L91-L109】 |
 | Host weekly Symposium threads to highlight notable developments. | Partially Implemented | A scheduled symposium heartbeat exists, but no topic selection or participation mechanics are implemented.【F:great_work/scheduler.py†L50-L58】 |
 
 ### Discord UX and Commands
 
 | Requirement | Status | Notes |
 | --- | --- | --- |
-| Expose gameplay interactions through the `#orders` channel. | Not Implemented | Channel routing is not automated; commands respond in-place without channel-specific dispatch.【F:great_work/discord_bot.py†L19-L200】 |
-| Expose gameplay interactions through the `#gazette` channel. | Not Implemented | Gazette publications rely on manual command responses rather than targeted channel posts.【F:great_work/discord_bot.py†L164-L191】【F:great_work/scheduler.py†L41-L69】 |
-| Expose gameplay interactions through the `#table-talk` channel. | Not Implemented | No functionality differentiates table-talk output from other channels yet.【F:great_work/discord_bot.py†L19-L200】 |
+| Expose gameplay interactions through the `#orders` channel. | Implemented | Orders, recruitment, and digest resolutions mirror their announcements into the configured orders channel automatically.【F:great_work/discord_bot.py†L129-L205】 |
+| Expose gameplay interactions through the `#gazette` channel. | Implemented | Gazette digests publish press copy to the configured Gazette channel whenever the scheduler runs.【F:great_work/discord_bot.py†L91-L109】【F:great_work/scheduler.py†L30-L58】 |
+| Expose gameplay interactions through the `#table-talk` channel. | Implemented | Players can send moderated chatter to the table-talk channel via the `/table_talk` command.【F:great_work/discord_bot.py†L233-L253】 |
 | Provide the `/submit_theory` slash command. | Implemented | Command registered and wired to `GameService.submit_theory`.【F:great_work/discord_bot.py†L33-L74】 |
 | Provide the `/wager` slash command. | Implemented | Discord exposes a dedicated `/wager` command that surfaces wager payouts, thresholds, and bounds from the service layer.【F:great_work/discord_bot.py†L168-L184】【F:great_work/service.py†L486-L505】 |
 | Provide the `/recruit` slash command. | Implemented | Recruitment attempts are exposed through Discord and backed by `GameService.attempt_recruitment`.【F:great_work/discord_bot.py†L123-L147】【F:great_work/service.py†L320-L392】 |
@@ -85,7 +85,7 @@
 
 | Requirement | Status | Notes |
 | --- | --- | --- |
-| Optimize pacing for small friend groups. | Partially Implemented | Twice-daily digest scheduling and follow-up processing support slower pacing, though symposium participation loops are still pending.【F:great_work/scheduler.py†L30-L69】【F:great_work/service.py†L494-L666】 |
+| Optimize pacing for small friend groups. | Partially Implemented | Twice-daily digest scheduling and follow-up processing support slower pacing, though symposium participation loops are still pending.【F:great_work/scheduler.py†L30-L69】【F:great_work/service.py†L515-L666】 |
 | Optimize complexity for small friend groups. | Not Evaluated | No instrumentation or documentation addresses cognitive load or scaling complexity yet. |
 | Ensure systems remain manageable at the intended small-group scale. | Partially Implemented | Current mechanics and persistence target a single Discord server, but tooling for moderation or scaling beyond core commands is absent.【F:great_work/discord_bot.py†L19-L200】 |
 
@@ -101,9 +101,9 @@
 
 | Requirement | Status | Notes |
 | --- | --- | --- |
-| Maintain a twice-daily cadence for Gazette digests. | Partially Implemented | Scheduler jobs trigger at configured times, though publishing requires a custom publisher hook.【F:great_work/scheduler.py†L30-L48】 |
+| Maintain a twice-daily cadence for Gazette digests. | Implemented | Scheduler jobs trigger at configured times and automatically publish Gazette digests to the designated channel.【F:great_work/scheduler.py†L30-L58】【F:great_work/discord_bot.py†L91-L109】 |
 | Schedule weekly Symposium events to drive communal discussion. | Partially Implemented | A weekly heartbeat exists, but it lacks topics, participation tracking, or consequences.【F:great_work/scheduler.py†L50-L58】 |
-| Support idle-friendly scheduling to avoid overwhelming players. | Partially Implemented | Asynchronous Discord commands and digest gating help pacing, yet mentorship and symposium mechanics may add additional load once implemented.【F:great_work/discord_bot.py†L19-L200】【F:great_work/service.py†L494-L666】 |
+| Support idle-friendly scheduling to avoid overwhelming players. | Partially Implemented | Asynchronous Discord commands and digest gating help pacing, yet mentorship and symposium mechanics may add additional load once implemented.【F:great_work/discord_bot.py†L19-L200】【F:great_work/service.py†L515-L666】 |
 
 ### Reproducibility and Auditability
 

@@ -1,8 +1,11 @@
 """Discord bot entry point for The Great Work."""
 from __future__ import annotations
 
+import atexit
+import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -10,25 +13,103 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from .models import ConfidenceLevel, ExpeditionPreparation
+from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease
+from .scheduler import GazetteScheduler
 from .service import GameService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ChannelRouter:
+    """Configures which Discord channels receive automated posts."""
+
+    orders: Optional[int]
+    gazette: Optional[int]
+    table_talk: Optional[int]
+
+    @staticmethod
+    def from_env() -> "ChannelRouter":
+        def _parse(env_key: str) -> Optional[int]:
+            value = os.environ.get(env_key)
+            if not value:
+                return None
+            try:
+                return int(value)
+            except ValueError:
+                logger.warning("Invalid channel id %s for %s", value, env_key)
+                return None
+
+        return ChannelRouter(
+            orders=_parse("GREAT_WORK_CHANNEL_ORDERS"),
+            gazette=_parse("GREAT_WORK_CHANNEL_GAZETTE"),
+            table_talk=_parse("GREAT_WORK_CHANNEL_TABLE_TALK"),
+        )
+
+
+async def _post_to_channel(
+    bot: commands.Bot,
+    channel_id: Optional[int],
+    content: str,
+    *,
+    purpose: str,
+) -> None:
+    """Send content to a configured channel if possible."""
+
+    if channel_id is None:
+        logger.debug("Skipping %s post; channel not configured", purpose)
+        return
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
+        return
+    try:
+        await channel.send(content)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to send %s message", purpose)
+
+
+def _format_press(press: PressRelease) -> str:
+    return f"**{press.headline}**\n{press.body}"
 
 
 def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> commands.Bot:
     intents = intents or discord.Intents.default()
     bot = commands.Bot(command_prefix="/", intents=intents)
     service = GameService(db_path)
+    router = ChannelRouter.from_env()
+    scheduler: Optional[GazetteScheduler] = None
+
+    def _shutdown_scheduler() -> None:  # pragma: no cover - process shutdown hook
+        if scheduler is not None:
+            scheduler.shutdown()
+
+    atexit.register(_shutdown_scheduler)
 
     @bot.event
     async def on_ready() -> None:
+        nonlocal scheduler
         logger.info("Great Work bot connected as %s", bot.user)
         try:
             synced = await bot.tree.sync()
             logger.info("Synced %d commands", len(synced))
         except Exception as exc:  # pragma: no cover - logging only
             logger.exception("Failed to sync commands: %s", exc)
+        if scheduler is None and router.gazette is not None:
+            scheduler = GazetteScheduler(
+                service,
+                publisher=lambda press: asyncio.run_coroutine_threadsafe(
+                    _post_to_channel(
+                        bot,
+                        router.gazette,
+                        _format_press(press),
+                        purpose="gazette",
+                    ),
+                    bot.loop,
+                ),
+            )
+            scheduler.start()
+            logger.info("Started Gazette scheduler publishing to %s", router.gazette)
 
     @app_commands.command(name="submit_theory", description="Submit a theory to the Gazette")
     @app_commands.describe(
@@ -54,7 +135,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             supporters=supporter_list,
             deadline=deadline,
         )
-        await interaction.response.send_message(f"{press.headline}\n{press.body}")
+        message = _format_press(press)
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.orders, message, purpose="orders")
 
     @app_commands.command(name="launch_expedition", description="Queue an expedition for resolution")
     @app_commands.describe(
@@ -108,7 +191,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             prep_depth=prep_depth,
             confidence=level,
         )
-        await interaction.response.send_message(f"{press.headline}\n{press.body}")
+        message = _format_press(press)
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.orders, message, purpose="orders")
 
     @app_commands.command(name="resolve_expeditions", description="Resolve all pending expeditions")
     async def resolve_expeditions(interaction: discord.Interaction) -> None:
@@ -117,8 +202,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         if not releases:
             await interaction.response.send_message("No expeditions waiting.")
             return
-        text = "\n\n".join(f"{press.headline}\n{press.body}" for press in releases)
+        text = "\n\n".join(_format_press(press) for press in releases)
         await interaction.response.send_message(text)
+        await _post_to_channel(bot, router.orders, text, purpose="orders")
 
     @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
     @app_commands.describe(
@@ -143,7 +229,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         prefix = "Success" if success else "Failure"
-        await interaction.response.send_message(f"{prefix}: {press.headline}\n{press.body}")
+        message = f"{prefix}: {press.headline}\n{press.body}"
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.orders, message, purpose="orders")
 
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
     async def status(interaction: discord.Interaction) -> None:
@@ -212,6 +300,19 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
         await interaction.response.send_message("\n".join(press_lines + [""] + event_lines), ephemeral=True)
 
+    @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
+    async def table_talk(interaction: discord.Interaction, message: str) -> None:
+        display_name = interaction.user.display_name
+        if router.table_talk is None:
+            await interaction.response.send_message(
+                "Table-talk channel is not configured.",
+                ephemeral=True,
+            )
+            return
+        payload = f"**{display_name}:** {message}"
+        await _post_to_channel(bot, router.table_talk, payload, purpose="table-talk")
+        await interaction.response.send_message("Posted to table-talk.", ephemeral=True)
+
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)
@@ -220,6 +321,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(wager)
     bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
+    bot.tree.add_command(table_talk)
     return bot
 
 
