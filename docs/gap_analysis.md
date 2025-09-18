@@ -15,6 +15,11 @@
 - **Implementation status:** Expedition launches deduct influence by type, persist preparation details, and resolve through an `ExpeditionResolver` that rolls d100, applies modifiers, consults depth-specific failure tables, and records the outcome along with reaction text and sideways flavour.【F:great_work/service.py†L170-L318】【F:great_work/expeditions.py†L60-L116】【F:great_work/data/failure_tables.yaml†L1-L80】【F:great_work/press.py†L61-L96】
 - **Gap:** Sideways discoveries remain narrative flavour with no faction effects, queued follow-ups, or branching threads, and deep preparation does not yet unlock bespoke narrative beats beyond the stored text snippets.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L244-L307】【F:great_work/service.py†L728-L759】
 
+### 3.1 Great Projects gating divergence
+- **Design intent:** Defer Great Projects until after initial playtests.【F:docs/HLD.md†L73-L86】
+- **Implementation status:** Great Projects are already selectable and resolved with costs/rewards and thresholds.【F:great_work/service.py†L38-L64】【F:great_work/expeditions.py†L60-L116】【F:great_work/data/settings.yaml†L20-L34】
+- **Gap:** Behaviour exceeds MVP scope. Either gate behind a feature flag or remove from command surface until playtest feedback.
+
 ## 4. Influence Economy and Faction Mechanics
 - **Design intent:** Influence should operate as a five-dimensional economy with soft caps tied to reputation and faction requirements across key actions, supported by additional sinks such as symposium commitments and contracts.【F:docs/HLD.md†L90-L213】
 - **Implementation status:** Player influence is persisted per faction, capped using reputation-driven limits, modified by expedition costs/rewards and recruitment success, and surfaced through the `/status` command.【F:great_work/service.py†L170-L392】【F:great_work/service.py†L677-L772】【F:great_work/discord_bot.py†L236-L254】
@@ -25,10 +30,20 @@
 - **Implementation status:** Templated generators create press for theories, expeditions, recruitment, and defections; `GameService` archives releases in SQLite; and Discord commands let players list Gazette entries or export logs.【F:great_work/press.py†L20-L145】【F:great_work/service.py†L125-L513】【F:great_work/state.py†L366-L417】【F:great_work/discord_bot.py†L274-L301】
 - **Gap:** Copy still uses static templates without persona voice or moderation safeguards, Gazette digests only reach Discord logs without a broader public archive, and most actions emit a single artefact instead of the layered bulletins and manifests described.【F:docs/HLD.md†L214-L354】【F:great_work/scheduler.py†L20-L59】【F:great_work/press.py†L20-L145】
 
+### 5.1 Public archive availability
+- **Design intent:** Keep a permanent, public, citable archive beyond Discord.【F:docs/HLD.md†L214-L354】
+- **Implementation status:** Press is archived to SQLite and can be exported via `/export_log`, but there is no external static archive or web view.【F:great_work/state.py†L366-L417】【F:great_work/discord_bot.py†L289-L301】
+- **Gap:** Introduce an exporter (e.g., static site or attachment bundles) to satisfy permanence and accessibility goals.
+
 ## 6. Timing, Gazette Cadence, and Symposiums
 - **Design intent:** Twice-daily Gazette digests should advance cooldowns, timeline years, and queued orders before publishing to Discord, while weekly symposiums run structured topics with mandatory responses.【F:docs/HLD.md†L101-L386】
 - **Implementation status:** The background scheduler triggers digests at configured times, calling `advance_digest` to age cooldowns, maintain the roster, progress careers, resolve follow-ups, and then resolve pending expeditions before broadcasting to the Gazette channel; a weekly symposium heartbeat posts a placeholder announcement.【F:great_work/scheduler.py†L20-L59】【F:great_work/discord_bot.py†L89-L113】【F:great_work/service.py†L515-L686】
 - **Gap:** Symposiums stop at a heartbeat message with no topic selection or participation mechanics, and digest processing still excludes non-expedition orders such as mentorships or conferences that the design earmarks for batch resolution.【F:docs/HLD.md†L101-L280】【F:great_work/scheduler.py†L32-L52】【F:great_work/service.py†L515-L553】
+
+### 6.1 Non-expedition order batching
+- **Design intent:** Orders like mentorships and conferences batch into digests.【F:docs/HLD.md†L101-L213】
+- **Implementation status:** Only expedition resolution and follow-ups are batched; there is no queue for other order types yet.【F:great_work/service.py†L515-L686】
+- **Gap:** Add generic order queue + handlers for mentorship and conference flows.
 
 ## 7. Data Model and Persistence
 - **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events with exports available through a bot command.【F:docs/HLD.md†L203-L385】
@@ -39,6 +54,11 @@
 - **Design intent:** Provide slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log exports, and at least one admin hotfix interface.【F:docs/HLD.md†L248-L386】
 - **Implementation status:** The bot offers slash commands for theory submission, expedition launch/resolution, recruitment, wager lookups, status, Gazette browsing, log export, and table-talk, and the scheduler mirrors gameplay updates into the configured channels.【F:great_work/discord_bot.py†L114-L324】【F:great_work/scheduler.py†L20-L59】
 - **Gap:** `/conference` and admin/hotfix flows are still missing, and defection tooling remains callable only from the service layer without Discord triggers or audit trails.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L316-L324】【F:great_work/service.py†L394-L466】
+
+### 8.1 Credentials and application configuration
+- **Design intent:** Bot setup assumes proper Discord app configuration but does not specify runtime variables.【F:docs/HLD.md†L248-L286】
+- **Implementation status:** The bot now supports `DISCORD_APP_ID` and posts to configured channels; tokens and keys are provided via environment variables, not documented in HLD.【F:great_work/discord_bot.py†L69-L113】
+- **Gap:** Add a short deployment/config appendix in docs to align with the code’s environment variable surface (token, app id, channel ids).
 
 ## 9. LLM and Narrative Integration
 - **Design intent:** Generate press and reactions through persona-driven LLM prompts with batching and moderation safeguards.【F:docs/HLD.md†L318-L369】
