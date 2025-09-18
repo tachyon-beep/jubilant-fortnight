@@ -75,7 +75,14 @@ def _format_press(press: PressRelease) -> str:
 
 def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> commands.Bot:
     intents = intents or discord.Intents.default()
-    bot = commands.Bot(command_prefix="/", intents=intents)
+    app_id_raw = os.environ.get("DISCORD_APP_ID")
+    application_id: Optional[int] = None
+    if app_id_raw:
+        try:
+            application_id = int(app_id_raw)
+        except ValueError:
+            logger.warning("Invalid DISCORD_APP_ID: %s", app_id_raw)
+    bot = commands.Bot(command_prefix="/", intents=intents, application_id=application_id)
     service = GameService(db_path)
     router = ChannelRouter.from_env()
     scheduler: Optional[GazetteScheduler] = None

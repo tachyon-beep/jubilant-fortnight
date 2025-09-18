@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4",
+    "ruff>=0.6",
 ]
 
 [tool.pytest.ini_options]
@@ -27,3 +28,23 @@ testpaths = ["tests"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["great_work*"]
+
+[tool.ruff]
+# Keep things readable, but not overly strict.
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Focus on core correctness checks out of the box.
+select = ["E", "F"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests often use unused imports/variables and relaxed style.
+"tests/**/*" = ["E402", "F401"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
