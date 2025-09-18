@@ -20,15 +20,22 @@ class Settings:
     symposium_day: str
     confidence_wagers: Dict[str, Dict[str, int]]
     reputation_bounds: Dict[str, int]
+    action_thresholds: Dict[str, int]
+    influence_caps: Dict[str, float]
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Settings":
+        reputation = dict(data["reputation"])
+        thresholds = reputation.get("thresholds", {})
+        influence_caps = data.get("influence_caps", {"base": 5, "per_reputation": 0.0})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
             gazette_times=list(data["timing"]["gazette_times"]),
             symposium_day=data["timing"]["symposium_day"],
             confidence_wagers=data["confidence_wagers"],
-            reputation_bounds=data["reputation"],
+            reputation_bounds=reputation,
+            action_thresholds={k: int(v) for k, v in thresholds.items()},
+            influence_caps={"base": float(influence_caps.get("base", 5)), "per_reputation": float(influence_caps.get("per_reputation", 0.0))},
         )
 
 

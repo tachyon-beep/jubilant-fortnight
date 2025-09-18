@@ -32,7 +32,8 @@ class GazetteScheduler:
         self.scheduler.shutdown(wait=False)
 
     def _publish_digest(self) -> None:
-        releases = self.service.resolve_pending_expeditions()
+        digest_releases = self.service.advance_digest()
+        releases = digest_releases + self.service.resolve_pending_expeditions()
         if not releases:
             logger.info("No expeditions to report this digest")
             return

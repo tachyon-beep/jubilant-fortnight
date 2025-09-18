@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import yaml
 
@@ -24,17 +24,26 @@ class FailureTables:
     def __init__(self, data_path: Path | None = None) -> None:
         self._path = data_path or _DATA_PATH
         data = self._load_yaml("failure_tables.yaml")
-        self._tables = {
-            key: [FailureResult(**entry) for entry in entries]
-            for key, entries in data["failure_tables"].items()
-        }
+        raw_tables = data["failure_tables"]
+        self._tables: Dict[str, Dict[str, List[FailureResult]]] = {}
+        for expedition_type, depths in raw_tables.items():
+            self._tables[expedition_type] = {
+                depth: [FailureResult(**entry) for entry in entries]
+                for depth, entries in depths.items()
+            }
+        self._sideways: Dict[str, Dict[str, List[str]]] = {}
+        for expedition_type, depths in data.get("sideways", {}).items():
+            self._sideways[expedition_type] = {
+                depth: list(entries)
+                for depth, entries in depths.items()
+            }
 
     def _load_yaml(self, name: str) -> Dict:
         with (self._path / name).open("r", encoding="utf-8") as fh:
             return yaml.safe_load(fh)
 
-    def roll(self, rng: DeterministicRNG, depth: str) -> FailureResult:
-        table = self._tables[depth]
+    def roll(self, rng: DeterministicRNG, expedition_type: str, depth: str) -> FailureResult:
+        table = self._tables[expedition_type][depth]
         total = sum(item.weight for item in table)
         roll = rng.randint(1, total)
         upto = 0
@@ -43,6 +52,9 @@ class FailureTables:
             if roll <= upto:
                 return item
         return table[-1]
+
+    def sideways(self, expedition_type: str, depth: str) -> List[str]:
+        return self._sideways.get(expedition_type, {}).get(depth, [])
 
 
 class ExpeditionResolver:
@@ -56,12 +68,13 @@ class ExpeditionResolver:
         rng: DeterministicRNG,
         preparation: ExpeditionPreparation,
         prep_depth: str,
+        expedition_type: str,
     ) -> ExpeditionResult:
         roll = rng.roll_d100()
         modifier = preparation.total_modifier()
         final = roll + modifier
         if final < 40:
-            failure = self._failure_tables.roll(rng, prep_depth)
+            failure = self._failure_tables.roll(rng, expedition_type, prep_depth)
             return ExpeditionResult(
                 roll=roll,
                 modifier=modifier,
@@ -75,7 +88,7 @@ class ExpeditionResolver:
                 modifier=modifier,
                 final_score=final,
                 outcome=ExpeditionOutcome.PARTIAL,
-                sideways_discovery=self._sideways_discovery(prep_depth),
+                sideways_discovery=self._sideways_discovery(expedition_type, prep_depth),
             )
         if 65 <= final <= 84:
             return ExpeditionResult(
@@ -89,15 +102,18 @@ class ExpeditionResolver:
             modifier=modifier,
             final_score=final,
             outcome=ExpeditionOutcome.LANDMARK,
-            sideways_discovery="New domain unlocked",
+            sideways_discovery=self._sideways_discovery(expedition_type, prep_depth, landmark=True),
         )
 
-    def _sideways_discovery(self, prep_depth: str) -> str | None:
-        if prep_depth == "shallow":
-            return "Minor clue toward adjacent site"
-        if prep_depth == "deep":
-            return "Adjacent-field discovery that shifts focus"
-        return None
+    def _sideways_discovery(
+        self, expedition_type: str, prep_depth: str, landmark: bool = False
+    ) -> str | None:
+        options = self._failure_tables.sideways(expedition_type, prep_depth)
+        if not options:
+            return None if not landmark else "New domain unlocked"
+        if landmark:
+            return options[-1]
+        return options[0]
 
 
 __all__ = ["ExpeditionResolver", "FailureTables", "FailureResult"]

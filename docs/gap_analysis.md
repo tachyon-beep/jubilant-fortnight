@@ -1,46 +1,46 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
 ## 1. Scholar Lifecycle and Memory
-- **Design intent:** Maintain a roster of 20–30 memorable scholars that combine hand-authored legends with procedurally generated characters, including sidecast scholars emerging from expeditions, mentorship growth, and public defections with long-term grudges tracked via facts, feelings, and scars.【F:docs/HLD.md†L26-L200】【F:docs/HLD.md†L171-L201】
-- **Implementation status:** The codebase loads static seed scholars and supports deterministic generation plus basic memory serialization, but only seeds once at startup with no ongoing roster management or hooks to expeditions for spawning newcomers.【F:great_work/service.py†L48-L158】【F:great_work/state.py†L84-L115】【F:great_work/scholars.py†L18-L159】
-- **Gap:** There is no system to keep the scholar pool within the desired size, trigger expedition sidecasts, progress careers, or publish public defection stories tied to memory changes.【F:great_work/service.py†L160-L217】【F:great_work/scholars.py†L162-L184】
+- **Design intent:** Maintain a roster of 20–30 memorable scholars that mix hand-authored legends with procedurally generated characters, spawn sidecast scholars from expeditions, nurture mentorship growth, and track defections with persistent scars and public fallout.【F:docs/HLD.md†L26-L201】
+- **Implementation status:** `GameService` enforces a minimum roster, seeds procedurally generated scholars, spawns sidecasts on successful expeditions, records relationship changes, and publishes defection outcomes while applying memory scars.【F:great_work/service.py†L60-L551】 Persistence layers store scholar data, relationships, press releases, and events to back these flows.【F:great_work/state.py†L22-L233】
+- **Gap:** The roster is only back-filled upward—there is no retirement logic, mentorship advancement, or career progression to keep the pool curated within the 20–30 window, and sidecasts do not yet branch into longer arcs beyond their initial gossip beat.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L463-L551】
 
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
-- **Design intent:** Confidence wagers alter reputation according to the provided table and impose a recruitment cooldown (halved success chances for two ticks) after any “stake my career” claim, all within bounded reputation thresholds.【F:docs/HLD.md†L44-L116】
-- **Implementation status:** Reputation deltas follow the wager table, but partial outcomes reuse half the reward and no cooldown or reputation-bound logic is applied; recruitment odds are unaffected because no recruitment system exists yet.【F:great_work/service.py†L118-L217】【F:great_work/config.py†L14-L58】
-- **Gap:** Missing cooldown tracking, recruitment impact hooks, and enforcement of reputation thresholds or soft caps referenced in the design.【F:docs/HLD.md†L54-L116】【F:great_work/service.py†L192-L200】
+- **Design intent:** Confidence wagers should respect the tuned reward/penalty table, clamp reputation within bounds, and impose a two-tick recruitment cooldown after staking one’s career; recruitment odds should respond to cooldowns and influence while action unlocks respect reputation thresholds.【F:docs/HLD.md†L44-L116】
+- **Implementation status:** Reputation adjustments use the configured wager table, apply bounds, and set a recruitment cooldown that halves success chances until `advance_digest` decays it; recruitment attempts modify scholar feelings, influence, and emit press.【F:great_work/service.py†L228-L368】【F:great_work/models.py†L86-L117】
+- **Gap:** Reputation is not yet consulted to gate actions, cooldown decay relies on manual digest advancement, and recruitment remains inaccessible through the Discord surface, limiting the intended gameplay impact.【F:docs/HLD.md†L54-L116】【F:great_work/service.py†L304-L437】【F:great_work/discord_bot.py†L14-L110】
 
 ## 3. Expedition Structure and Outcomes
-- **Design intent:** Distinct expedition types (think tank, field, great project), prep modifiers, and prep-depth-dependent failure tables should produce sideways discoveries and social fallout.【F:docs/HLD.md†L57-L138】
-- **Implementation status:** Expeditions are handled with a single queue/resolution path using shared modifiers and static sideways discovery text; there is no concept of expedition type, cost, or public social consequences beyond templated press releases.【F:great_work/service.py†L118-L217】【F:great_work/expeditions.py†L48-L103】
-- **Gap:** Missing expedition typing, influence/reputation costs, dynamic sideways discovery content, and hooks for gossip or faction reactions after failures.【F:docs/HLD.md†L57-L138】【F:great_work/press.py†L21-L93】
+- **Design intent:** Distinct expedition types with tailored prep modifiers, influence costs, and prep-depth-dependent failure tables should surface sideways discoveries, gossip, and faction fallout.【F:docs/HLD.md†L57-L138】
+- **Implementation status:** Launching an expedition records the declared type, applies faction costs and rewards, resolves outcomes via the shared resolver, updates relationships, and may spawn a sidecast gossip item on non-failures.【F:great_work/service.py†L158-L551】【F:great_work/expeditions.py†L1-L74】【F:great_work/press.py†L14-L107】
+- **Gap:** Resolution still treats all types identically aside from influence math, sideways discoveries use static text, and there are no differentiated prep tracks, failure-table flavour, or faction gossip hooks after spectacular failures.【F:docs/HLD.md†L77-L138】【F:great_work/expeditions.py†L57-L74】
 
 ## 4. Influence Economy and Faction Mechanics
-- **Design intent:** Players earn and spend a five-vector influence score with soft caps tied to reputation, affecting recruitment and expedition logistics.【F:docs/HLD.md†L65-L138】
-- **Implementation status:** Players are initialized with a five-key influence dict, but there are no mechanics to change influence, enforce caps, or apply faction requirements to actions.【F:great_work/service.py†L70-L155】【F:great_work/state.py†L49-L141】
-- **Gap:** Influence accumulation, expenditure, faction checks on actions, and scaling caps remain unimplemented.【F:docs/HLD.md†L65-L138】
+- **Design intent:** Influence is a five-vector economy with soft caps tied to reputation and faction requirements on key actions.【F:docs/HLD.md†L65-L138】
+- **Implementation status:** Influence is stored per player, expeditions charge and reward faction influence, and recruitment success can grant faction points.【F:great_work/models.py†L86-L117】【F:great_work/service.py†L158-L368】
+- **Gap:** Soft caps, faction gating for orders, and broader influence sinks/sources (e.g., symposiums or contracts) remain absent, leaving the economy unbalanced.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L490-L505】
 
 ## 5. Press Artefacts and Public Record
-- **Design intent:** Every action yields rich press artefacts (bulletins, manifestos, discovery reports or retractions, gossip), ideally with AI persona voices and persistent publication.【F:docs/HLD.md†L86-L266】【F:docs/HLD.md†L318-L354】
-- **Implementation status:** Templates generate simple text for bulletins, manifestos, discovery reports, and gossip, but no retraction notices, persona-driven prose, or automated triggering of gossip; generated outputs are not persisted separately from the event log.【F:great_work/press.py†L11-L104】【F:great_work/service.py†L85-L190】
-- **Gap:** Need persona-aware generation, support for retractions, gossip triggers for social events, and storage of press artefacts for public archives.【F:docs/HLD.md†L86-L266】【F:great_work/state.py†L117-L141】
+- **Design intent:** All moves should yield rich, persona-driven press artefacts that persist in a public archive, spanning bulletins, manifestos, discoveries, retractions, gossip, recruitment notes, and defection wires.【F:docs/HLD.md†L86-L266】【F:docs/HLD.md†L318-L354】
+- **Implementation status:** Templates cover each press type, and the service archives every generated release (including recruitment and defection) into a dedicated database table alongside event logs.【F:great_work/press.py†L14-L122】【F:great_work/service.py†L113-L368】【F:great_work/state.py†L22-L233】
+- **Gap:** Text remains purely templated without persona/LLM styling, gossip triggers only cover sidecasts and recruitment, and there is no surfaced public archive or Discord publishing pipeline yet.【F:docs/HLD.md†L214-L266】【F:great_work/service.py†L297-L355】【F:great_work/discord_bot.py†L14-L110】
 
 ## 6. Timing, Gazette Cadence, and Symposiums
-- **Design intent:** Twice-daily Gazette digests process queued orders, while weekly symposiums enforce public stances within the Discord flow.【F:docs/HLD.md†L101-L280】【F:docs/HLD.md†L381-L386】
-- **Implementation status:** A scheduler triggers digest resolution by calling expedition resolution and logs a placeholder symposium message; there is no order queue beyond expeditions, no symposium content, and no Discord integration for scheduled posts.【F:great_work/scheduler.py†L23-L43】【F:great_work/discord_bot.py†L19-L132】
-- **Gap:** Need a broader order pipeline, Gazette publication to Discord, symposium event scripting, and integration with reputation/influence effects.【F:docs/HLD.md†L101-L280】
+- **Design intent:** Twice-daily Gazette digests should process all queued orders, advance cooldown ticks, and publish to Discord, while weekly symposiums drive mandatory public stances.【F:docs/HLD.md†L101-L280】【F:docs/HLD.md†L381-L386】
+- **Implementation status:** The background scheduler runs digest jobs that resolve expeditions and logs a symposium heartbeat, but digest advancement does not tick cooldowns or publish summaries beyond server logs.【F:great_work/scheduler.py†L1-L43】【F:great_work/service.py†L228-L437】
+- **Gap:** Need to integrate digest advancement (`advance_digest`), broaden the queued order system, and push Gazette/symposium artefacts to Discord with the promised participation mechanics.【F:docs/HLD.md†L101-L280】【F:great_work/discord_bot.py†L14-L110】
 
 ## 7. Data Model and Persistence
-- **Design intent:** Persistence should cover players, scholars, factions, relationships, theories, expeditions, offers, events, press releases, and contracts, accessible via `/export_log`.【F:docs/HLD.md†L203-L346】【F:docs/HLD.md†L384-L385】
-- **Implementation status:** SQLite stores only players, scholars, and events; there is an event export helper but no API or command to expose it, and other tables are absent.【F:great_work/state.py†L14-L141】【F:great_work/discord_bot.py†L110-L121】
-- **Gap:** Missing storage for theories, expeditions, press artefacts, relationships, offers, and a Discord `/export_log` command as described.【F:docs/HLD.md†L203-L385】
+- **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events, exposing them through an `/export_log` command.【F:docs/HLD.md†L203-L346】【F:docs/HLD.md†L384-L385】
+- **Implementation status:** The SQLite schema already covers players, scholars, events, theories, expeditions, press releases, relationships, and offers, with helpers to record and retrieve each artefact.【F:great_work/state.py†L22-L233】
+- **Gap:** There is still no surfaced export endpoint, no persistence for faction standings beyond influence totals, and no tooling around offers/contracts to realise the documented workflows.【F:docs/HLD.md†L203-L346】【F:great_work/state.py†L71-L233】
 
 ## 8. Discord Command Surface and Admin Tools
-- **Design intent:** Provide slash commands for submitting theories, wagers, recruitment, expeditions, conferences, status checks, exporting logs, plus an admin hotfix command.【F:docs/HLD.md†L248-L253】【F:docs/HLD.md†L384-L385】
-- **Implementation status:** Only three commands exist (`/submit_theory`, `/launch_expedition`, `/resolve_expeditions`), and there is no admin or export command.【F:great_work/discord_bot.py†L33-L121】
-- **Gap:** Need to implement the remaining player commands, status queries, export functionality, and at least one admin hotfix action.【F:docs/HLD.md†L248-L385】
+- **Design intent:** Offer slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log export, and at least one admin hotfix entry point.【F:docs/HLD.md†L248-L386】
+- **Implementation status:** The bot exposes only `/submit_theory`, `/launch_expedition`, and `/resolve_expeditions`, with no recruitment, status, export, or admin commands wired up.【F:great_work/discord_bot.py†L14-L110】
+- **Gap:** Expand the command surface to include the documented gameplay and admin flows, wiring them into the new recruitment/defection services and export tooling.【F:docs/HLD.md†L248-L386】【F:great_work/service.py†L304-L428】
 
 ## 9. LLM and Narrative Integration
-- **Design intent:** Use LLM prompts per scholar for press releases and reactions with safety controls and batching strategies.【F:docs/HLD.md†L318-L369】
-- **Implementation status:** Scholar reactions are formatted by substituting placeholders into static catchphrases; there is no LLM integration or safety layer.【F:great_work/service.py†L202-L216】【F:great_work/press.py†L60-L93】
-- **Gap:** Implement persona-driven generation, batching, and moderation pipeline as outlined in the design.【F:docs/HLD.md†L318-L369】
+- **Design intent:** Generate press and scholar reactions through persona-driven LLM prompts with batching and moderation safeguards.【F:docs/HLD.md†L318-L369】
+- **Implementation status:** Scholar reactions and press copy remain templated string substitutions without any LLM calls or safety layers.【F:great_work/service.py†L553-L569】【F:great_work/press.py†L14-L122】
+- **Gap:** Introduce the planned persona prompt pipeline, batching strategies, and moderation checks to reach the intended narrative richness.【F:docs/HLD.md†L318-L369】

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .config import Settings, get_settings
 from .expeditions import ExpeditionResolver, FailureTables
@@ -70,6 +70,18 @@ class GameService:
         "field": {"government": 1, "industry": 1},
         "great_project": {"academia": 2, "industry": 2, "foreign": 1},
     }
+    _FACTIONS: Tuple[str, ...] = ("academia", "government", "industry", "religion", "foreign")
+
+    _CAREER_TRACKS: Dict[str, List[str]] = {
+        "Academia": ["Postdoc", "Fellow", "Professor"],
+        "Industry": ["Associate", "Director", "Visionary"],
+    }
+    _CAREER_TICKS_REQUIRED = 3
+    _FOLLOWUP_DELAYS: Dict[str, timedelta] = {
+        "defection_grudge": timedelta(days=2),
+        "defection_return": timedelta(days=3),
+        "recruitment_grudge": timedelta(days=1),
+    }
 
     def __init__(
         self,
@@ -93,6 +105,8 @@ class GameService:
     def ensure_player(self, player_id: str, display_name: Optional[str] = None) -> None:
         player = self.state.get_player(player_id)
         if player:
+            self._ensure_influence_structure(player)
+            self.state.upsert_player(player)
             return
         display = display_name or player_id
         self.state.upsert_player(
@@ -100,13 +114,7 @@ class GameService:
                 id=player_id,
                 display_name=display,
                 reputation=0,
-                influence={
-                    "academia": 0,
-                    "government": 0,
-                    "industry": 0,
-                    "religion": 0,
-                    "foreign": 0,
-                },
+                influence={faction: 0 for faction in self._FACTIONS},
             )
         )
 
@@ -170,6 +178,7 @@ class GameService:
         self.ensure_player(player_id)
         player = self.state.get_player(player_id)
         assert player is not None
+        self._require_reputation(player, f"expedition_{expedition_type}")
         self._apply_expedition_costs(player, expedition_type, funding)
         self.state.upsert_player(player)
         order = ExpeditionOrder(
@@ -228,7 +237,9 @@ class GameService:
     def resolve_pending_expeditions(self) -> List[PressRelease]:
         releases: List[PressRelease] = []
         for code, order in list(self._pending_expeditions.items()):
-            result = self.resolver.resolve(self._rng, order.preparation, order.prep_depth)
+            result = self.resolver.resolve(
+                self._rng, order.preparation, order.prep_depth, order.expedition_type
+            )
             delta = self._confidence_delta(order.confidence, result.outcome)
             player = self.state.get_player(order.player_id)
             assert player is not None
@@ -317,18 +328,20 @@ class GameService:
         if not player or not scholar:
             raise ValueError("Unknown player or scholar")
 
+        self._require_reputation(player, "recruitment")
         influence_bonus = max(0, player.influence.get(faction, 0)) * 0.05
         cooldown_penalty = 0.5 if player.cooldowns.get("recruitment", 0) else 1.0
         chance = max(0.05, min(0.95, base_chance * cooldown_penalty + influence_bonus))
         roll = self._rng.uniform(0.0, 1.0)
         success = roll < chance
         now = datetime.now(timezone.utc)
+        player.cooldowns["recruitment"] = max(2, player.cooldowns.get("recruitment", 0))
 
         if success:
             scholar.memory.adjust_feeling(player_id, 2.0)
             scholar.contract["employer"] = player_id
             scholar.contract["faction"] = faction
-            player.influence[faction] = player.influence.get(faction, 0) + 1
+            self._apply_influence_change(player, faction, 1)
             press = recruitment_report(
                 RecruitmentContext(
                     player=player_id,
@@ -348,6 +361,13 @@ class GameService:
                     chance=chance,
                     faction=faction,
                 )
+            )
+            resolve_at = now + self._FOLLOWUP_DELAYS["recruitment_grudge"]
+            self.state.schedule_followup(
+                scholar_id,
+                "recruitment_grudge",
+                resolve_at,
+                {"player": player_id, "faction": faction},
             )
         self.state.save_scholar(scholar)
         self.state.upsert_player(player)
@@ -399,6 +419,13 @@ class GameService:
                     probability=probability,
                 )
             )
+            resolve_at = timestamp + self._FOLLOWUP_DELAYS["defection_return"]
+            self.state.schedule_followup(
+                scholar_id,
+                "defection_return",
+                resolve_at,
+                {"former_employer": former_employer, "new_faction": new_faction},
+            )
         else:
             scholar.memory.adjust_feeling(new_faction, -2.0)
             outcome = "refused"
@@ -409,6 +436,13 @@ class GameService:
                     new_faction=new_faction,
                     probability=probability,
                 )
+            )
+            resolve_at = timestamp + self._FOLLOWUP_DELAYS["defection_grudge"]
+            self.state.schedule_followup(
+                scholar_id,
+                "defection_grudge",
+                resolve_at,
+                {"faction": new_faction, "probability": probability},
             )
         self.state.save_scholar(scholar)
         self._archive_press(press, timestamp)
@@ -427,13 +461,43 @@ class GameService:
         )
         return outcome == "defected", press
 
-    def advance_digest(self) -> None:
+    def player_status(self, player_id: str) -> Dict[str, object]:
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError("Unknown player")
+        self._ensure_influence_structure(player)
+        cap = self._influence_cap(player)
+        thresholds = {
+            action: value for action, value in self.settings.action_thresholds.items()
+        }
+        return {
+            "player": player.display_name,
+            "reputation": player.reputation,
+            "influence": dict(player.influence),
+            "influence_cap": cap,
+            "cooldowns": dict(player.cooldowns),
+            "thresholds": thresholds,
+        }
+
+    def export_press_archive(self, limit: int = 10, offset: int = 0) -> List[PressRecord]:
+        return self.state.list_press_releases(limit=limit, offset=offset)
+
+    def export_log(self, limit: int = 20) -> Dict[str, Iterable[object]]:
+        events = self.state.export_events()
+        press = self.state.list_press_releases(limit=limit)
+        return {"events": events[-limit:], "press": press}
+
+    def advance_digest(self) -> List[PressRelease]:
         """Advance the digest tick, decaying cooldowns and maintaining the roster."""
 
+        releases: List[PressRelease] = []
         for player in list(self.state.all_players()):
             player.tick_cooldowns()
             self.state.upsert_player(player)
         self._ensure_roster()
+        releases.extend(self._progress_careers())
+        releases.extend(self._resolve_followups())
+        return releases
 
     def _confidence_delta(self, confidence: ConfidenceLevel, outcome: ExpeditionOutcome) -> int:
         wagers = self.settings.confidence_wagers
@@ -462,8 +526,6 @@ class GameService:
 
     def _ensure_roster(self) -> None:
         scholars = list(self.state.all_scholars())
-        if len(scholars) >= self._MIN_SCHOLAR_ROSTER:
-            return
         while len(scholars) < self._MIN_SCHOLAR_ROSTER:
             identifier = f"s.proc-{self._generated_counter:03d}"
             self._generated_counter += 1
@@ -477,6 +539,98 @@ class GameService:
                     payload={"id": scholar.id, "name": scholar.name, "origin": "roster_fill"},
                 )
             )
+        if len(scholars) <= self._MAX_SCHOLAR_ROSTER:
+            return
+        surplus = len(scholars) - self._MAX_SCHOLAR_ROSTER
+        ranked = sorted(
+            scholars,
+            key=lambda s: (
+                0 if s.contract.get("employer") == "Independent" else 1,
+                s.stats.loyalty,
+                len(s.memory.facts),
+            ),
+        )
+        for scholar in ranked[:surplus]:
+            self.state.remove_scholar(scholar.id)
+            self.state.append_event(
+                Event(
+                    timestamp=datetime.now(timezone.utc),
+                    action="scholar_retired",
+                    payload={"id": scholar.id, "name": scholar.name},
+                )
+            )
+
+    def _progress_careers(self) -> List[PressRelease]:
+        releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+        for scholar in list(self.state.all_scholars()):
+            track = scholar.career.get("track", "Academia")
+            ladder = self._CAREER_TRACKS.get(track, self._CAREER_TRACKS["Academia"])
+            tier = scholar.career.get("tier", ladder[0])
+            ticks = int(scholar.career.get("ticks", 0)) + 1
+            scholar.career["ticks"] = ticks
+            if tier not in ladder:
+                ladder = self._CAREER_TRACKS["Academia"]
+                tier = ladder[0]
+                scholar.career["tier"] = tier
+            idx = ladder.index(tier)
+            if idx < len(ladder) - 1 and ticks >= self._CAREER_TICKS_REQUIRED:
+                scholar.career["tier"] = ladder[idx + 1]
+                scholar.career["ticks"] = 0
+                quote = f"Advanced to {scholar.career['tier']} after diligent mentorship."
+                press = academic_gossip(
+                    GossipContext(scholar=scholar.name, quote=quote, trigger="Digest advancement"),
+                )
+                releases.append(press)
+                self._archive_press(press, now)
+                self.state.append_event(
+                    Event(
+                        timestamp=now,
+                        action="career_progression",
+                        payload={"scholar": scholar.id, "new_tier": scholar.career["tier"]},
+                    )
+                )
+            self.state.save_scholar(scholar)
+        return releases
+
+    def _resolve_followups(self) -> List[PressRelease]:
+        releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+        for followup_id, scholar_id, kind, payload in self.state.due_followups(now):
+            scholar = self.state.get_scholar(scholar_id)
+            if not scholar:
+                self.state.clear_followup(followup_id)
+                continue
+            if kind == "defection_grudge":
+                scholar.memory.adjust_feeling(payload.get("faction", "Unknown"), -1.5)
+                quote = "The betrayal still smolders in the halls."
+            elif kind == "defection_return":
+                scholar.memory.adjust_feeling(payload.get("former_employer", "Unknown"), 1.0)
+                quote = "Rumours swirl about a tentative reconciliation."
+            elif kind == "recruitment_grudge":
+                scholar.memory.adjust_feeling(payload.get("player", "Unknown"), -1.0)
+                quote = "The slighted scholar sharpens their public retort."
+            else:
+                quote = "An unresolved thread lingers in the archives."
+            press = academic_gossip(
+                GossipContext(
+                    scholar=scholar.name,
+                    quote=quote,
+                    trigger=kind.replace("_", " ").title(),
+                )
+            )
+            self._archive_press(press, now)
+            releases.append(press)
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="followup_resolved",
+                    payload={"scholar": scholar.id, "kind": kind},
+                )
+            )
+            self.state.save_scholar(scholar)
+            self.state.clear_followup(followup_id)
+        return releases
 
     def _apply_reputation_change(
         self, player: Player, delta: int, confidence: ConfidenceLevel
@@ -490,9 +644,9 @@ class GameService:
     def _apply_expedition_costs(self, player: Player, expedition_type: str, funding: List[str]) -> None:
         costs = self._EXPEDITION_COSTS.get(expedition_type, {})
         for faction, amount in costs.items():
-            player.influence[faction] = player.influence.get(faction, 0) - amount
+            self._apply_influence_change(player, faction, -amount)
         for faction in funding:
-            player.influence[faction] = player.influence.get(faction, 0) + 1
+            self._apply_influence_change(player, faction, 1)
 
     def _apply_expedition_rewards(
         self, player: Player, expedition_type: str, result
@@ -501,7 +655,7 @@ class GameService:
             return
         rewards = self._EXPEDITION_REWARDS.get(expedition_type, {})
         for faction, amount in rewards.items():
-            player.influence[faction] = player.influence.get(faction, 0) + amount
+            self._apply_influence_change(player, faction, amount)
 
     def _update_relationships_from_result(self, order: ExpeditionOrder, result) -> None:
         outcome = result.outcome
@@ -567,5 +721,36 @@ class GameService:
             )
             reactions.append(f"{scholar.name} ({tone}): {phrase}")
         return reactions
+
+    def _ensure_influence_structure(self, player: Player) -> None:
+        for faction in self._FACTIONS:
+            player.influence.setdefault(faction, 0)
+        if player.cooldowns is None:
+            player.cooldowns = {}
+
+    def _apply_influence_change(self, player: Player, faction: str, delta: int) -> int:
+        self._ensure_influence_structure(player)
+        current = player.influence.get(faction, 0)
+        cap = self._influence_cap(player)
+        new_value = current + delta
+        if delta > 0:
+            new_value = min(cap, new_value)
+        player.influence[faction] = new_value
+        return new_value
+
+    def _influence_cap(self, player: Player) -> int:
+        base = int(self.settings.influence_caps.get("base", 5))
+        per_rep = float(self.settings.influence_caps.get("per_reputation", 0.0))
+        dynamic = base + int(per_rep * max(0, player.reputation))
+        return max(base, dynamic)
+
+    def _require_reputation(self, player: Player, action: str) -> None:
+        threshold = self.settings.action_thresholds.get(action)
+        if threshold is None:
+            return
+        if player.reputation < threshold:
+            raise PermissionError(
+                f"Action '{action}' requires reputation {threshold} but {player.display_name} has {player.reputation}."
+            )
 
 __all__ = ["GameService", "ExpeditionOrder"]

@@ -18,3 +18,11 @@ confidence_wagers:
 reputation:
   min: -50
   max: 50
+  thresholds:
+    recruitment: -10
+    expedition_think_tank: -5
+    expedition_field: 0
+    expedition_great_project: 10
+influence_caps:
+  base: 6
+  per_reputation: 0.2
