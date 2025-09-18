@@ -1,0 +1,21 @@
+failure_tables:
+  shallow:
+    - weight: 60
+      result: nothing
+      description: "No meaningful findings beyond bruised egos."
+    - weight: 30
+      result: minor_clue
+      description: "A fragmentary clue hints at an adjacent site."
+    - weight: 10
+      result: disaster
+      description: "A dramatic mishap becomes campus gossip."
+  deep:
+    - weight: 40
+      result: minor_clue
+      description: "Careful prep yields a small but usable lead."
+    - weight: 40
+      result: adjacent_field
+      description: "Unexpected insight in a neighbouring discipline."
+    - weight: 20
+      result: major_unlock
+      description: "Failure uncovers a new research domain."

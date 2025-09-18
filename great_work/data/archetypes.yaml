@@ -1,0 +1,46 @@
+archetypes:
+  Empiricist:
+    description: "Trusts data above all."
+    methods_bias:
+      - "survey and trench"
+      - "material science"
+  Visionary:
+    description: "Bold leaps and high drama."
+    methods_bias:
+      - "comparative myth"
+      - "experimental reconstruction"
+  Trickster:
+    description: "Thrives on chaos and surprises."
+    methods_bias:
+      - "oral history"
+      - "statistical inference"
+  Archivist:
+    description: "Excavates libraries and satellites alike."
+    methods_bias:
+      - "textual analysis"
+      - "satellite and aerial imaging"
+  Field Engineer:
+    description: "Builds gadgets and makes things explode."
+    methods_bias:
+      - "experimental reconstruction"
+      - "material science"
+  Mystic:
+    description: "Seeks the sacred patterns."
+    methods_bias:
+      - "comparative myth"
+      - "oral history"
+  Gadfly:
+    description: "Provokes to make progress."
+    methods_bias:
+      - "statistical inference"
+      - "textual analysis"
+  Administrator:
+    description: "Keeps the machine running."
+    methods_bias:
+      - "survey and trench"
+      - "conservation"
+  Polymath:
+    description: "A bit of everything, master of connections."
+    methods_bias:
+      - "remote sensing"
+      - "material science"

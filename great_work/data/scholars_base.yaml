@@ -1,0 +1,91 @@
+scholars:
+  - id: s.ironquill
+    name: Dr Elara Ironquill
+    seed: 10101
+    archetype: Empiricist
+    disciplines: [Archaeology]
+    methods: [survey and trench, material science]
+    drives: [Truth, Legacy]
+    virtues: [diligence, courage]
+    vices: [dogmatism]
+    stats:
+      talent: 8
+      reliability: 9
+      integrity: 8
+      theatrics: 3
+      loyalty: 6
+      risk: 4
+    politics:
+      academia: 2
+      government: 0
+      industry: -1
+      religion: 1
+      foreign: 0
+    catchphrase: "Show me the artifacts or stop wasting my time."
+    taboos: ["excavation without a conservation plan"]
+    career:
+      tier: Associate
+      track: Academia
+    contract:
+      employer: Royal Institute
+      term_years: 6
+  - id: s.zathras
+    name: Professor Zathras
+    seed: 20202
+    archetype: Trickster
+    disciplines: [Epigraphy]
+    methods: [textual analysis, oral history]
+    drives: [Fame, Legacy]
+    virtues: [curiosity]
+    vices: [credit theft, vanity]
+    stats:
+      talent: 9
+      reliability: 5
+      integrity: 3
+      theatrics: 8
+      loyalty: 2
+      risk: 6
+    politics:
+      academia: 1
+      government: -1
+      industry: 0
+      religion: 0
+      foreign: 2
+    catchphrase: "As I have long maintained."
+    taboos: ["second author twice in a row"]
+    career:
+      tier: Chair
+      track: Academia
+    contract:
+      employer: Royal Academy
+      term_years: 10
+  - id: s.blackstone
+    name: "Boom-Boom Blackstone"
+    seed: 30303
+    archetype: Field Engineer
+    disciplines: [Experimental Archaeology]
+    methods: [experimental reconstruction, material science]
+    drives: [Fame, Wealth]
+    virtues: [courage]
+    vices: [recklessness]
+    stats:
+      talent: 7
+      reliability: 6
+      integrity: 5
+      theatrics: 9
+      loyalty: 5
+      risk: 9
+    politics:
+      academia: -1
+      government: 1
+      industry: 2
+      religion: -2
+      foreign: 0
+    catchphrase: "Have we tried blowing it up?"
+    taboos: ["excavation without a conservation plan"]
+    career:
+      tier: Lecturer
+      track: Industry
+    contract:
+      employer: Siege Works Ltd
+      term_years: 3

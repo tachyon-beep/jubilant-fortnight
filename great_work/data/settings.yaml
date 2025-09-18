@@ -1,0 +1,20 @@
+time_scale:
+  real_days_per_year: 1
+timing:
+  gazette_times:
+    - "13:00"
+    - "21:00"
+  symposium_day: "Friday"
+confidence_wagers:
+  suspect:
+    reward: 2
+    penalty: -1
+  certain:
+    reward: 5
+    penalty: -7
+  stake_my_career:
+    reward: 15
+    penalty: -25
+reputation:
+  min: -50
+  max: 50
