@@ -1,7 +1,5 @@
 from great_work.expeditions import ExpeditionResolver, FailureTables
 from great_work.models import ExpeditionOutcome, ExpeditionPreparation
-from great_work.expeditions import ExpeditionResolver, FailureTables
-from great_work.models import ExpeditionOutcome, ExpeditionPreparation
 from great_work.rng import DeterministicRNG
 
 
