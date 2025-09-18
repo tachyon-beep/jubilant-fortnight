@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -40,7 +40,7 @@ class GazetteScheduler:
             logger.info("%s\n%s", press.headline, press.body)
 
     def _host_symposium(self) -> None:
-        logger.info("Symposium event triggered at %s", datetime.utcnow().isoformat())
+        logger.info("Symposium event triggered at %s", datetime.now(timezone.utc).isoformat())
 
 
 __all__ = ["GazetteScheduler"]

@@ -60,6 +60,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @app_commands.describe(
         code="Expedition code",
         objective="Objective statement",
+        expedition_type="Expedition type (think_tank, field, great_project)",
         team="Comma separated scholar IDs",
         funding="Comma separated factions",
         prep_depth="shallow or deep",
@@ -73,6 +74,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         interaction: discord.Interaction,
         code: str,
         objective: str,
+        expedition_type: str,
         team: str,
         funding: str,
         prep_depth: str,
@@ -98,6 +100,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         press = service.queue_expedition(
             code=code,
             player_id=str(interaction.user.display_name),
+            expedition_type=expedition_type,
             objective=objective,
             team=team_list,
             funding=funding_list,

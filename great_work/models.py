@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -98,6 +98,25 @@ class Player:
     display_name: str
     reputation: int = 0
     influence: Dict[str, int] = field(default_factory=dict)
+    cooldowns: Dict[str, int] = field(default_factory=dict)
+
+    def adjust_reputation(self, delta: int, lower: int, upper: int) -> int:
+        """Apply a reputation change while respecting configured bounds."""
+
+        self.reputation = max(lower, min(upper, self.reputation + delta))
+        return self.reputation
+
+    def tick_cooldowns(self) -> None:
+        """Advance any integer cooldown trackers by one step."""
+
+        if not self.cooldowns:
+            return
+        for key, value in list(self.cooldowns.items()):
+            next_value = max(0, value - 1)
+            if next_value == 0:
+                del self.cooldowns[key]
+            else:
+                self.cooldowns[key] = next_value
 
 
 @dataclass
@@ -148,6 +167,37 @@ class PressRelease:
     metadata: Dict[str, object] = field(default_factory=dict)
 
 
+@dataclass
+class PressRecord:
+    timestamp: datetime
+    release: PressRelease
+
+
+@dataclass
+class ExpeditionRecord:
+    code: str
+    player_id: str
+    expedition_type: str
+    objective: str
+    team: List[str]
+    funding: List[str]
+    prep_depth: str
+    confidence: str
+    outcome: Optional[str] = None
+    reputation_delta: int = 0
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class TheoryRecord:
+    timestamp: datetime
+    player_id: str
+    theory: str
+    confidence: str
+    supporters: List[str]
+    deadline: str
+
+
 __all__ = [
     "ConfidenceLevel",
     "Scholar",
@@ -160,4 +210,7 @@ __all__ = [
     "ExpeditionOutcome",
     "Event",
     "PressRelease",
+    "PressRecord",
+    "ExpeditionRecord",
+    "TheoryRecord",
 ]

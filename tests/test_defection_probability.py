@@ -1,4 +1,5 @@
 from great_work.models import Scholar, ScholarStats
+from great_work.models import Scholar, ScholarStats
 from great_work.scholars import defection_probability
 
 
