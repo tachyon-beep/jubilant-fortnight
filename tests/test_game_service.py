@@ -216,11 +216,34 @@ def test_reputation_gating_blocks_high_tier_actions(tmp_path):
             code="AR-99",
             player_id="sarah",
             expedition_type="great_project",
-            objective="Ambitious", 
+            objective="Ambitious",
             team=["s.ironquill"],
             funding=["academia"],
             preparation=ExpeditionPreparation(),
             prep_depth="deep",
             confidence=ConfidenceLevel.CERTAIN,
         )
+
+
+def test_wager_reference_exposes_thresholds_and_bounds(tmp_path):
+    service = build_service(tmp_path)
+
+    reference = service.wager_reference()
+
+    assert "wagers" in reference
+    assert (
+        reference["wagers"][ConfidenceLevel.STAKE_CAREER.value]["penalty"]
+        == service.settings.confidence_wagers[ConfidenceLevel.STAKE_CAREER.value]["penalty"]
+    )
+    assert (
+        reference["wagers"][ConfidenceLevel.STAKE_CAREER.value]["triggers_recruitment_cooldown"]
+        is True
+    )
+
+    thresholds = reference["action_thresholds"]
+    assert thresholds["recruitment"] == service.settings.action_thresholds["recruitment"]
+
+    bounds = reference["reputation_bounds"]
+    assert bounds["min"] == service.settings.reputation_bounds["min"]
+    assert bounds["max"] == service.settings.reputation_bounds["max"]
 

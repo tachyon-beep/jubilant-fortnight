@@ -159,6 +159,28 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 lines.append(f" - {key}: {value} digests")
         else:
             lines.append("No active cooldowns.")
+        if data["thresholds"]:
+            lines.append("Action thresholds:")
+            for action, value in sorted(data["thresholds"].items()):
+                lines.append(f" - {action}: requires reputation {value}")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
+    async def wager(interaction: discord.Interaction) -> None:
+        reference = service.wager_reference()
+        lines = ["Confidence wagers:"]
+        for level, payload in reference["wagers"].items():
+            suffix = " (triggers recruitment cooldown)" if payload["triggers_recruitment_cooldown"] else ""
+            lines.append(
+                f" - {level}: reward {payload['reward']}, penalty {payload['penalty']}{suffix}"
+            )
+        lines.append("")
+        lines.append("Action thresholds:")
+        for action, value in sorted(reference["action_thresholds"].items()):
+            lines.append(f" - {action}: {value}")
+        bounds = reference["reputation_bounds"]
+        lines.append("")
+        lines.append(f"Reputation bounds: {bounds['min']} to {bounds['max']}")
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="gazette", description="Show recent Gazette headlines")
@@ -195,6 +217,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(resolve_expeditions)
     bot.tree.add_command(recruit)
     bot.tree.add_command(status)
+    bot.tree.add_command(wager)
     bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
     return bot

@@ -483,6 +483,27 @@ class GameService:
             "thresholds": thresholds,
         }
 
+    def wager_reference(self) -> Dict[str, object]:
+        """Expose wager tuning, thresholds, and reputation bounds for UX surfaces."""
+
+        wagers: Dict[str, Dict[str, object]] = {}
+        for level in ConfidenceLevel:
+            config = self.settings.confidence_wagers.get(level.value, {})
+            wagers[level.value] = {
+                "reward": int(config.get("reward", 0)),
+                "penalty": int(config.get("penalty", 0)),
+                "triggers_recruitment_cooldown": level is ConfidenceLevel.STAKE_CAREER,
+            }
+        bounds = self.settings.reputation_bounds
+        return {
+            "wagers": wagers,
+            "action_thresholds": dict(self.settings.action_thresholds),
+            "reputation_bounds": {
+                "min": int(bounds.get("min", 0)),
+                "max": int(bounds.get("max", 0)),
+            },
+        }
+
     def export_press_archive(self, limit: int = 10, offset: int = 0) -> List[PressRecord]:
         return self.state.list_press_releases(limit=limit, offset=offset)
 
