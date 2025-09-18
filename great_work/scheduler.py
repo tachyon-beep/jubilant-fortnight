@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Callable, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from .config import get_settings
+from .models import PressRelease
 from .service import GameService
 
 logger = logging.getLogger(__name__)
@@ -15,10 +17,15 @@ logger = logging.getLogger(__name__)
 class GazetteScheduler:
     """Schedules Gazette digests and weekly symposium events."""
 
-    def __init__(self, service: GameService) -> None:
+    def __init__(
+        self,
+        service: GameService,
+        publisher: Optional[Callable[[PressRelease], None]] = None,
+    ) -> None:
         self.service = service
         self.settings = get_settings()
         self.scheduler = BackgroundScheduler()
+        self._publisher = publisher
 
     def start(self) -> None:
         for digest_time in self.settings.gazette_times:
@@ -38,10 +45,27 @@ class GazetteScheduler:
             logger.info("No expeditions to report this digest")
             return
         for press in releases:
-            logger.info("%s\n%s", press.headline, press.body)
+            self._emit_release(press)
 
     def _host_symposium(self) -> None:
-        logger.info("Symposium event triggered at %s", datetime.now(timezone.utc).isoformat())
+        message = f"Symposium event triggered at {datetime.now(timezone.utc).isoformat()}"
+        self._emit_release(
+            PressRelease(
+                type="symposium_heartbeat",
+                headline="Symposium heartbeat",
+                body=message,
+                metadata={},
+            )
+        )
+
+    def _emit_release(self, press: PressRelease) -> None:
+        if self._publisher is not None:
+            try:
+                self._publisher(press)
+                return
+            except Exception:  # pragma: no cover - defensive logging only
+                logger.exception("Failed to publish Gazette item")
+        logger.info("%s\n%s", press.headline, press.body)
 
 
 __all__ = ["GazetteScheduler"]
