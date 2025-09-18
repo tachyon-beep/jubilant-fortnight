@@ -3,11 +3,10 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, VectorParams
 
 logger = logging.getLogger(__name__)
 

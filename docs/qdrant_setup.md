@@ -3,6 +3,7 @@
 ## Overview
 
 Qdrant provides semantic search capabilities for The Great Work, enabling:
+
 - Natural language queries about game mechanics
 - Scholar relationship discovery
 - Press archive semantic search
@@ -56,6 +57,7 @@ The `.mcp.json` file configures the MCP server for Claude integration:
 ### 1. Game Mechanics Knowledge Base
 
 Store and query:
+
 - Confidence wager tables and outcomes
 - Expedition resolution rules
 - Influence economy mechanics
@@ -64,6 +66,7 @@ Store and query:
 ### 2. Scholar Profiles and Relationships
 
 Index:
+
 - Scholar personalities and catchphrases
 - Relationship histories and grudges
 - Defection patterns and loyalty metrics
@@ -72,6 +75,7 @@ Index:
 ### 3. Press Archive Search
 
 Enable semantic search over:
+
 - Academic bulletins
 - Research manifestos
 - Discovery reports
@@ -81,6 +85,7 @@ Enable semantic search over:
 ### 4. Expedition Outcomes
 
 Pattern match:
+
 - Successful expedition strategies
 - Spectacular failure discoveries
 - Sideways discovery chains
@@ -129,21 +134,25 @@ results = qdrant.search("Bronze Age discoveries by Fieldstone")
 ## Administration
 
 ### Health Check
+
 ```bash
 curl http://localhost:6333/health
 ```
 
 ### Collection Info
+
 ```bash
 curl http://localhost:6333/collections/great-work-knowledge
 ```
 
 ### Delete Collection (WARNING: Destructive)
+
 ```bash
 curl -X DELETE http://localhost:6333/collections/great-work-knowledge
 ```
 
 ### Backup
+
 ```bash
 # Backup Qdrant storage
 tar -czf qdrant_backup_$(date +%Y%m%d).tar.gz ./qdrant_storage/
@@ -152,12 +161,15 @@ tar -czf qdrant_backup_$(date +%Y%m%d).tar.gz ./qdrant_storage/
 ## Troubleshooting
 
 ### Port Conflicts
+
 If port 6333 is in use:
+
 1. Edit `docker-compose.yml` to use different ports
 2. Update `.mcp.json` with new URL
 3. Restart services
 
 ### Collection Already Exists
+
 ```bash
 # Reset collection (WARNING: deletes all data)
 curl -X DELETE http://localhost:6333/collections/great-work-knowledge
@@ -165,6 +177,7 @@ python -m great_work.tools.qdrant_manager --setup
 ```
 
 ### MCP Server Not Found
+
 ```bash
 # Install MCP server for Qdrant
 pip install mcp-server-qdrant

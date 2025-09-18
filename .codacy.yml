@@ -1,0 +1,31 @@
+---
+# Codacy configuration for The Great Work (Python 3.12 project)
+exclude_paths:
+  - "**/*.md"
+  - "docs/**"
+  - "*.txt"
+  - "LICENSE"
+  - ".github/**"
+  - "*.yaml"
+  - "*.yml"
+  - ".codacy/**"
+  - "docker-compose.yml"
+  - ".mcp.json"
+
+engines:
+  pylint:
+    enabled: true
+    python_version: 3.12
+    exclude_paths:
+      - "**/*.md"
+  ruff:
+    enabled: true
+    python_version: "py312"
+  revive:
+    enabled: false  # Disable Go linter for Python project
+  dartanalyzer:
+    enabled: false  # Disable Dart analyzer for Python project
+  eslint:
+    enabled: false  # Disable JS linter for Python project
+  pmd:
+    enabled: false  # Disable Java analyzer for Python project

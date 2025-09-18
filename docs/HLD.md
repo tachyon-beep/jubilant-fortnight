@@ -30,13 +30,13 @@ A pool of 20 to 30 named scholars exists at any time so that each becomes a memo
 - Grudges, friendships, and rivalries persist across games.
 - Example vibe: “Dr Zathras? That backstabber who stole credit for my Bronze Age discovery.”
 
-**Procedural generation and hand-crafted mix**
+#### Procedural generation and hand-crafted mix
 
 - Ship a small set of hand-written legends, then allow procedural generation for the rest.
 - Scholars can emerge from expeditions as side discoveries and grow into major figures.
 - Players can mentor, place, and watch them rise—risking public betrayal if they defect to a rival faction.
 
-**Memory model**
+#### Memory model
 
 - **Facts:** timestamped canonical events, e.g., “credit stolen on 16 Sep Y53”.
 - **Feelings:** emotion scores toward players and scholars that decay slowly but never reach zero. Major betrayals create Scars that do not decay.
@@ -122,7 +122,7 @@ A legible, fair recipe:
 4. Apply site friction and political friction (0 to −25).
 5. Confidence affects the payoff, not the success chance.
 
-**Outcomes**
+#### Outcomes
 
 - Below 40: Failure (roll on failure table).
 - 40 to 64: Partial success.
@@ -193,7 +193,7 @@ def defection_probability(scholar, offer):
     return 1 / (1 + math.exp(-6 * (x - 0.5)))
 ```
 
-**Public outcomes**
+#### Public outcomes
 
 - If they defect, the Gazette prints the resignation letter, the new contract summary, and reactions. Reputation hits scale with their integrity and how justified the move appears.
 - If they refuse, they gain Resolve. Next time they are harder to poach but will expect a raise or title.
@@ -237,19 +237,19 @@ def defection_probability(scholar, offer):
 
 Discord provides slash commands, threads, roles, and webhooks. Additional platforms (Signal, Telegram) can be added based on community needs.
 
-**Channels**
+#### Channels
 
 - `#orders` for commands
 - `#gazette` for digests and threaded events
 - `#table-talk` for banter and memes
 
-**Commands**
+#### Commands
 
 `/submit_theory`, `/wager`, `/recruit`, `/launch_expedition`, `/conference`, `/status`, `/export_log`
 
 One admin command exists to hotfix if something goes off the rails.
 
-**Press release discipline**
+#### Press release discipline
 
 Short, quotable, and consistent. Examples:
 
@@ -262,7 +262,7 @@ Short, quotable, and consistent. Examples:
 - **Academic Gossip**
   - “{Scholar}: “{quippy line}”  Context: {trigger}.”
 
-**Sample digest slice**
+#### Sample digest slice
 
 > Academic Bulletin No. 25  
 > Player Sarah submits: “Pre-dynastic sky burials”, confidence: certain. Support: Ironquill, Morrison. Counter-claims close Friday 20:00 AEST.
@@ -280,20 +280,20 @@ Short, quotable, and consistent. Examples:
 
 ## 7. Narrative Examples
 
-**User stories**
+### User stories
 
 - **Public Humiliation Arc:** certainty claim about a volcanic winter fails, reputation craters, Zathras mocks, you discover unusual iron deposits and become the “Failed Volcano Guy” who revolutionised metallurgy.
 - **Backstab Revenge:** Zathras supports then steals credit; you need his expertise for a Great Project, so you choose between forgiving him or trusting Morrison's 5 percent genius.
 - **Conference Showdown:** weekly symposium forces a public stance on Bronze Age astronomy; Ironquill demands evidence; you go all-in while the community watches.
 
-**Career arc: Dr Sarah Fieldstone**
+### Career arc: Dr Sarah Fieldstone
 
 - **Month 1:** bold entrance, partial success, reputation mixed.
 - **Months 2–3:** credit theft by Zathras, public academic war, scholars take sides.
 - **Months 4–5:** “stake my career” success on a theory he said would fail, vindication.
 - **Month 6:** enough influence for Great Projects, half the scholars have strong opinions, choice to reconcile or continue the feud.
 
-**Sample generated scholar: Dr Nadiya Ashraf**
+### Sample generated scholar: Dr Nadiya Ashraf
 
 - Archetype: Archivist
 - Discipline: Remote Sensing
@@ -395,12 +395,12 @@ The game succeeds when:
 - Feuds mirror actual friend group dynamics.
 - “Remember when you staked your career on Bronze Age flight?” becomes a running joke.
 
-**Playtest protocol**
+### Playtest protocol
 
 - Group size: 4 to 6 for the first run.
 - Duration: two weeks real time, one Symposium per week.
 
-**Success bar**
+### Success bar
 
 - At least two nicknames emerge for scholars.
 - At least three screenshots of press releases shared in other chats.
@@ -419,7 +419,7 @@ Publishing on GitHub allows:
 - Community contributions of new scholar personas.
 - Shared failure tables for the failure-to-discovery pipeline.
 
-**Repo assets**
+### Repo assets
 
 - `scholars_base.yaml` with 10 handcrafted legends.
 - `namebanks.yaml` per region.
@@ -428,7 +428,7 @@ Publishing on GitHub allows:
 - `factions.yaml` for the five vectors and sample contracts.
 - `settings.yaml` for time scale, payout numbers, and posting cadence.
 
-**MVP coding order for proc-gen**
+### MVP coding order for proc-gen
 
 1. Deterministic RNG wrapper with seeds by campaign and event index.
 2. Scholar factory from seed or sidecast templates.
@@ -484,4 +484,3 @@ Publishing on GitHub allows:
 - Maintain a slow cadence with twice daily digests and a weekly Symposium.
 - Use strict templates and persona sheets to maintain tone and continuity.
 - Defer Great Projects until after group momentum builds.
-

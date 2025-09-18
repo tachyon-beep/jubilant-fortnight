@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 **Setup and Installation:**
+
 ```bash
 make venv        # Create Python 3.12 virtualenv
 make install     # Install project + dev dependencies
@@ -12,6 +13,7 @@ make env         # Create .env from .env.example
 ```
 
 **Core Commands:**
+
 ```bash
 make test        # Run pytest suite
 make lint        # Run ruff linter
@@ -20,6 +22,7 @@ make run         # Run Discord bot (loads .env if present)
 ```
 
 **Testing:**
+
 ```bash
 pytest                              # Run all tests
 pytest tests/test_scholar_generation.py  # Run specific test file
@@ -27,6 +30,7 @@ pytest -k "test_name"               # Run specific test by name
 ```
 
 **Linting:**
+
 ```bash
 ruff .           # Check all files
 ruff --fix .     # Auto-fix issues where possible
@@ -34,9 +38,11 @@ ruff --fix .     # Auto-fix issues where possible
 
 ## Architecture Overview
 
-**The Great Work** is an asynchronous multiplayer Discord game where players direct scholars to make research discoveries. The codebase follows a layered architecture:
+**The Great Work** is an asynchronous multiplayer Discord game where players direct scholars to make research
+discoveries. The codebase follows a layered architecture:
 
 ### Core Game Logic (`great_work/`)
+
 - **models.py**: Core domain models (Scholar, Player, Theory, Expedition, etc.) with Pydantic dataclasses
 - **state.py**: GameState class managing persistent SQLite storage and event log
 - **service.py**: GameService orchestrating high-level game operations and player commands
@@ -47,7 +53,9 @@ ruff --fix .     # Auto-fix issues where possible
 - **discord_bot.py**: Discord slash command interface mapping to game service
 
 ### Data Files (`great_work/data/`)
+
 YAML configuration files defining game content:
+
 - **scholars_base.yaml**: Hand-authored legendary scholar profiles
 - **disciplines.yaml**, **methods.yaml**: Academic specializations and research approaches
 - **failure_tables.yaml**: d100 tables for expedition failure outcomes
@@ -55,19 +63,22 @@ YAML configuration files defining game content:
 
 ### Key Design Patterns
 
-1. **Event Sourcing**: All game actions produce Events stored in an append-only log, enabling full game replay and audit trails.
+1. **Event Sourcing**: All game actions produce Events stored in an append-only log, enabling full game replay
+   and audit trails.
 
 2. **Deterministic Generation**: Scholars use seeded RNG (DeterministicRNG) ensuring reproducible personalities across games.
 
 3. **Public-First Design**: Every action generates PressReleases visible to all players - no private moves exist.
 
-4. **Memory System**: Scholars maintain Facts (timestamped events) and Feelings (decaying emotions) with permanent Scars from betrayals.
+4. **Memory System**: Scholars maintain Facts (timestamped events) and Feelings (decaying emotions) with permanent
+   Scars from betrayals.
 
 5. **Influence Vectors**: Five-faction system (Academic, Government, Industry, Religious, Foreign) replaces single currency.
 
 ## Discord Bot Environment
 
 Required environment variables:
+
 - `DISCORD_TOKEN`: Bot authentication token
 - `DISCORD_APP_ID`: Application ID for slash commands
 - `GREAT_WORK_CHANNEL_ORDERS`: Channel ID for player commands
@@ -77,6 +88,7 @@ Required environment variables:
 ## Database Schema
 
 SQLite with JSON serialization for complex types:
+
 - **players**: Player profiles with reputation and influence vectors
 - **scholars**: Generated personalities with memories and relationships
 - **theories**: Published research claims with confidence wagers
@@ -87,9 +99,29 @@ SQLite with JSON serialization for complex types:
 ## Testing Approach
 
 Tests focus on deterministic behavior and game mechanics:
+
 - **test_scholar_generation.py**: Reproducible character generation
 - **test_expedition_resolver.py**: d100 threshold calculations
 - **test_defection_probability.py**: Scholar loyalty curves
 - **test_game_service.py**: Integration tests for command flow
 
 Use `conftest.py` fixtures for temporary databases and test data.
+
+## Qdrant Vector Database Integration
+
+The project includes Qdrant for semantic search and knowledge management. When working with game knowledge,
+scholar information, or press archives:
+
+**IMPORTANT: Read these comprehensive guides:**
+
+- **[Qdrant Usage Guide](docs/ai/qdrant_usage_guide.md)**: Complete MCP command reference, best practices, search strategies
+- **[Qdrant Schemas](docs/ai/qdrant_schemas.md)**: Document schemas, examples for all content types, validation checklists
+
+**Quick Reference:**
+
+- Store information: `mcp__qdrant-great-work__qdrant-store(information="...")`
+- Search knowledge: `mcp__qdrant-great-work__qdrant-find(query="...")`
+- Collection name: `great-work-knowledge`
+
+See the linked documentation for detailed usage patterns, schema examples, and best practices for maintaining
+game continuity through the vector database.

@@ -1,6 +1,7 @@
 # The Great Work
 
-The Great Work is an asynchronous, fully public research drama played through Discord. Players direct scholars, make proclamations, and resolve expeditions that can succeed spectacularly or fail into sideways discoveries.
+The Great Work is an asynchronous, fully public research drama played through Discord. Players direct scholars,
+make proclamations, and resolve expeditions that can succeed spectacularly or fail into sideways discoveries.
 
 This repository contains a playable MVP aligned with the provided design:
 
@@ -71,4 +72,5 @@ The tests cover scholar generation reproducibility, expedition resolution thresh
 
 ## License
 
-Code is released under the MIT License. Narrative assets and persona sheets default to CC BY-SA 4.0 as described in the design notes.
+Code is released under the MIT License. Narrative assets and persona sheets default to CC BY-SA 4.0
+as described in the design notes.
