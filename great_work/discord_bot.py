@@ -28,7 +28,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             synced = await bot.tree.sync()
             logger.info("Synced %d commands", len(synced))
         except Exception as exc:  # pragma: no cover - logging only
-            logger.exception("Failed to sync commands: %%s", exc)
+            logger.exception("Failed to sync commands: %s", exc)
 
     @app_commands.command(name="submit_theory", description="Submit a theory to the Gazette")
     @app_commands.describe(
