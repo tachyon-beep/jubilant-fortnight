@@ -125,3 +125,56 @@ scholar information, or press archives:
 
 See the linked documentation for detailed usage patterns, schema examples, and best practices for maintaining
 game continuity through the vector database.
+
+## Available Subagents
+
+**IMPORTANT**: Unless work needs to be done sequentially, agents should be launched in parallel using multiple Task tool calls in a single message for optimal performance.
+
+The following specialized agents are available to assist with development:
+
+### Core Development Agents
+- **python-refactoring-expert**: Review, refactor, and improve Python code quality. Analyzes for complexity, applies design patterns, ensures SOLID principles.
+- **test-engineer**: Write comprehensive tests, analyze coverage, implement TDD/BDD, create mocks, identify edge cases.
+- **architecture-reviewer**: Review code architecture, system design, API patterns, modularity, scalability, and separation of concerns.
+
+### System Design Agents
+- **database-architect**: Design database schemas, event sourcing, CQRS, data consistency, migration strategies, transaction optimization.
+- **api-integration-architect**: Design and implement REST/GraphQL APIs, webhooks, third-party integrations, authentication, rate limiting.
+- **async-systems-architect**: Design asynchronous systems, event-driven architectures, message queues, pub/sub patterns.
+- **data-architect**: Design data models, pipelines, ETL processes, data warehousing, analytics architectures.
+
+### Infrastructure & Operations
+- **devops-engineer**: Set up CI/CD pipelines, Docker containers, Kubernetes deployments, infrastructure as code, monitoring systems.
+- **observability-engineer**: Implement logging, metrics, tracing, alerting, performance monitoring, debugging tools.
+- **performance-optimizer**: Analyze and optimize performance bottlenecks, memory usage, query optimization, caching strategies.
+
+### Specialized Domains
+- **game-systems-designer**: Design game mechanics, balance systems, progression loops, player engagement strategies.
+- **security-architect**: Design authentication, authorization, encryption, security audits, vulnerability assessments, OWASP compliance.
+- **frontend-ui-specialist**: Design user interfaces, React components, state management, responsive layouts, accessibility.
+- **platform-integration-specialist**: Integrate with external platforms, APIs, SDKs, handle platform-specific requirements.
+
+### Quality & Compliance
+- **compliance-standards-auditor**: Ensure regulatory compliance, audit standards, implement governance, risk management.
+- **error-resilience-engineer**: Design error handling, fault tolerance, circuit breakers, retry logic, graceful degradation.
+- **documentation-specialist**: Write technical documentation, API docs, user guides, maintain README files, create diagrams.
+
+### Configuration & Planning
+- **config-manager**: Manage application configuration, environment variables, secrets, feature flags, deployment configs.
+- **domain-modeler**: Design domain models, bounded contexts, aggregates, value objects, domain events.
+- **data-validator**: Implement data validation, sanitization, schema validation, input verification, data quality checks.
+- **product-strategy-advisor**: Define product strategy, roadmaps, feature prioritization, user stories, market analysis.
+- **ai-systems-optimizer**: Optimize AI/ML systems, model performance, prompt engineering, inference optimization.
+
+### Usage Example
+
+To launch multiple agents in parallel:
+
+```python
+# Single message with multiple Task tool calls for parallel execution
+[
+    Task(subagent_type="test-engineer", prompt="Write tests for the new feature"),
+    Task(subagent_type="security-architect", prompt="Review authentication implementation"),
+    Task(subagent_type="documentation-specialist", prompt="Update API documentation")
+]
+```
