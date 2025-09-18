@@ -27,14 +27,23 @@ Seed the database with the canonical scholars and run the Discord bot:
 ```bash
 python -m great_work.tools.seed_db great_work.db
 export DISCORD_TOKEN=your_token_here
+export GREAT_WORK_CHANNEL_ORDERS=123456789012345678
+export GREAT_WORK_CHANNEL_GAZETTE=123456789012345679
+export GREAT_WORK_CHANNEL_TABLE_TALK=123456789012345680
 python -m great_work.discord_bot
 ```
 
-The bot exposes three slash commands in Discord:
+The bot exposes a suite of slash commands in Discord:
 
-* `/submit_theory` – publish an Academic Bulletin.
-* `/launch_expedition` – queue a field expedition with preparation details.
-* `/resolve_expeditions` – resolve all queued expeditions and post Discovery Reports.
+* `/submit_theory` – publish an Academic Bulletin and broadcast it to `#orders`.
+* `/launch_expedition` – queue a field expedition with preparation details and announce it in `#orders`.
+* `/resolve_expeditions` – resolve all queued expeditions, including Gazette digests, and mirror them to `#orders`.
+* `/recruit` – attempt to recruit a scholar and share the result in `#orders`.
+* `/status` – inspect your influence, cooldowns, and thresholds (ephemeral response).
+* `/wager` – review confidence stakes and thresholds (ephemeral response).
+* `/gazette` – browse recent Gazette headlines (ephemeral response).
+* `/export_log` – export recent events and press (ephemeral response).
+* `/table_talk` – post flavour commentary to the configured table-talk channel.
 
 For offline experiments you can drive the service directly:
 

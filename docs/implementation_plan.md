@@ -1,14 +1,14 @@
 # Implementation Plan to Close Documented Gaps
 
 ## 1. Scholar Lifecycle and Defection Arcs
-- Build mentorship and assignment actions that let players develop scholars, increment structured career tracks, and surface those beats during digest advancement with persistent records.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L494-L666】
+- Build mentorship and assignment actions that let players develop scholars, increment structured career tracks, and surface those beats during digest advancement with persistent records.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L515-L666】
 - Extend sidecast follow-ups into branching arcs (e.g., mentorship offers, rival poaching, symposium invitations) so new scholars continue generating events beyond their introduction.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L707-L738】
 - Expand defection follow-ups into multi-step pipelines that can trigger return offers, rival contracts, and additional press beyond a single gossip item.【F:docs/HLD.md†L171-L213】【F:great_work/service.py†L394-L666】
 
 ## 2. Confidence, Reputation, and Recruitment Effects
-- Surface reputation thresholds and the wager table inside Discord (status panels, help text) so players understand gating and rewards without consulting configuration files.【F:docs/HLD.md†L44-L138】【F:great_work/service.py†L468-L675】【F:great_work/discord_bot.py†L148-L162】
-- Add forthcoming conference/wager commands that reuse `_require_reputation`, apply cooldown impacts, and archive outcomes with press for parity with expeditions and recruitment.【F:docs/HLD.md†L54-L138】【F:great_work/service.py†L170-L392】
-- Provide admin-visible telemetry for cooldown progression and recruitment modifiers to support moderation and balancing.【F:docs/HLD.md†L44-L116】【F:great_work/service.py†L468-L533】
+- Implement the planned conference and high-stakes wager commands so Discord clients can drive these actions through `GameService`, reusing reputation gates and cooldown rules already in place for expeditions and recruitment.【F:docs/HLD.md†L54-L138】【F:great_work/service.py†L226-L392】【F:great_work/discord_bot.py†L33-L220】
+- Extend the service layer to resolve conferences with archived press, cooldown adjustments, and failure/success consequences in line with existing wager outcomes.【F:docs/HLD.md†L54-L138】【F:great_work/service.py†L226-L392】【F:great_work/press.py†L40-L145】
+- Provide admin-visible telemetry for cooldown progression and recruitment modifiers through dedicated status or admin commands to support moderation and balancing.【F:docs/HLD.md†L44-L116】【F:great_work/service.py†L468-L505】【F:great_work/discord_bot.py†L148-L191】
 
 ## 3. Expedition Depth and Sideways Fallout
 - Translate sideways discovery strings into concrete state changes—faction reputation shifts, queued follow-up expeditions, or scholar memory updates—so partial successes alter gameplay.【F:docs/HLD.md†L77-L138】【F:great_work/service.py†L226-L318】【F:great_work/press.py†L61-L75】
@@ -26,12 +26,12 @@
 - Automate Gazette publishing into public Discord channels (or a web archive) using the stored press records instead of manual command responses.【F:docs/HLD.md†L214-L280】【F:great_work/scheduler.py†L41-L69】
 
 ## 6. Gazette Cadence and Symposium Flow
-- Wire the scheduler publisher into Discord, formatting twice-daily digests that summarise the releases produced by `advance_digest` and expedition resolution.【F:docs/HLD.md†L101-L280】【F:great_work/scheduler.py†L41-L58】【F:great_work/service.py†L494-L533】
-- Implement the symposium content pipeline (topic selection, mandated responses, consequence calculation) and schedule reminder press leading into the weekly event.【F:docs/HLD.md†L249-L386】【F:great_work/service.py†L494-L533】
+- Enrich the automated scheduler posts with digest headers, pinned summaries, and fallback archiving when Discord channel configuration is missing, ensuring non-expedition orders appear alongside expedition results.【F:docs/HLD.md†L101-L280】【F:great_work/scheduler.py†L41-L58】【F:great_work/discord_bot.py†L74-L205】
+- Implement the symposium content pipeline (topic selection, mandated responses, consequence calculation) and schedule reminder press leading into the weekly event.【F:docs/HLD.md†L249-L386】【F:great_work/service.py†L515-L533】
 - Support queuing of non-expedition orders (mentorship, conferences) that process during digest ticks alongside existing expedition flows.【F:docs/HLD.md†L101-L213】【F:great_work/service.py†L170-L666】
 
 ## 7. Command Surface and Admin Tooling
-- Deliver the remaining slash commands (`/wager`, `/conference`, defection/admin tools) mapped to the service APIs, including validation feedback and archived press output.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L33-L191】
+- Deliver the remaining slash commands (`/conference`, defection/admin tools) mapped to the service APIs, including validation feedback and archived press output.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L33-L191】
 - Provide audited admin overrides (reputation/influence adjustment, order cancellation) that append to the event log for transparency.【F:docs/HLD.md†L248-L386】【F:great_work/state.py†L255-L305】
 - Offer richer status cards (queued orders, cooldown timers, thresholds) either as Discord embeds or attachments for player clarity.【F:docs/HLD.md†L248-L286】【F:great_work/service.py†L468-L533】
 
