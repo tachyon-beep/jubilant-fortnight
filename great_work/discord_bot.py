@@ -302,7 +302,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
     @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
     async def table_talk(interaction: discord.Interaction, message: str) -> None:
-        display_name = str(interaction.user.display_name)
+        display_name = interaction.user.display_name
         if router.table_talk is None:
             await interaction.response.send_message(
                 "Table-talk channel is not configured.",
