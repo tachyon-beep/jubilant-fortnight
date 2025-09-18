@@ -36,7 +36,7 @@
 | --- | --- | --- |
 | Offer think tank expeditions as a selectable option. | Implemented | Discord commands and service logic accept `think_tank` expeditions with tailored costs and rewards.【F:great_work/discord_bot.py†L142-L206】【F:great_work/service.py†L170-L214】 |
 | Offer field expeditions as a selectable option. | Implemented | Field expeditions are handled alongside other types using the same queue and resolver flow.【F:great_work/service.py†L170-L318】 |
-| Offer deferred Great Projects as a selectable option. | Implemented | The resolver and cost tables include `great_project`, though narrative gating is still up to gameplay direction.【F:great_work/service.py†L170-L318】【F:great_work/expeditions.py†L60-L116】 |
+| Offer Great Projects as a selectable option. | Implemented | The resolver and cost tables include `great_project` with full implementation.【F:great_work/service.py†L170-L318】【F:great_work/expeditions.py†L60-L116】 |
 | Resolve expedition outcomes using a d100 recipe. | Implemented | `ExpeditionResolver` rolls d100 and computes modifiers before determining outcomes.【F:great_work/expeditions.py†L60-L101】 |
 | Incorporate preparation modifiers into expedition resolution. | Implemented | Preparation inputs contribute to the modifier sum applied during resolution.【F:great_work/models.py†L122-L135】【F:great_work/expeditions.py†L60-L75】 |
 | Incorporate expertise modifiers into expedition resolution. | Implemented | Expertise bonuses are part of the `ExpeditionPreparation` data used in modifier calculations.【F:great_work/models.py†L122-L135】 |

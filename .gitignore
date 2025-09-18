@@ -9,3 +9,7 @@ __pycache__/
 build/
 dist/
 the_great_work.egg-info/
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

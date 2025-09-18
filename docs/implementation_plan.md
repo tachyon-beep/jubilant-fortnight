@@ -1,81 +1,238 @@
-# Implementation Plan to Close Documented Gaps
+# Implementation Plan - Full Design Build
+*Last Updated: 2025-09-19*
 
-## 1. Scholar Lifecycle and Defection Arcs
-- Add mentorship and placement actions that queue during digests, update scholar career state, and persist mentorship events so career progression is player-driven rather than automatic ticks.【F:docs/HLD.md†L145-L177】【F:great_work/service.py†L617-L686】
-- Extend follow-up handling to support multi-step defection arcs (return offers, counter-offers, rival contracts) by storing stateful payloads and emitting additional press at each step.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L650-L686】【F:great_work/service.py†L728-L759】
-- Expand sidecast generation to schedule further events (mentorship invitations, faction checks) so new scholars continue surfacing in gameplay instead of ending after a single gossip item.【F:docs/HLD.md†L165-L213】【F:great_work/service.py†L728-L759】
+## Design Commitment
 
-Deliverables:
-- Schema: add `mentorships` table; extend `followups` kinds for mentorship/conference.
-- Service: `queue_mentorship`, `resolve_mentorships`; extend `_resolve_followups` to support multi-step arcs.
-- Bot: `/mentor`, `/assign_lab` commands with validation and press output.
+We're building the full design vision with no deferrals. Great Projects are already implemented correctly. Focus is on completing missing features to deliver the complete game experience.
 
-## 2. Confidence, Conferences, and Wager UX
-- Implement `/conference` and related wager commands in the Discord bot, mirroring existing expedition/recruitment validation and routing requests through the service layer.【F:docs/HLD.md†L90-L138】【F:great_work/discord_bot.py†L114-L324】
-- Add a conference resolution service that archives press, adjusts cooldowns, and records faction responses using the existing wager tables and reputation thresholds.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L214-L392】【F:great_work/press.py†L61-L96】
-- Surface admin-visible telemetry for cooldown progress and recruitment modifiers via enhanced status/log exports to help moderators tune the wager economy.【F:docs/HLD.md†L44-L116】【F:great_work/service.py†L468-L505】【F:great_work/discord_bot.py†L236-L301】
+## Priority Order
 
-Deliverables:
-- Bot: `/conference` command; ephemeral preview + public artefact in `#orders`.
-- Service: `resolve_conference` applying wager table outputs; persists press + events.
-- Telemetry: `/status` subpanel with cooldowns and soft cap info per faction.
+Implementation should proceed in phases to deliver core functionality first:
 
-## 3. Expedition Sideways Outcomes
-- Translate sideways discoveries into concrete state changes—queued follow-up orders, faction influence shifts, or scholar memory updates—rather than storing text-only flavour.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L244-L307】【F:great_work/service.py†L728-L759】
-- Introduce expedition-type-specific aftermath hooks that publish bespoke gossip or faction reactions when catastrophic failures occur.【F:docs/HLD.md†L57-L138】【F:great_work/press.py†L61-L96】
-- Track preparation depth per axis when generating downstream orders so deep preparation unlocks bespoke narrative threads and modifiers.【F:docs/HLD.md†L101-L138】【F:great_work/models.py†L122-L135】
+**Phase 1 - Core Gameplay (Weeks 1-2)**
+- Conference mechanics and `/conference` command
+- Mentorship system and `/mentor` command
+- Generic order batching infrastructure
+- Sideways discovery mechanics (influence shifts, queued orders)
 
-Deliverables:
-- Map sideways discoveries to concrete effects (influence delta, queued research tasks, relationships).
-- Add a `side_effects` registry by expedition type/depth; apply in `resolve_pending_expeditions`.
+**Phase 2 - Community Features (Weeks 3-4)**
+- Full symposium implementation (topics, voting, participation)
+- Admin tools and moderation commands
+- Multi-stage defection and return arcs
+- Contract and offer mechanics
 
-## 4. Influence Economy Enhancements
-- Create new influence sinks (symposium commitments, contracts, faction offers) that consume stored influence vectors and record the resulting events for auditability.【F:docs/HLD.md†L104-L213】【F:great_work/service.py†L677-L738】【F:great_work/state.py†L18-L417】
-- Notify players when approaching soft caps and persist faction standing data beyond influence to prepare for alliances or embargo mechanics.【F:docs/HLD.md†L90-L213】【F:great_work/service.py†L677-L772】【F:great_work/discord_bot.py†L236-L254】
-- Activate the `offers` table by wiring contract workflows (draft, issue, resolve) through the service and Discord layers.【F:docs/HLD.md†L203-L346】【F:great_work/state.py†L77-L212】【F:great_work/service.py†L394-L466】
+**Phase 3 - Polish & Narrative (Weeks 5-6)**
+- LLM narrative generation with persona voices
+- Public web archive with permalinks
+- Enhanced status displays and telemetry
+- Moderation and safety systems
 
-Deliverables:
-- New commands: `/offer_contract`, `/accept_offer`, `/decline_offer`.
-- Service: create/transition `offers` records, emit press; tie to influence costs.
+## 1. Mentorship System and Scholar Careers
+- **Priority: HIGH** - Core gameplay mechanic missing
+- Add player-driven mentorship replacing automatic career progression【F:great_work/service.py†L617-L686】
+- Create `/mentor` and `/assign_lab` Discord commands with validation
+- Queue mentorship orders for batch resolution during digests
+- Persist mentorship relationships and career advancement events
 
-## 5. Press Artefacts and Public Archive
-- Layer persona-driven generation (LLM prompts, batching, moderation) on top of the existing press templates to achieve the narrative tone described in the design.【F:docs/HLD.md†L214-L369】【F:great_work/press.py†L20-L145】
-- Generate multiple artefacts per major action (bulletins, manifestos, reports, gossip) and publish them into a durable archive beyond Discord, such as a web view or attachment feed.【F:docs/HLD.md†L214-L354】【F:great_work/service.py†L125-L513】【F:great_work/scheduler.py†L20-L59】
-- Automate Gazette exports so digests are stored externally (S3, static site) in addition to Discord postings, ensuring permanent public access.【F:docs/HLD.md†L214-L280】【F:great_work/state.py†L366-L417】【F:great_work/discord_bot.py†L274-L301】
+**Deliverables:**
+- Database: Add `mentorships` table with mentor_id, scholar_id, start_date, status
+- Service: `queue_mentorship()`, `resolve_mentorships()` methods
+- Discord: `/mentor <scholar>` and `/assign_lab <scholar> <lab>` commands
+- Press: Mentorship announcements and career advancement notices
 
-Deliverables:
-- LLM pipeline: persona prompts + moderation; fall back to templates when LLM disabled.
-- Archive exporter: `great_work.tools.export_gazette` to render JSON/HTML from SQLite.
-- Optional config: `GREAT_WORK_ARCHIVE_PATH`/`GREAT_WORK_ARCHIVE_S3` feature flag.
+**Implementation Steps:**
+1. Create mentorships table migration
+2. Add MentorshipOrder dataclass
+3. Implement queue/resolve logic in GameService
+4. Add Discord command handlers
+5. Create press templates for mentorship events
 
-## 6. Gazette Cadence and Symposium Flow
-- Build the symposium topic pipeline (selection, reminder press, response deadlines) and integrate outcomes into the digest loop with stored results and press artefacts.【F:docs/HLD.md†L249-L386】【F:great_work/scheduler.py†L32-L56】【F:great_work/service.py†L515-L553】
-- Allow non-expedition orders (mentorship, conferences) to queue and resolve during digests alongside existing expedition flows.【F:docs/HLD.md†L101-L213】【F:great_work/service.py†L515-L553】
-- Enrich scheduled posts with digest headers, pinned summaries, and fallback archiving when channels are missing so cadence remains reliable.【F:docs/HLD.md†L101-L280】【F:great_work/scheduler.py†L20-L59】
+## 2. Conference Mechanics
+- **Priority: HIGH** - Major missing gameplay feature
+- Implement public wager conferences with reputation stakes
+- Create `/conference` Discord command for theory debates
+- Apply existing confidence wager mechanics to conference outcomes
+- Generate press releases for conference proceedings
 
-Deliverables:
-- Symposium topics: weekly selection + `/symposium_vote` with deadline; digest integrates results.
-- Digest headers: batch releases under a “Digest {date}” banner.
-- Fallback: write digest bundle to archive when Discord channel missing.
+**Deliverables:**
+- Discord: `/conference <theory> <confidence>` command
+- Service: `launch_conference()` and `resolve_conference()` methods
+- Database: Conference queue table similar to expeditions
+- Press: Conference announcements, debate transcripts, outcome reports
 
-## 7. Command Surface and Admin Tooling
-- Deliver remaining slash commands (`/conference`, defection/admin overrides) with validation feedback, press output, and audit logging.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L114-L324】【F:great_work/service.py†L394-L466】
-- Provide audited admin overrides for reputation/influence adjustment and order cancellation, storing events and press artefacts where appropriate.【F:docs/HLD.md†L248-L386】【F:great_work/state.py†L255-L310】
-- Offer richer status cards (queued orders, cooldown timers, thresholds) as embeds or attachments for player clarity.【F:docs/HLD.md†L248-L286】【F:great_work/service.py†L468-L505】【F:great_work/discord_bot.py†L236-L301】
+**Implementation Steps:**
+1. Create conferences table (similar to expeditions)
+2. Add ConferenceOrder dataclass
+3. Implement launch/queue/resolve logic
+4. Add Discord slash command
+5. Create conference press templates
 
-Deliverables:
-- Admin: `/gw_admin adjust_rep`, `/gw_admin adjust_influence`, `/gw_admin cancel_order`.
-- Status embeds: add structured, readable `/status` output.
+## 3. Generic Order Batching Infrastructure
+- **Priority: HIGH** - Required for mentorship and conferences
+- Create unified order queue system for all delayed actions
+- Support different order types (mentorship, conference, contract)
+- Batch resolution during digest processing
+- Maintain order history and audit trail
 
-## 8. Narrative Safety and Export Improvements
-- Integrate moderation safeguards—blocklists, rate limits, manual review hooks—for new narrative generation paths before exposing them publicly.【F:docs/HLD.md†L318-L369】【F:great_work/press.py†L20-L145】【F:great_work/service.py†L394-L466】
-- Enhance `/export_log` with pagination/attachments and include new lifecycle events so external auditing covers symposium and mentorship beats.【F:docs/HLD.md†L248-L386】【F:great_work/discord_bot.py†L289-L301】【F:great_work/service.py†L486-L513】
-- Instrument telemetry that tracks scholar mentorship outcomes, defection arcs, and shared press releases to measure success criteria.【F:docs/HLD.md†L318-L369】【F:great_work/service.py†L617-L686】
+**Deliverables:**
+- Database: Generic `orders` table with type, payload, scheduled_for
+- Service: `queue_order()`, `resolve_orders()` methods
+- Model: OrderType enum, Order base class
+- Integration: Update digest processing to resolve all order types
 
-Deliverables:
-- Safety: blocklist and rate-limits for generated copy; manual review flag.
-- Logs: extend `/export_log` with pagination and include symposium/mentorship events.
+**Implementation Steps:**
+1. Design generic order schema
+2. Create orders table migration
+3. Implement order queue/resolution framework
+4. Migrate expeditions to use new system
+5. Add mentorship/conference order types
 
-## 9. Scope Alignment: Great Projects
-- Gate Great Projects behind a feature flag (`GREAT_WORK_ENABLE_GREAT_PROJECTS=false`) or raise thresholds to hide during MVP playtests, aligning with HLD’s deferral note.【F:docs/HLD.md†L73-L86】【F:great_work/data/settings.yaml†L20-L34】
-- Update docs to clarify the gating and expected unlock path (e.g., reputation threshold + admin enable).
+## 4. Sideways Discovery Mechanics
+- **Priority: HIGH** - Core gameplay feature incomplete
+- Make sideways discoveries mechanically meaningful
+- Trigger faction influence shifts from discoveries
+- Queue follow-up orders and research threads
+- Generate multi-stage gossip chains
+
+**Deliverables:**
+- Service: Side effect registry and application logic
+- Model: SidewaysEffect class with influence/order payloads
+- Database: Track discovery chains and consequences
+- Press: Multi-part discovery narratives
+
+**Implementation Steps:**
+1. Design sideways effect types and triggers
+2. Map discoveries to mechanical outcomes
+3. Implement effect application in resolver
+4. Create follow-up order generation
+5. Test discovery chain propagation
+
+## 5. Symposium Implementation
+- **Priority: MEDIUM** - Weekly community engagement feature
+- Replace heartbeat with full topic selection system
+- Add voting mechanics and participation tracking
+- Generate outcomes based on community consensus
+- Archive symposium proceedings
+
+**Deliverables:**
+- Service: Topic selection algorithm, vote tallying
+- Discord: `/symposium_vote <option>` command
+- Database: Symposium topics, votes, outcomes tables
+- Press: Topic announcements, vote reminders, outcome summaries
+
+**Implementation Steps:**
+1. Design symposium topic selection logic
+2. Create voting tables and mechanics
+3. Implement participation tracking
+4. Add Discord voting commands
+5. Generate symposium outcome press
+
+## 6. Admin Tools and Moderation
+- **Priority: MEDIUM** - Operational necessity
+- Create `/gw_admin` command group for moderators
+- Implement reputation/influence adjustments
+- Add order cancellation and defection triggers
+- Ensure all admin actions are audited
+
+**Deliverables:**
+- Discord: `/gw_admin` command group with subcommands
+- Service: Admin override methods with audit logging
+- Security: Permission checks for admin-only commands
+- Audit: Admin action event types and press releases
+
+**Implementation Steps:**
+1. Create admin command group structure
+2. Implement permission checking
+3. Add adjust_reputation, adjust_influence methods
+4. Create cancel_order, force_defection methods
+5. Ensure all actions generate audit events
+
+## 7. Multi-Stage Defection Arcs
+- **Priority: LOW** - Enhancement to existing feature
+- Extend follow-ups to support negotiation chains
+- Add return offers and counter-offers
+- Create rival contract mechanics
+- Generate press for each negotiation stage
+
+**Deliverables:**
+- Model: Stateful follow-up payloads for negotiations
+- Service: Multi-step defection resolution logic
+- Database: Enhanced followups table with state tracking
+- Press: Negotiation updates, counter-offer announcements
+
+**Implementation Steps:**
+1. Design negotiation state machine
+2. Extend followups table schema
+3. Implement multi-step resolution
+4. Add negotiation press templates
+5. Test complex defection scenarios
+
+## 8. Public Web Archive
+- **Priority: LOW** - Nice-to-have for permanence
+- Create static site generator for press archive
+- Implement automatic export during digests
+- Deploy to GitHub Pages or S3
+- Add permalink system for citations
+
+**Deliverables:**
+- Tool: `export_gazette.py` static site generator
+- Templates: HTML templates for press archive
+- Automation: Export hook in digest processing
+- Deployment: GitHub Actions or S3 sync
+
+**Implementation Steps:**
+1. Create static site generator tool
+2. Design HTML templates
+3. Add export hook to scheduler
+4. Set up GitHub Pages deployment
+5. Document archive URL structure
+
+## 9. LLM Narrative Integration
+- **Priority: MEDIUM** - Essential for full narrative experience
+- Integrate OpenAI/Anthropic API for persona voices
+- Implement prompt templates for each scholar
+- Add moderation and safety controls
+- Maintain template fallbacks
+
+**Deliverables:**
+- Integration: LLM API client with retry logic
+- Prompts: Persona prompt templates
+- Safety: Blocklist, rate limiting, content filtering
+- Config: API keys, model selection, fallback settings
+
+**Implementation Steps:**
+1. Add LLM client library
+2. Create prompt template system
+3. Implement safety controls
+4. Add configuration options
+5. Test with gradual rollout
+
+## Testing Strategy
+
+Each feature should include:
+- Unit tests for new service methods
+- Integration tests for Discord commands
+- Database migration tests
+- Press generation validation
+- End-to-end digest processing tests
+
+## Success Metrics
+
+Track implementation success through:
+- Feature completion percentage
+- Test coverage metrics
+- Discord command usage statistics
+- Player engagement with new features
+- Press archive accessibility
+
+## Risk Mitigation
+
+- **Database migrations**: Test on copy of production data
+- **Discord commands**: Deploy to test server first
+- **Order batching**: Maintain backward compatibility
+- **LLM integration**: Keep template fallbacks functional
+- **Full feature scope**: Prioritize core gameplay over polish if timeline pressures emerge
+
+## Note on Scope
+
+This plan commits to the full design vision. All features are targeted for implementation within the 6-week timeline. If timeline pressures emerge, deprioritize Phase 3 polish features rather than Phase 1-2 core gameplay.

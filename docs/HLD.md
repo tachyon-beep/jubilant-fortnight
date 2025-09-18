@@ -60,8 +60,6 @@ Players must declare confidence when they act. The latest tuning is shown below.
 2. **Field Expeditions:** digs and surveys that find new primary sources (medium cost).
 3. **Great Projects:** large science efforts that unlock new research domains (high cost).
 
-> **MVP note:** defer Great Projects until after initial playtests.
-
 ### 2.4 Influence Economy
 
 Players earn and spend soft power with five factions rather than a single currency:
@@ -146,7 +144,7 @@ A legible, fair recipe:
 - **Nurture:** mentor, coauthor, or place them in a lab to raise skill, loyalty, and faction standing.
 - **Career beats:** Postdoc → Lecturer → Associate → Chair, with potential divergence to Industry, Government, Religious Orders, or Foreign Powers.
 - **Poaching and defection:** timed offers arrive from rivals and factions; defections are always public.
-- **Return arcs:** defectors can return later with strings attached or become your greatest rivals.
+- **Return arcs:** defectors can return with strings attached or become your greatest rivals.
 
 ### 5.2 Proc-gen Recipe
 
@@ -237,7 +235,7 @@ def defection_probability(scholar, offer):
 
 ### Discord-first approach
 
-Discord provides slash commands, threads, roles, and webhooks. Signal is deferred until later.
+Discord provides slash commands, threads, roles, and webhooks. Additional platforms (Signal, Telegram) can be added based on community needs.
 
 **Channels**
 
@@ -285,7 +283,7 @@ Short, quotable, and consistent. Examples:
 **User stories**
 
 - **Public Humiliation Arc:** certainty claim about a volcanic winter fails, reputation craters, Zathras mocks, you discover unusual iron deposits and become the “Failed Volcano Guy” who revolutionised metallurgy.
-- **Backstab Revenge:** Zathras supports then steals credit; you later need his expertise for a Great Project, so you choose between forgiving him or trusting Morrison’s 5 percent genius.
+- **Backstab Revenge:** Zathras supports then steals credit; you need his expertise for a Great Project, so you choose between forgiving him or trusting Morrison's 5 percent genius.
 - **Conference Showdown:** weekly symposium forces a public stance on Bronze Age astronomy; Ironquill demands evidence; you go all-in while the community watches.
 
 **Career arc: Dr Sarah Fieldstone**
