@@ -8,7 +8,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from .models import Event, Player, Scholar
+from .models import (
+    Event,
+    ExpeditionRecord,
+    Player,
+    PressRecord,
+    PressRelease,
+    Scholar,
+    TheoryRecord,
+)
 from .scholars import ScholarRepository
 
 _DB_SCHEMA = """
@@ -16,7 +24,8 @@ CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     reputation INTEGER NOT NULL,
-    influence TEXT NOT NULL
+    influence TEXT NOT NULL,
+    cooldowns TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS scholars (
     id TEXT PRIMARY KEY,
@@ -27,6 +36,51 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp TEXT NOT NULL,
     action TEXT NOT NULL,
     payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS theories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    theory TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    supporters TEXT NOT NULL,
+    deadline TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS expeditions (
+    code TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    expedition_type TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    team TEXT NOT NULL,
+    funding TEXT NOT NULL,
+    prep_depth TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    outcome TEXT,
+    reputation_delta INTEGER NOT NULL DEFAULT 0,
+    result_payload TEXT
+);
+CREATE TABLE IF NOT EXISTS press_releases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    type TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    body TEXT NOT NULL,
+    metadata TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS relationships (
+    scholar_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    feeling REAL NOT NULL,
+    PRIMARY KEY (scholar_id, subject_id)
+);
+CREATE TABLE IF NOT EXISTS offers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scholar_id TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );
 """
 
@@ -49,10 +103,18 @@ class GameState:
     # Player management -------------------------------------------------
     def upsert_player(self, player: Player) -> None:
         influence_json = json.dumps(player.influence)
+        cooldowns_json = json.dumps(player.cooldowns)
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute(
-                "REPLACE INTO players (id, display_name, reputation, influence) VALUES (?, ?, ?, ?)",
-                (player.id, player.display_name, player.reputation, influence_json),
+                "REPLACE INTO players (id, display_name, reputation, influence, cooldowns) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    player.id,
+                    player.display_name,
+                    player.reputation,
+                    influence_json,
+                    cooldowns_json,
+                ),
             )
             conn.commit()
         self._cached_players[player.id] = player
@@ -62,22 +124,38 @@ class GameState:
             return self._cached_players[player_id]
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
-                "SELECT id, display_name, reputation, influence FROM players WHERE id = ?",
+                "SELECT id, display_name, reputation, influence, cooldowns FROM players WHERE id = ?",
                 (player_id,),
             ).fetchone()
             if not row:
                 return None
             influence = json.loads(row[3])
-            player = Player(id=row[0], display_name=row[1], reputation=row[2], influence=influence)
+            cooldowns = json.loads(row[4])
+            player = Player(
+                id=row[0],
+                display_name=row[1],
+                reputation=row[2],
+                influence=influence,
+                cooldowns=cooldowns,
+            )
             self._cached_players[player.id] = player
             return player
 
     def all_players(self) -> Iterable[Player]:
         with closing(sqlite3.connect(self._db_path)) as conn:
-            rows = conn.execute("SELECT id, display_name, reputation, influence FROM players").fetchall()
+            rows = conn.execute(
+                "SELECT id, display_name, reputation, influence, cooldowns FROM players"
+            ).fetchall()
         for row in rows:
             influence = json.loads(row[3])
-            player = Player(id=row[0], display_name=row[1], reputation=row[2], influence=influence)
+            cooldowns = json.loads(row[4])
+            player = Player(
+                id=row[0],
+                display_name=row[1],
+                reputation=row[2],
+                influence=influence,
+                cooldowns=cooldowns,
+            )
             self._cached_players[player.id] = player
             yield player
 
@@ -114,6 +192,25 @@ class GameState:
             self._cached_scholars[scholar.id] = scholar
             yield scholar
 
+    # Relationship management -------------------------------------------
+    def update_relationship(self, scholar_id: str, subject_id: str, feeling: float) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "REPLACE INTO relationships (scholar_id, subject_id, feeling) VALUES (?, ?, ?)",
+                (scholar_id, subject_id, feeling),
+            )
+            conn.commit()
+
+    def get_relationship(self, scholar_id: str, subject_id: str) -> Optional[float]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT feeling FROM relationships WHERE scholar_id = ? AND subject_id = ?",
+                (scholar_id, subject_id),
+            ).fetchone()
+        if not row:
+            return None
+        return float(row[0])
+
     # Event log ---------------------------------------------------------
     def append_event(self, event: Event) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -138,6 +235,73 @@ class GameState:
                 )
             )
         return events
+
+    # Theory log --------------------------------------------------------
+    def record_theory(self, record: TheoryRecord) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO theories (timestamp, player_id, theory, confidence, supporters, deadline)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    record.timestamp.isoformat(),
+                    record.player_id,
+                    record.theory,
+                    record.confidence,
+                    json.dumps(record.supporters),
+                    record.deadline,
+                ),
+            )
+            conn.commit()
+
+    # Expedition log ----------------------------------------------------
+    def record_expedition(self, record: ExpeditionRecord, result_payload: Dict[str, object] | None = None) -> None:
+        payload_json = json.dumps(result_payload or {})
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "REPLACE INTO expeditions (code, timestamp, player_id, expedition_type, objective, team, funding, prep_depth, confidence, outcome, reputation_delta, result_payload)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.code,
+                    record.timestamp.isoformat(),
+                    record.player_id,
+                    record.expedition_type,
+                    record.objective,
+                    json.dumps(record.team),
+                    json.dumps(record.funding),
+                    record.prep_depth,
+                    record.confidence,
+                    record.outcome,
+                    record.reputation_delta,
+                    payload_json,
+                ),
+            )
+            conn.commit()
+
+    # Press archive -----------------------------------------------------
+    def record_press_release(self, record: PressRecord) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO press_releases (timestamp, type, headline, body, metadata) VALUES (?, ?, ?, ?, ?)",
+                (
+                    record.timestamp.isoformat(),
+                    record.release.type,
+                    record.release.headline,
+                    record.release.body,
+                    json.dumps(record.release.metadata),
+                ),
+            )
+            conn.commit()
+
+    def list_press_releases(self) -> List[PressRecord]:
+        records: List[PressRecord] = []
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT timestamp, type, headline, body, metadata FROM press_releases ORDER BY id ASC"
+            ).fetchall()
+        for ts, type_, headline, body, metadata in rows:
+            release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
+            records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))
+        return records
 
 
 __all__ = ["GameState"]

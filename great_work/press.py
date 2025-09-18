@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, Iterable, List
+from typing import List
 
 from .models import ExpeditionResult, PressRelease
 
@@ -32,6 +31,7 @@ def academic_bulletin(ctx: BulletinContext) -> PressRelease:
 class ExpeditionContext:
     code: str
     player: str
+    expedition_type: str
     objective: str
     team: List[str]
     funding: List[str]
@@ -52,13 +52,14 @@ def research_manifesto(ctx: ExpeditionContext) -> PressRelease:
 class OutcomeContext:
     code: str
     player: str
+    expedition_type: str
     result: ExpeditionResult
     reputation_change: int
     reactions: List[str]
 
 
 def discovery_report(ctx: OutcomeContext) -> PressRelease:
-    headline = f"Discovery Report: Expedition {ctx.code}"
+    headline = f"Discovery Report: Expedition {ctx.code} ({ctx.expedition_type.title()})"
     reaction_text = " | ".join(ctx.reactions)
     body = (
         f"Outcome: {ctx.result.outcome.value}. "
@@ -79,6 +80,23 @@ def discovery_report(ctx: OutcomeContext) -> PressRelease:
     )
 
 
+def retraction_notice(ctx: OutcomeContext) -> PressRelease:
+    headline = f"Retraction Notice: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    reaction_text = " | ".join(ctx.reactions)
+    body = (
+        f"Outcome: {ctx.result.outcome.value}. Roll {ctx.result.roll} + {ctx.result.modifier} = {ctx.result.final_score}. "
+        f"Reputation change: {ctx.reputation_change:+}. Failure detail: {ctx.result.failure_detail}."
+    )
+    if reaction_text:
+        body += f" Scholar reactions: {reaction_text}."
+    return PressRelease(
+        type="retraction_notice",
+        headline=headline,
+        body=body,
+        metadata={"outcome": ctx.result.outcome.value},
+    )
+
+
 @dataclass
 class GossipContext:
     scholar: str
@@ -92,13 +110,53 @@ def academic_gossip(ctx: GossipContext) -> PressRelease:
     return PressRelease(type="academic_gossip", headline=headline, body=body)
 
 
+@dataclass
+class RecruitmentContext:
+    player: str
+    scholar: str
+    outcome: str
+    chance: float
+    faction: str
+
+
+def recruitment_report(ctx: RecruitmentContext) -> PressRelease:
+    headline = f"Recruitment Update: {ctx.scholar}"
+    body = (
+        f"{ctx.player} pursued {ctx.scholar} through {ctx.faction}. "
+        f"Outcome: {ctx.outcome}. Chance: {ctx.chance:.0%}."
+    )
+    return PressRelease(type="recruitment_report", headline=headline, body=body)
+
+
+@dataclass
+class DefectionContext:
+    scholar: str
+    outcome: str
+    new_faction: str
+    probability: float
+
+
+def defection_notice(ctx: DefectionContext) -> PressRelease:
+    headline = f"Defection Wire — {ctx.scholar}"
+    body = (
+        f"{ctx.scholar} {ctx.outcome} an offer from {ctx.new_faction}. "
+        f"Probability: {ctx.probability:.0%}."
+    )
+    return PressRelease(type="defection_notice", headline=headline, body=body)
+
+
 __all__ = [
     "academic_bulletin",
     "research_manifesto",
     "discovery_report",
+    "retraction_notice",
     "academic_gossip",
+    "recruitment_report",
+    "defection_notice",
     "BulletinContext",
     "ExpeditionContext",
     "OutcomeContext",
     "GossipContext",
+    "RecruitmentContext",
+    "DefectionContext",
 ]
