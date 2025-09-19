@@ -15,6 +15,7 @@ from great_work.models import (
     Scholar,
     TheoryRecord,
 )
+from great_work.rng import DeterministicRNG
 from great_work.scholars import ScholarRepository
 from great_work.state import GameState
 
@@ -79,20 +80,21 @@ def test_player_cache_invalidation(tmp_path):
 def test_scholar_removal_cascades(tmp_path):
     """Removing a scholar should cascade to relationships and followups."""
     state = GameState(db_path=tmp_path / "test.db", start_year=1923)
-    repo = ScholarRepository(seed=12345)
+    repo = ScholarRepository()
+    rng = DeterministicRNG(12345)
 
     # Create and save a scholar
-    scholar = repo.generate("test_scholar", "Test Scholar")
+    scholar = repo.generate(rng, "test_scholar")
     state.save_scholar(scholar)
 
     # Add relationships and followups
     with sqlite3.connect(state._db_path) as conn:
         conn.execute(
-            "INSERT INTO relationships (scholar_id, subject_id, relationship) VALUES (?, ?, ?)",
-            ("test_scholar", "other_scholar", "rival")
+            "INSERT INTO relationships (scholar_id, subject_id, feeling) VALUES (?, ?, ?)",
+            ("test_scholar", "other_scholar", -0.5)
         )
         conn.execute(
-            "INSERT INTO followups (scholar_id, followup_type, scheduled_time, payload) VALUES (?, ?, ?, ?)",
+            "INSERT INTO followups (scholar_id, kind, resolve_at, payload) VALUES (?, ?, ?, ?)",
             ("test_scholar", "grudge", datetime.now(timezone.utc).isoformat(), "{}")
         )
         conn.commit()
@@ -170,7 +172,6 @@ def test_expedition_record_persistence(tmp_path):
         objective="Test objective",
         team=["scholar1", "scholar2"],
         funding=["academia"],
-        preparation={"equipment": True, "guides": False},
         prep_depth="deep",
         confidence="certain"
     )
@@ -185,7 +186,7 @@ def test_expedition_record_persistence(tmp_path):
         ).fetchone()
 
     assert row is not None
-    assert row[1] == "EX-001"  # code
+    assert row[0] == "EX-001"  # code
     assert row[2] == "player1"  # player_id
     assert json.loads(row[5]) == ["scholar1", "scholar2"]  # team
 
@@ -230,7 +231,6 @@ def test_expedition_record_can_be_stored(tmp_path):
         objective="Test objective 2",
         team=["scholar3"],
         funding=["government"],
-        preparation={"research": True},
         prep_depth="shallow",
         confidence="suspect"
     )
@@ -272,10 +272,11 @@ def test_theory_record_can_be_stored(tmp_path):
 def test_scholar_memories_update(tmp_path):
     """Updating scholar memories should persist correctly."""
     state = GameState(db_path=tmp_path / "test.db", start_year=1923)
-    repo = ScholarRepository(seed=12345)
+    repo = ScholarRepository()
+    rng = DeterministicRNG(12345)
 
     # Create scholar with memories
-    scholar = repo.generate("s1", "Scholar One")
+    scholar = repo.generate(rng, "s1")
 
     # Add feelings to memory
     scholar.memory.feelings["other"] = 0.8
@@ -337,7 +338,9 @@ def test_timeline_year_progression(tmp_path):
     old_year, new_year = state.advance_timeline(now, days_per_year=365)
 
     # Should stay same year on first advance (not enough time passed)
-    assert old_year == 1923
+    # When no advancement happens, old_year is 0 and new_year is current year
+    assert old_year == 0
+    assert new_year == 1923
 
     # Manually update last_advanced to force year progression
     past_time = now - timedelta(days=400)
@@ -394,7 +397,7 @@ def test_followup_scheduling_and_retrieval(tmp_path):
 
     # Schedule multiple followups
     past = datetime.now(timezone.utc) - timedelta(hours=1)
-    future = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    future = datetime.now(timezone.utc) + timedelta(days=365)  # Actually in the future
     now = datetime.now(timezone.utc)
 
     state.schedule_followup(

@@ -698,8 +698,8 @@ class GameService:
         offer_quality = min(10.0, total_influence / 10.0)  # Scale to 0-10
 
         # Check feelings toward rival and patron
-        rival_feeling = scholar.memory.get_feeling(offer.rival_id)
-        patron_feeling = scholar.memory.get_feeling(offer.patron_id)
+        rival_feeling = scholar.memory.feelings.get(offer.rival_id, 0.0)
+        patron_feeling = scholar.memory.feelings.get(offer.patron_id, 0.0)
 
         # Mistreatment factor (negative feelings toward current patron)
         mistreatment = max(0.0, -patron_feeling) / 5.0  # Scale negative feelings

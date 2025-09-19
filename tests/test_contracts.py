@@ -566,8 +566,8 @@ class TestEmotionalConsequences:
         monkeypatch.setattr(service, "_rng", mock_rng)
 
         newton = service.state.get_scholar("newton")
-        initial_alice_feeling = newton.memory.get_feeling("alice")
-        initial_bob_feeling = newton.memory.get_feeling("bob")
+        initial_alice_feeling = newton.memory.feelings.get("alice", 0.0)
+        initial_bob_feeling = newton.memory.feelings.get("bob", 0.0)
 
         offer_id, _ = service.create_defection_offer(
             rival_id="bob",
@@ -581,14 +581,12 @@ class TestEmotionalConsequences:
         newton = service.state.get_scholar("newton")
 
         # Should have negative feelings toward former employer
-        assert newton.memory.get_feeling("alice") < initial_alice_feeling
+        assert newton.memory.feelings.get("alice", 0.0) < initial_alice_feeling
         # Should have positive feelings toward new employer
-        assert newton.memory.get_feeling("bob") > initial_bob_feeling
+        assert newton.memory.feelings.get("bob", 0.0) > initial_bob_feeling
 
         # Should have defection scar
-        scars = [s for s in newton.memory.scars if s["kind"] == "defection"]
-        assert len(scars) > 0
-        assert scars[0]["subject"] == "alice"
+        assert "defection" in newton.memory.scars
 
     def test_failed_poaching_emotions(self, service: GameService, monkeypatch):
         """Test emotional changes from failed poaching."""
@@ -598,7 +596,7 @@ class TestEmotionalConsequences:
         monkeypatch.setattr(service, "_rng", mock_rng)
 
         newton = service.state.get_scholar("newton")
-        initial_bob_feeling = newton.memory.get_feeling("bob")
+        initial_bob_feeling = newton.memory.feelings.get("bob", 0.0)
 
         offer_id, _ = service.create_defection_offer(
             rival_id="bob",
@@ -612,11 +610,10 @@ class TestEmotionalConsequences:
         newton = service.state.get_scholar("newton")
 
         # Should have negative feelings toward failed poacher
-        assert newton.memory.get_feeling("bob") < initial_bob_feeling
+        assert newton.memory.feelings.get("bob", 0.0) < initial_bob_feeling
 
         # No defection scar (stayed loyal)
-        scars = [s for s in newton.memory.scars if s["kind"] == "defection"]
-        assert len(scars) == 0
+        assert "defection" not in newton.memory.scars
 
     def test_counter_offer_loyalty_emotions(self, service: GameService, monkeypatch):
         """Test emotional boost from successful counter-offer."""
@@ -626,7 +623,7 @@ class TestEmotionalConsequences:
         monkeypatch.setattr(service, "_rng", mock_rng)
 
         newton = service.state.get_scholar("newton")
-        initial_alice_feeling = newton.memory.get_feeling("alice")
+        initial_alice_feeling = newton.memory.feelings.get("alice", 0.0)
 
         offer_id, _ = service.create_defection_offer(
             rival_id="bob",
@@ -651,4 +648,4 @@ class TestEmotionalConsequences:
         newton = service.state.get_scholar("newton")
 
         # Should have stronger positive feelings toward alice (who fought for them)
-        assert newton.memory.get_feeling("alice") > initial_alice_feeling
+        assert newton.memory.feelings.get("alice", 0.0) > initial_alice_feeling

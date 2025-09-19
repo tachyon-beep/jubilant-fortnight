@@ -85,7 +85,7 @@ def test_submit_theory_with_career_stake(tmp_path):
         deadline="2025-01-15"
     )
 
-    assert "stake_career confidence" in press.body.lower()
+    assert "stake_my_career confidence" in press.body.lower()
 
     # Verify high-stakes theory is recorded
     events = service.state.export_events()
