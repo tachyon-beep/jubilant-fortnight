@@ -1,29 +1,26 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-12-19 (Post-Sprint 3 Verification)
+Last Updated: 2025-09-19 (Post-integration review)
 
 ## Executive Summary
 
-After comprehensive verification of Sprint 3 implementation:
+- **Fully Implemented:** 55 requirements (71.4%)
+- **Partially Implemented:** 10 requirements (13.0%)
+- **Not Implemented:** 10 requirements (13.0%)
+- **Not Evaluated:** 2 requirements (2.6%)
 
-- **Fully Implemented**: 70 requirements (97%) ✅
-- **Partially Implemented**: 0 requirements (0%)
-- **Not Implemented**: 0 requirements (0%)
-- **Not Evaluated**: 2 requirements (3%) - Performance metrics pending live deployment
+Core gameplay and community loops function end to end, but narrative polish, telemetry coverage, and success metrics remain short of the design intent. The main gaps cluster around layered press generation, LLM-backed narration, and operational instrumentation.
 
 ## Functional Requirements Status
 
-### Core Gameplay Loop and Transparency (6 requirements)
+### Core Gameplay Loop and Transparency (4 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 6 | 100% |
+| Fully Implemented | 2 | 50% |
+| Partially Implemented | 2 | 50% |
 
-**Status:** ✅ All core gameplay requirements verified and working:
-
-- Public command responses implemented
-- Defection handling via `/poach`, `/counter`, `/view_offers` commands
-- Player management through database and Discord integration
+**Notes:** All primary moves run through Discord and the shared timeline advances correctly, but player-count guardrails and “all moves are public” remain partial because several actions reply ephemerally rather than posting to shared channels.【F:great_work/discord_bot.py†L209-L637】【F:great_work/service.py†L1700-L2059】
 
 ### Scholar Management (6 requirements)
 
@@ -31,11 +28,7 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 6 | 100% |
 
-**Status:** ✅ All scholar management features verified:
-
-- Mentorship system with `/mentor` and `/assign_lab` commands
-- Multi-stage defection arcs with negotiation chains
-- Complete defection/return mechanics via offers system
+**Notes:** Roster enforcement, procedural generation, mentorship-driven careers, sidecasts, and multi-stage defection arcs all operate via the service layer and persistence tables.【F:great_work/service.py†L520-L1105】【F:great_work/state.py†L636-L944】
 
 ### Confidence Wagering (3 requirements)
 
@@ -43,7 +36,7 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Fully Functional:** All confidence wager mechanics working as designed
+**Notes:** Confidence levels gate actions, wager tables clamp reputation, and high-stakes wagers impose recruitment cooldowns surfaced to players via `/status` and `/wager`.【F:great_work/service.py†L125-L392】【F:great_work/discord_bot.py†L523-L571】
 
 ### Expeditions and Outcomes (10 requirements)
 
@@ -51,13 +44,7 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 10 | 100% |
 
-**Status:** All expedition types fully functional including Great Projects
-
-- Think tanks: -5 reputation threshold
-- Field expeditions: 0 reputation threshold
-- Great Projects: 10 reputation threshold
-- d100 resolution with modifiers working correctly
-- Failure tables (shallow/deep) properly implemented
+**Notes:** Expedition costs, modifiers, d100 resolution, depth-aware failure tables, sideways effects, and great projects match the detailed design.【F:great_work/service.py†L170-L392】【F:great_work/expeditions.py†L60-L213】
 
 ### Influence Economy (3 requirements)
 
@@ -65,32 +52,24 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Fully Functional:** Five-faction economy with reputation-based soft caps
+**Notes:** Five-dimensional influence vectors persist per player, clamp to reputation-derived caps, and adjust through expeditions, recruitment, and offers with escrow tracking.【F:great_work/service.py†L677-L835】【F:great_work/state.py†L18-L170】
 
-- Base cap: 6 influence
-- Additional cap: 0.2 per reputation point
-- Properly enforced in `_apply_influence_change()` method
-
-### Press Artifacts and Gazette (6 requirements)
+### Press Artefacts and Gazette Cadence (6 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 6 | 100% |
+| Fully Implemented | 2 | 33% |
+| Partially Implemented | 4 | 67% |
 
-**Status:** ✅ All press features verified:
+**Notes:** Gazette digests and symposium cadence run on schedule, but bulletins/manifestos/gossip coverage remain template-only and the multi-layer press system is not yet invoked for most actions.【F:great_work/scheduler.py†L20-L95】【F:great_work/service.py†L170-L392】【F:great_work/multi_press.py†L1-L497】
 
-- All actions generate appropriate press releases
-- Multi-layer press system with depth-based coverage (`multi_press.py`)
-- LLM integration for persona voices with fallback templates
-- Web archive with permalinks for all press artifacts
-
-### Discord UX and Commands (8 requirements)
+### Discord UX and Commands (10 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 8 | 100% |
+| Fully Implemented | 10 | 100% |
 
-**Note:** All commands now implemented: `/submit_theory`, `/launch_expedition`, `/resolve_expeditions`, `/recruit`, `/status`, `/wager`, `/gazette`, `/export_log`, `/table_talk`, `/conference`, `/mentor`, `/assign_lab`, `/symposium_vote`, `/gw_admin` command group
+**Notes:** Slash commands cover theories, wagers, recruitment, expeditions, conferences, mentorship, offers, archives, telemetry, and admin overrides, all wired to service methods.【F:great_work/discord_bot.py†L123-L872】
 
 ## Non-Functional Requirements Status
 
@@ -98,22 +77,21 @@ After comprehensive verification of Sprint 3 implementation:
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 2 | 67% |
+| Fully Implemented | 1 | 33% |
+| Partially Implemented | 1 | 33% |
 | Not Evaluated | 1 | 33% |
 
-**Status:** Architecture supports target scale, performance metrics pending live deployment
+**Notes:** Digest pacing fits small groups, but complexity benchmarking is unevaluated and tooling for moderation at scale is still limited.【F:great_work/scheduler.py†L20-L95】【F:docs/HLD.md†L386-L430】
 
 ### Narrative Tone and Consistency (3 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 3 | 100% |
+| Fully Implemented | 1 | 33% |
+| Partially Implemented | 1 | 33% |
+| Not Implemented | 1 | 33% |
 
-**Status:** ✅ All narrative features verified:
-
-- LLM integration complete with OpenAI-compatible API (`llm_client.py`)
-- Dynamic persona voice generation based on scholar traits
-- Consistent tone through templates and LLM prompts
+**Notes:** Template consistency is enforced, yet not all outputs are posted publicly (ephemeral replies) and persona-aligned LLM narration is still theoretical because the client is not invoked in gameplay flows.【F:great_work/discord_bot.py†L523-L637】【F:great_work/llm_client.py†L1-L283】
 
 ### Pacing and Engagement (3 requirements)
 
@@ -121,11 +99,7 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Status:** ✅ All pacing features verified:
-
-- Symposium fully implemented with voting system
-- Twice-daily Gazette digests via scheduler
-- Conference and mentorship mechanics for player engagement
+**Notes:** Gazette digests, symposium heartbeat, and idle-friendly command structure all match the pacing goals.【F:great_work/scheduler.py†L20-L95】【F:great_work/service.py†L1295-L1448】
 
 ### Reproducibility and Auditability (4 requirements)
 
@@ -133,55 +107,44 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 4 | 100% |
 
-**Fully Functional:** Complete event logging and deterministic RNG
+**Notes:** Deterministic RNG, comprehensive event logs, and export tooling support replay and audit scenarios.【F:great_work/service.py†L86-L214】【F:great_work/state.py†L200-L417】
 
 ### Cost and Operational Control (4 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 4 | 100% |
+| Fully Implemented | 1 | 25% |
+| Partially Implemented | 1 | 25% |
+| Not Implemented | 2 | 50% |
 
-**Status:** ✅ All cost controls verified:
-
-- LLM integration includes rate limiting and fallback mechanisms
-- Configurable API endpoints support local LLMs for cost control
-- Telemetry tracks resource usage
+**Notes:** Scheduler-based maintenance exists, but LLM batching/length controls are pending and posting frequency is not rate-limited beyond the digest cadence.【F:great_work/scheduler.py†L20-L95】【F:great_work/press.py†L20-L145】
 
 ### Licensing and Safety (5 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 5 | 100% |
+| Fully Implemented | 1 | 20% |
+| Not Implemented | 4 | 80% |
 
-**Status:** ✅ All safety features verified:
-
-- ContentModerator class with multi-level safety checks
-- Content filtering in LLM client
-- Manual review capabilities via admin tools
-- Audit trail for all actions
+**Notes:** Code remains MIT-licensed, yet narrative asset licensing, blocklists, manual review guidelines, and MPL/CC licenses are still missing.【F:LICENSE†L1-L21】【F:docs/HLD.md†L354-L410】
 
 ### Success Criteria and Iteration (4 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 3 | 75% |
+| Not Implemented | 3 | 75% |
 | Not Evaluated | 1 | 25% |
 
-**Status:** ✅ Success metrics implemented:
+**Notes:** No telemetry tracks nickname adoption, press sharing, or manifesto creation, and iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L320】
 
-- Complete telemetry system (`telemetry.py`)
-- `/telemetry_report` command for metrics review
-- Command usage tracking via decorators
-- Performance pending live deployment evaluation
-
-### Open-Source Readiness (4 requirements)
+### Open-Source Readiness (5 requirements)
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 4 | 100% |
-| Partially Implemented | 0 | 0% |
+| Fully Implemented | 4 | 80% |
+| Partially Implemented | 1 | 20% |
 
-**Key Gap:** ~~**Admin tooling now fully implemented via `/gw_admin` command group**~~
+**Notes:** Structured YAML assets, deterministic tooling, admin utilities, and licensing support for forks are in place. API-level and deployment documentation still require expansion.【F:great_work/data/settings.yaml†L1-L28】【F:great_work/rng.py†L1-L63】【F:docs/HLD.md†L1-L386】
 
 ### Accessibility of Records (4 requirements)
 
@@ -189,113 +152,10 @@ After comprehensive verification of Sprint 3 implementation:
 |--------|-------|------------|
 | Fully Implemented | 4 | 100% |
 
-**Status:** ✅ All accessibility features verified:
+**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, and `/archive_link` provides permalinks, satisfying archival accessibility requirements.【F:great_work/discord_bot.py†L577-L665】【F:great_work/web_archive.py†L416-L520】
 
-- Web archive with static HTML generation (`web_archive.py`)
-- Permalinks for all press releases
-- `/export_web_archive` and `/archive_link` commands
-- Search functionality in web archive
+## Key Follow-ups
 
-## All Critical Features Implemented
-
-After Sprint 3 verification, there are **no remaining critical missing features**:
-
-### ✅ Core Gameplay Features
-
-- **Mentorship System**: Fully implemented with `/mentor` and `/assign_lab` commands
-- **Conference Mechanics**: Public wager conferences via `/conference` command
-- **Symposium System**: Weekly voting with `/symposium_vote` command
-- **Admin Tools**: Complete moderation toolkit via `/gw_admin` command group
-
-### ✅ Community & Narrative Features
-
-- **Public Archive**: Web archive with static HTML, permalinks, and search
-- **LLM Integration**: OpenAI-compatible API with persona voices and safety controls
-- **Multi-layer Press**: Depth-based coverage system with follow-up narratives
-- **Telemetry**: Comprehensive metrics tracking with admin visibility
-
-### ✅ Advanced Mechanics
-
-- **Contracts/Offers**: Multi-stage negotiation system with influence escrow
-- **Sideways Effects**: Full mechanical impact from expedition discoveries
-- **Defection Arcs**: Complex negotiation chains with counter-offers
-- **Order Batching**: Unified processing for all delayed actions
-
-## Implementation Readiness
-
-The codebase demonstrates strong foundations:
-
-- ✅ Robust data persistence layer (SQLite with proper schemas)
-- ✅ Clean service architecture (GameService with clear separation of concerns)
-- ✅ Deterministic game mechanics (RNG seeding, reproducible outcomes)
-- ✅ Discord bot framework (slash commands, channel posting)
-- ✅ Press generation system (templated with extensible structure)
-- ✅ Scheduled digest processing (APScheduler integration working)
-- ✅ Event sourcing (complete audit trail)
-- ✅ Influence economy (5-faction system with soft caps)
-
-### All Infrastructure Now Fully Utilized
-
-- ✅ Offers table fully operational with complete CRUD operations
-- ✅ Defection logic exposed via `/poach`, `/counter`, `/view_offers`
-- ✅ Followups system extended for multi-stage negotiations
-- ✅ Career progression under player control via mentorship commands
-
-All previously partial implementations have been completed and integrated.
-
-## Recommendations
-
-1. **Sprint 1 Achievements** **[COMPLETED]**:
-   - ~~Implement mentorship system~~ **[DONE]**
-   - ~~Add conference mechanics~~ **[DONE]**
-   - ~~Build generic order batching~~ **[DONE]**
-   - ~~Complete symposium implementation~~ **[DONE]**
-   - ~~Add admin tools~~ **[DONE]**
-
-2. **Sprint 2 Achievements** **[COMPLETED]**:
-   - ~~Sideways discovery mechanical effects~~ **[DONE]**
-   - ~~Multi-stage defection arcs~~ **[DONE]**
-   - ~~Contract and offer mechanics~~ **[DONE]**
-   - ~~Web archive implementation~~ **[DONE - BONUS]**
-
-3. **Sprint 3 Achievements** **[COMPLETED]**:
-   - ~~LLM narrative generation~~ **[DONE]**
-   - ~~Success metrics tracking~~ **[DONE]**
-   - ~~Moderation and safety systems~~ **[DONE]**
-   - ~~Multi-layer press artifacts~~ **[DONE - BONUS]**
-
-## Conclusion
-
-The implementation has successfully delivered the complete game as designed, achieving **97% full implementation** of all requirements (70 of 72, with 2 pending live deployment evaluation).
-
-### Verification Summary
-
-All major systems verified and operational:
-
-- ✅ **192 tests passing** - comprehensive test coverage
-- ✅ **20 Discord commands** - complete player and admin interface
-- ✅ **5 major subsystems** - all working (scholars, expeditions, press, influence, events)
-- ✅ **LLM integration** - persona voices with safety controls
-- ✅ **Web archive** - static HTML with permalinks and search
-- ✅ **Telemetry system** - complete metrics and monitoring
-
-### Production Readiness
-
-The game is **production-ready** with:
-
-- Robust error handling and fallback mechanisms
-- Complete audit trail via event sourcing
-- Admin tools for moderation and hotfixes
-- Performance suitable for designed scale (~100 concurrent players)
-- Safety controls and content moderation
-- Comprehensive documentation and test suite
-
-### Architecture Quality
-
-Based on code review:
-
-- **Strengths**: Clean separation of concerns, appropriate design patterns, comprehensive testing
-- **Future Enhancements**: Could benefit from transaction boundaries and concurrency controls for larger scale
-- **Overall Grade**: B+ - Solid implementation ready for production deployment
-
-The implementation successfully delivers the full design vision with no compromises or deferrals.
+1. Integrate the LLM client and multi-layer press generator to close the remaining narrative gaps.
+2. Expand telemetry coverage and success metrics before external playtests.
+3. Automate archive publishing and extend documentation for deployment and configuration.
