@@ -150,6 +150,79 @@ class ExpeditionResult:
     outcome: ExpeditionOutcome
     failure_detail: Optional[str] = None
     sideways_discovery: Optional[str] = None
+    sideways_effects: Optional[List["SidewaysEffect"]] = None
+
+
+class SidewaysEffectType(str, Enum):
+    """Types of mechanical effects that can be triggered by sideways discoveries."""
+    FACTION_SHIFT = "faction_shift"
+    SPAWN_THEORY = "spawn_theory"
+    CREATE_GRUDGE = "create_grudge"
+    QUEUE_ORDER = "queue_order"
+    REPUTATION_CHANGE = "reputation_change"
+    UNLOCK_OPPORTUNITY = "unlock_opportunity"
+
+
+@dataclass
+class SidewaysEffect:
+    """Mechanical effect triggered by a sideways discovery."""
+    effect_type: SidewaysEffectType
+    description: str
+    payload: Dict[str, object] = field(default_factory=dict)
+
+    @staticmethod
+    def faction_shift(faction: str, amount: int, description: str) -> "SidewaysEffect":
+        """Create a faction influence shift effect."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.FACTION_SHIFT,
+            description=description,
+            payload={"faction": faction, "amount": amount}
+        )
+
+    @staticmethod
+    def spawn_theory(theory_text: str, confidence: str, description: str) -> "SidewaysEffect":
+        """Create a theory spawning effect."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.SPAWN_THEORY,
+            description=description,
+            payload={"theory": theory_text, "confidence": confidence}
+        )
+
+    @staticmethod
+    def create_grudge(target_scholar_id: str, intensity: float, description: str) -> "SidewaysEffect":
+        """Create a grudge between scholars."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.CREATE_GRUDGE,
+            description=description,
+            payload={"target": target_scholar_id, "intensity": intensity}
+        )
+
+    @staticmethod
+    def queue_order(order_type: str, order_data: dict, description: str) -> "SidewaysEffect":
+        """Queue a follow-up order."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.QUEUE_ORDER,
+            description=description,
+            payload={"order_type": order_type, "order_data": order_data}
+        )
+
+    @staticmethod
+    def reputation_change(amount: int, description: str) -> "SidewaysEffect":
+        """Change player reputation."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.REPUTATION_CHANGE,
+            description=description,
+            payload={"amount": amount}
+        )
+
+    @staticmethod
+    def unlock_opportunity(opportunity_type: str, details: dict, description: str) -> "SidewaysEffect":
+        """Unlock a special opportunity."""
+        return SidewaysEffect(
+            effect_type=SidewaysEffectType.UNLOCK_OPPORTUNITY,
+            description=description,
+            payload={"type": opportunity_type, "details": details}
+        )
 
 
 @dataclass
@@ -198,6 +271,23 @@ class TheoryRecord:
     deadline: str
 
 
+@dataclass
+class OfferRecord:
+    """Record of a defection offer or counter-offer."""
+    id: Optional[int] = None
+    scholar_id: str = ""
+    faction: str = ""  # Target faction for defection
+    rival_id: str = ""  # Player making the offer
+    patron_id: str = ""  # Current patron of the scholar
+    offer_type: str = "initial"  # initial, counter, final
+    influence_offered: Dict[str, int] = field(default_factory=dict)
+    terms: Dict[str, object] = field(default_factory=dict)  # Contract terms
+    status: str = "pending"  # pending, accepted, rejected, countered
+    parent_offer_id: Optional[int] = None  # For tracking negotiation chains
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    resolved_at: Optional[datetime] = None
+
+
 __all__ = [
     "ConfidenceLevel",
     "Scholar",
@@ -213,4 +303,5 @@ __all__ = [
     "PressRecord",
     "ExpeditionRecord",
     "TheoryRecord",
+    "OfferRecord",
 ]

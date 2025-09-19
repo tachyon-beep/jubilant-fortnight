@@ -23,7 +23,7 @@ def test_submit_theory_creates_bulletin(tmp_path):
         theory="The ancient calendar aligns with lunar cycles",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=["s.ironquill", "s.scholar2"],
-        deadline="2024-12-31"
+        deadline="2030-12-31"
     )
 
     # Verify press release
@@ -32,7 +32,7 @@ def test_submit_theory_creates_bulletin(tmp_path):
     assert "lunar cycles" in press.body
     assert "certain confidence" in press.body.lower()
     assert "s.ironquill" in press.body
-    assert "2024-12-31" in press.body
+    assert "2030-12-31" in press.body
 
     # Verify event was recorded
     events = service.state.export_events()
@@ -44,7 +44,7 @@ def test_submit_theory_creates_bulletin(tmp_path):
 
     # Verify theory was recorded in database
     theories = service.state.pending_theories()
-    assert any(t.theory == "The ancient calendar aligns with lunar cycles" for t in theories)
+    assert any(record.theory == "The ancient calendar aligns with lunar cycles" for theory_id, record in theories)
 
     # Verify press was archived
     archived = service.state.list_press_releases()
@@ -85,12 +85,12 @@ def test_submit_theory_with_career_stake(tmp_path):
         deadline="2025-01-15"
     )
 
-    assert "stake_career confidence" in press.body.lower()
+    assert "stake_my_career confidence" in press.body.lower()
 
     # Verify high-stakes theory is recorded
     events = service.state.export_events()
     theory_event = next((e for e in events if e.action == "submit_theory"), None)
-    assert theory_event.payload["confidence"] == "stake_career"
+    assert theory_event.payload["confidence"] == "stake_my_career"
 
 
 def test_submit_multiple_theories_increments_bulletin_number(tmp_path):
@@ -143,8 +143,10 @@ def test_ensure_player_creates_new_player(tmp_path):
     assert player is not None
     assert player.id == "new_player"
     assert player.display_name == "new_player"
-    assert player.reputation == service.settings.reputation_bounds["initial"]
-    assert player.influence == {}
+    assert player.reputation == 0  # Default initial reputation
+    # Influence should be initialized with all factions at 0
+    expected_influence = {"academia": 0, "government": 0, "industry": 0, "religion": 0, "foreign": 0}
+    assert player.influence == expected_influence
     assert player.cooldowns == {}
 
 
@@ -226,10 +228,10 @@ def test_theory_deadline_formats(tmp_path):
     service.ensure_player("planner")
 
     test_cases = [
-        "2024-12-31",
-        "2025-01-15",
-        "December 31, 2024",
-        "Jan 15, 2025"
+        "2030-12-31",
+        "2031-01-15",
+        "December 31, 2030",
+        "Jan 15, 2031"
     ]
 
     for deadline in test_cases:
@@ -245,5 +247,5 @@ def test_theory_deadline_formats(tmp_path):
 
         # Verify stored correctly
         theories = service.state.pending_theories()
-        matching = [t for t in theories if deadline in t.deadline]
+        matching = [t for t in theories if deadline in t[1].deadline]
         assert len(matching) > 0

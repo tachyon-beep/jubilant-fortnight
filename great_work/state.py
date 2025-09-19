@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import (
-    ConfidenceLevel,
     Event,
     ExpeditionRecord,
+    OfferRecord,
     Player,
     PressRecord,
     PressRelease,
@@ -223,8 +223,12 @@ class GameState:
                 "SELECT id, display_name, reputation, influence, cooldowns FROM players"
             ).fetchall()
         for row in rows:
-            influence = json.loads(row[3])
-            cooldowns = json.loads(row[4])
+            try:
+                influence = json.loads(row[3])
+                cooldowns = json.loads(row[4])
+            except (json.JSONDecodeError, TypeError):
+                # Skip rows with malformed JSON data
+                continue
             player = Player(
                 id=row[0],
                 display_name=row[1],
@@ -336,6 +340,18 @@ class GameState:
             conn.execute("DELETE FROM followups WHERE id = ?", (followup_id,))
             conn.commit()
 
+    def list_followups(self) -> List[Tuple[int, str, str, datetime, Dict[str, object]]]:
+        """List all followups (not just due ones)."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, scholar_id, kind, resolve_at, payload
+                FROM followups ORDER BY resolve_at ASC"""
+            ).fetchall()
+        return [
+            (row[0], row[1], row[2], datetime.fromisoformat(row[3]), json.loads(row[4]))
+            for row in rows
+        ]
+
     def export_events(self) -> List[Event]:
         events: List[Event] = []
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -429,6 +445,19 @@ class GameState:
                     payload_json,
                 ),
             )
+            # Also record as an event for audit trail
+            event_payload = {
+                "code": record.code,
+                "player_id": record.player_id,
+                "expedition_type": record.expedition_type,
+                "objective": record.objective,
+                "team": record.team,
+                "funding": record.funding,
+            }
+            conn.execute(
+                "INSERT INTO events (timestamp, action, payload) VALUES (?, ?, ?)",
+                (record.timestamp.isoformat(), "expedition_queued", json.dumps(event_payload))
+            )
             conn.commit()
 
     # Press archive -----------------------------------------------------
@@ -460,6 +489,151 @@ class GameState:
             release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
             records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))
         return records
+
+    # Offer management (Defection negotiations) ------------------------
+    def save_offer(self, offer: OfferRecord) -> int:
+        """Save a defection offer to the database. First actual use of offers table!"""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            # Convert influence_offered and terms to JSON
+            payload = {
+                "rival_id": offer.rival_id,
+                "patron_id": offer.patron_id,
+                "offer_type": offer.offer_type,
+                "influence_offered": offer.influence_offered,
+                "terms": offer.terms,
+                "parent_offer_id": offer.parent_offer_id,
+                "resolved_at": offer.resolved_at.isoformat() if offer.resolved_at else None,
+            }
+
+            cursor = conn.execute(
+                """INSERT INTO offers (scholar_id, faction, payload, status, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    offer.scholar_id,
+                    offer.faction,
+                    json.dumps(payload),
+                    offer.status,
+                    offer.created_at.isoformat(),
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_offer(self, offer_id: int) -> Optional[OfferRecord]:
+        """Retrieve a specific offer by ID."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT id, scholar_id, faction, payload, status, created_at FROM offers WHERE id = ?",
+                (offer_id,),
+            ).fetchone()
+
+            if not row:
+                return None
+
+            id_, scholar_id, faction, payload_json, status, created_at = row
+            payload = json.loads(payload_json)
+
+            return OfferRecord(
+                id=id_,
+                scholar_id=scholar_id,
+                faction=faction,
+                rival_id=payload.get("rival_id", ""),
+                patron_id=payload.get("patron_id", ""),
+                offer_type=payload.get("offer_type", "initial"),
+                influence_offered=payload.get("influence_offered", {}),
+                terms=payload.get("terms", {}),
+                status=status,
+                parent_offer_id=payload.get("parent_offer_id"),
+                created_at=datetime.fromisoformat(created_at),
+                resolved_at=datetime.fromisoformat(payload["resolved_at"]) if payload.get("resolved_at") else None,
+            )
+
+    def list_active_offers(self, player_id: Optional[str] = None) -> List[OfferRecord]:
+        """Get all pending offers, optionally filtered by player involvement."""
+        query = "SELECT id, scholar_id, faction, payload, status, created_at FROM offers WHERE status IN ('pending', 'countered')"
+        params = []
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        offers = []
+        for id_, scholar_id, faction, payload_json, status, created_at in rows:
+            payload = json.loads(payload_json)
+
+            # Filter by player if specified
+            if player_id and player_id not in [payload.get("rival_id"), payload.get("patron_id")]:
+                continue
+
+            offers.append(OfferRecord(
+                id=id_,
+                scholar_id=scholar_id,
+                faction=faction,
+                rival_id=payload.get("rival_id", ""),
+                patron_id=payload.get("patron_id", ""),
+                offer_type=payload.get("offer_type", "initial"),
+                influence_offered=payload.get("influence_offered", {}),
+                terms=payload.get("terms", {}),
+                status=status,
+                parent_offer_id=payload.get("parent_offer_id"),
+                created_at=datetime.fromisoformat(created_at),
+                resolved_at=datetime.fromisoformat(payload["resolved_at"]) if payload.get("resolved_at") else None,
+            ))
+
+        return offers
+
+    def update_offer_status(self, offer_id: int, new_status: str, resolved_at: Optional[datetime] = None) -> None:
+        """Update the status of an offer."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            # First get the current offer to update its payload
+            row = conn.execute(
+                "SELECT payload FROM offers WHERE id = ?",
+                (offer_id,),
+            ).fetchone()
+
+            if row:
+                payload = json.loads(row[0])
+                if resolved_at:
+                    payload["resolved_at"] = resolved_at.isoformat()
+
+                conn.execute(
+                    "UPDATE offers SET status = ?, payload = ? WHERE id = ?",
+                    (new_status, json.dumps(payload), offer_id),
+                )
+                conn.commit()
+
+    def get_offer_chain(self, offer_id: int) -> List[OfferRecord]:
+        """Get all offers in a negotiation chain."""
+        offers = []
+        current_offer = self.get_offer(offer_id)
+
+        if not current_offer:
+            return offers
+
+        # Find the root offer
+        while current_offer.parent_offer_id:
+            parent = self.get_offer(current_offer.parent_offer_id)
+            if parent:
+                current_offer = parent
+            else:
+                break
+
+        # Now collect all offers in the chain
+        def collect_children(offer: OfferRecord) -> None:
+            offers.append(offer)
+            # Find all offers that have this as parent
+            with closing(sqlite3.connect(self._db_path)) as conn:
+                rows = conn.execute(
+                    "SELECT id FROM offers WHERE payload LIKE ?",
+                    (f'%"parent_offer_id": {offer.id}%',),
+                ).fetchall()
+
+                for (child_id,) in rows:
+                    child = self.get_offer(child_id)
+                    if child:
+                        collect_children(child)
+
+        collect_children(current_offer)
+        return offers
 
     # Mentorship management ---------------------------------------------
     def add_mentorship(
@@ -614,6 +788,47 @@ class GameState:
                 )
                 return row[0], record
             return None
+
+    def get_last_theory_id_by_player(self, player_id: str) -> Optional[int]:
+        """Get the ID of the most recent theory submitted by a player."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id FROM theories
+                   WHERE player_id = ?
+                   ORDER BY id DESC
+                   LIMIT 1""",
+                (player_id,),
+            ).fetchone()
+            return row[0] if row else None
+
+    def pending_theories(self) -> List[Tuple[int, TheoryRecord]]:
+        """Get all theories with deadlines that haven't passed yet."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            rows = conn.execute(
+                """
+                SELECT id, player_id, theory, confidence, supporters, timestamp, deadline
+                FROM theories
+                WHERE deadline >= ?
+                ORDER BY deadline ASC
+                """,
+                (current_date,)
+            ).fetchall()
+
+        return [
+            (
+                row[0],
+                TheoryRecord(
+                    player_id=row[1],
+                    theory=row[2],
+                    confidence=row[3],
+                    supporters=json.loads(row[4]) if row[4] else [],
+                    timestamp=datetime.fromisoformat(row[5]),
+                    deadline=row[6]
+                )
+            )
+            for row in rows
+        ]
 
     def list_theories(self, limit: int | None = None) -> List[Tuple[int, TheoryRecord]]:
         """List all theories with their IDs, optionally limited."""

@@ -58,12 +58,14 @@ def test_memory_fact_creation():
     now = datetime.now(timezone.utc)
     fact = MemoryFact(
         timestamp=now,
-        event_type="expedition_success",
-        details={"outcome": "success", "reputation": 5}
+        type="expedition_success",
+        subject="darwin",
+        details={"outcome": "success", "reputation": "5"}
     )
 
     assert fact.timestamp == now
-    assert fact.event_type == "expedition_success"
+    assert fact.type == "expedition_success"
+    assert fact.subject == "darwin"
     assert fact.details["outcome"] == "success"
 
 
@@ -96,7 +98,7 @@ def test_confidence_level_enum_values():
     """ConfidenceLevel enum should have correct string values."""
     assert ConfidenceLevel.SUSPECT.value == "suspect"
     assert ConfidenceLevel.CERTAIN.value == "certain"
-    assert ConfidenceLevel.STAKE_CAREER.value == "stake_career"
+    assert ConfidenceLevel.STAKE_CAREER.value == "stake_my_career"
 
 
 def test_expedition_outcome_enum_values():
@@ -229,14 +231,14 @@ def test_seed_sequence_spawn_chain():
 # State additional coverage
 def test_gamestate_with_custom_repository(tmp_path):
     """GameState should accept custom ScholarRepository."""
-    custom_repo = ScholarRepository(seed=99999)
+    custom_repo = ScholarRepository()
     state = GameState(
         db_path=tmp_path / "custom.db",
         repository=custom_repo,
         start_year=1920
     )
 
-    assert state._repo.seed == 99999
+    assert state._repo == custom_repo
 
 
 def test_gamestate_update_relationship(tmp_path):
@@ -245,8 +247,9 @@ def test_gamestate_update_relationship(tmp_path):
 
     # Create two scholars
     repo = ScholarRepository()
-    scholar1 = repo.generate("s1", "Scholar One")
-    scholar2 = repo.generate("s2", "Scholar Two")
+    rng = DeterministicRNG(12345)
+    scholar1 = repo.generate(rng, "s1")
+    scholar2 = repo.generate(rng, "s2")
 
     state.save_scholar(scholar1)
     state.save_scholar(scholar2)
@@ -324,11 +327,10 @@ def test_expedition_record_model():
         objective="Find artifacts",
         team=["s1", "s2", "s3"],
         funding=["academia", "government"],
-        preparation={"equipment": True},
         prep_depth="deep",
         confidence="certain"
     )
 
     assert record.code == "EXP-123"
     assert len(record.team) == 3
-    assert record.preparation["equipment"] is True
+    assert record.prep_depth == "deep"

@@ -17,10 +17,10 @@ class SeedSequence:
         if index is None:
             index = self.counter
             self.counter += 1
-        return SeedSequence(self.campaign_seed ^ (index * 0x9E3779B9) & 0xFFFFFFFF, 0)
+        return SeedSequence((self.campaign_seed ^ (index * 0x9E3779B9)) & 0xFFFFFFFF, 0)
 
     def random(self) -> random.Random:
-        return random.Random(self.campaign_seed ^ (self.counter * 0x9E3779B9 & 0xFFFFFFFF))
+        return random.Random((self.campaign_seed ^ (self.counter * 0x9E3779B9)) & 0xFFFFFFFF)
 
 
 class DeterministicRNG:
