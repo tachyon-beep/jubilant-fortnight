@@ -15,9 +15,12 @@ from .models import (
     ExpeditionPreparation,
     ExpeditionRecord,
     MemoryFact,
+    OfferRecord,
     Player,
     PressRecord,
     PressRelease,
+    SidewaysEffect,
+    SidewaysEffectType,
     TheoryRecord,
 )
 from .press import (
@@ -309,6 +312,10 @@ class GameService:
             self._apply_expedition_rewards(player, order.expedition_type, result)
             self.state.upsert_player(player)
             self._update_relationships_from_result(order, result)
+            # Apply sideways discovery effects if present
+            if result.sideways_effects:
+                effect_releases = self._apply_sideways_effects(order, result, player)
+                releases.extend(effect_releases)
             sidecast = self._maybe_spawn_sidecast(order, result)
             if sidecast:
                 releases.append(sidecast)
@@ -464,6 +471,429 @@ class GameService:
             )
         )
         return outcome == "defected", press
+
+    # ===== New Offer System Methods =====
+    def create_defection_offer(
+        self,
+        rival_id: str,
+        scholar_id: str,
+        target_faction: str,
+        influence_offer: Dict[str, int],
+        terms: Optional[Dict[str, object]] = None,
+    ) -> Tuple[int, List[PressRelease]]:
+        """Create a new defection offer to poach a scholar.
+
+        Returns:
+            (offer_id, press_releases) tuple
+        """
+        timestamp = datetime.now(timezone.utc)
+        scholar = self.state.get_scholar(scholar_id)
+        rival = self.state.get_player(rival_id)
+
+        if not scholar:
+            raise ValueError(f"Scholar {scholar_id} not found")
+        if not rival:
+            raise ValueError(f"Player {rival_id} not found")
+
+        # Find current patron
+        patron_id = scholar.contract.get("employer", "")
+        if not patron_id:
+            raise ValueError(f"Scholar {scholar_id} has no current employer")
+
+        # Validate rival has enough influence
+        for faction, amount in influence_offer.items():
+            if rival.influence.get(faction, 0) < amount:
+                raise ValueError(f"Player {rival_id} has insufficient {faction} influence")
+
+        # Create the offer record
+        offer = OfferRecord(
+            scholar_id=scholar_id,
+            faction=target_faction,
+            rival_id=rival_id,
+            patron_id=patron_id,
+            offer_type="initial",
+            influence_offered=influence_offer,
+            terms=terms or {},
+            status="pending",
+            created_at=timestamp,
+        )
+
+        offer_id = self.state.save_offer(offer)
+        offer.id = offer_id
+
+        # Schedule followup for offer evaluation (24 hour negotiation window)
+        resolve_at = timestamp + timedelta(hours=24)
+        self.state.schedule_followup(
+            scholar_id,
+            "evaluate_offer",
+            resolve_at,
+            {"offer_id": offer_id},
+        )
+
+        # Generate press releases
+        press = []
+        headline = f"Poaching Attempt: {rival.display_name} Targets {scholar.name}"
+        body = f"{rival.display_name} has made an offer to {scholar.name} to join {target_faction}.\n"
+        body += f"The offer includes: {', '.join(f'{v} {k}' for k, v in influence_offer.items())} influence.\n"
+        if terms:
+            body += f"Additional terms: {terms}\n"
+        body += f"Current patron {patron_id} has 24 hours to counter."
+
+        release = PressRelease(
+            type="negotiation",
+            headline=headline,
+            body=body,
+            metadata={
+                "offer_id": offer_id,
+                "rival": rival_id,
+                "patron": patron_id,
+                "scholar": scholar_id,
+            }
+        )
+        self._archive_press(release, timestamp)
+        press.append(release)
+
+        # Deduct influence from rival (held in escrow)
+        for faction, amount in influence_offer.items():
+            rival.influence[faction] -= amount
+        self.state.upsert_player(rival)
+
+        # Record event
+        self.state.append_event(
+            Event(
+                timestamp=timestamp,
+                action="offer_created",
+                payload={
+                    "offer_id": offer_id,
+                    "rival": rival_id,
+                    "scholar": scholar_id,
+                    "influence": influence_offer,
+                }
+            )
+        )
+
+        return offer_id, press
+
+    def counter_offer(
+        self,
+        player_id: str,
+        original_offer_id: int,
+        counter_influence: Dict[str, int],
+        counter_terms: Optional[Dict[str, object]] = None,
+    ) -> Tuple[int, List[PressRelease]]:
+        """Create a counter-offer to retain a scholar.
+
+        Returns:
+            (counter_offer_id, press_releases) tuple
+        """
+        timestamp = datetime.now(timezone.utc)
+        original = self.state.get_offer(original_offer_id)
+        player = self.state.get_player(player_id)
+
+        if not original:
+            raise ValueError(f"Offer {original_offer_id} not found")
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+
+        # Verify this player is the current patron
+        if player_id != original.patron_id:
+            raise ValueError(f"Player {player_id} is not the current patron")
+
+        # Verify offer is still pending
+        if original.status != "pending":
+            raise ValueError(f"Offer {original_offer_id} is not pending (status: {original.status})")
+
+        # Validate patron has enough influence
+        for faction, amount in counter_influence.items():
+            if player.influence.get(faction, 0) < amount:
+                raise ValueError(f"Player {player_id} has insufficient {faction} influence")
+
+        # Create counter-offer
+        counter = OfferRecord(
+            scholar_id=original.scholar_id,
+            faction=original.faction,  # Keep same target faction for consistency
+            rival_id=original.rival_id,
+            patron_id=player_id,
+            offer_type="counter",
+            influence_offered=counter_influence,
+            terms=counter_terms or {},
+            status="pending",
+            parent_offer_id=original_offer_id,
+            created_at=timestamp,
+        )
+
+        counter_id = self.state.save_offer(counter)
+        counter.id = counter_id
+
+        # Update original offer status
+        self.state.update_offer_status(original_offer_id, "countered")
+
+        # Reschedule followup for counter evaluation (12 hours for final round)
+        self.state.clear_followup(original_offer_id)  # Clear original followup
+        resolve_at = timestamp + timedelta(hours=12)
+        self.state.schedule_followup(
+            original.scholar_id,
+            "evaluate_counter",
+            resolve_at,
+            {"counter_offer_id": counter_id},
+        )
+
+        # Generate press
+        scholar = self.state.get_scholar(original.scholar_id)
+        press = []
+        headline = f"Counter-Offer: {player.display_name} Fights for {scholar.name}"
+        body = f"{player.display_name} has countered with: {', '.join(f'{v} {k}' for k, v in counter_influence.items())} influence.\n"
+        if counter_terms:
+            body += f"Additional terms: {counter_terms}\n"
+        body += f"The rival has 12 hours to make a final offer."
+
+        release = PressRelease(
+            type="negotiation",
+            headline=headline,
+            body=body,
+            metadata={
+                "counter_offer_id": counter_id,
+                "original_offer_id": original_offer_id,
+            }
+        )
+        self._archive_press(release, timestamp)
+        press.append(release)
+
+        # Deduct influence from patron (held in escrow)
+        for faction, amount in counter_influence.items():
+            player.influence[faction] -= amount
+        self.state.upsert_player(player)
+
+        # Record event
+        self.state.append_event(
+            Event(
+                timestamp=timestamp,
+                action="counter_offer_created",
+                payload={
+                    "counter_offer_id": counter_id,
+                    "original_offer_id": original_offer_id,
+                    "patron": player_id,
+                    "influence": counter_influence,
+                }
+            )
+        )
+
+        return counter_id, press
+
+    def evaluate_scholar_offer(self, offer_id: int) -> float:
+        """Calculate a scholar's likelihood to accept an offer based on feelings and terms.
+
+        Returns probability between 0.0 and 1.0
+        """
+        offer = self.state.get_offer(offer_id)
+        if not offer:
+            raise ValueError(f"Offer {offer_id} not found")
+
+        scholar = self.state.get_scholar(offer.scholar_id)
+        if not scholar:
+            raise ValueError(f"Scholar {offer.scholar_id} not found")
+
+        # Base probability from offer quality (influence amount)
+        total_influence = sum(offer.influence_offered.values())
+        offer_quality = min(10.0, total_influence / 10.0)  # Scale to 0-10
+
+        # Check feelings toward rival and patron
+        rival_feeling = scholar.memory.get_feeling(offer.rival_id)
+        patron_feeling = scholar.memory.get_feeling(offer.patron_id)
+
+        # Mistreatment factor (negative feelings toward current patron)
+        mistreatment = max(0.0, -patron_feeling) / 5.0  # Scale negative feelings
+
+        # Alignment factor (positive feelings toward rival)
+        alignment = max(0.0, rival_feeling) / 5.0
+
+        # Check for plateau (no recent discoveries)
+        recent_discoveries = [
+            fact for fact in scholar.memory.facts
+            if fact.kind == "discovery" and
+            (datetime.now(timezone.utc) - fact.when).days < 90
+        ]
+        plateau = 0.0 if recent_discoveries else 2.0
+
+        # Use existing defection probability calculation
+        from .scholars import defection_probability
+        probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
+
+        # Adjust for contract terms
+        if "exclusive_research" in offer.terms:
+            probability += 0.1
+        if "guaranteed_funding" in offer.terms:
+            probability += 0.15
+        if "leadership_role" in offer.terms:
+            probability += 0.2
+
+        # Adjust for offer type (counters have slight advantage)
+        if offer.offer_type == "counter":
+            probability -= 0.1  # Loyalty bonus to current patron
+
+        return min(1.0, max(0.0, probability))
+
+    def resolve_offer_negotiation(
+        self,
+        offer_id: int,
+    ) -> List[PressRelease]:
+        """Resolve a negotiation chain and determine the final outcome.
+
+        This is called by the scheduler when negotiations time out.
+        """
+        timestamp = datetime.now(timezone.utc)
+        offer_chain = self.state.get_offer_chain(offer_id)
+
+        if not offer_chain:
+            raise ValueError(f"No offer chain found for {offer_id}")
+
+        # Find the best offer in the chain
+        best_offer = None
+        best_probability = 0.0
+
+        for offer in offer_chain:
+            if offer.status == "pending":
+                prob = self.evaluate_scholar_offer(offer.id)
+                if prob > best_probability:
+                    best_probability = prob
+                    best_offer = offer
+
+        if not best_offer:
+            # No valid offers, scholar stays
+            press = []
+            for offer in offer_chain:
+                self.state.update_offer_status(offer.id, "expired", timestamp)
+                # Return escrowed influence
+                player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                for faction, amount in offer.influence_offered.items():
+                    player.influence[faction] += amount
+                self.state.upsert_player(player)
+            return press
+
+        # Roll for acceptance
+        roll = self._rng.uniform(0.0, 1.0)
+        scholar = self.state.get_scholar(best_offer.scholar_id)
+        press = []
+
+        if roll < best_probability:
+            # Scholar accepts the offer
+            winner_id = best_offer.rival_id if best_offer.offer_type == "initial" else best_offer.patron_id
+            loser_id = best_offer.patron_id if best_offer.offer_type == "initial" else best_offer.rival_id
+
+            # Transfer scholar
+            old_employer = scholar.contract.get("employer", "")
+            scholar.contract["employer"] = best_offer.faction if best_offer.offer_type == "initial" else old_employer
+
+            # Apply emotional consequences
+            from .scholars import apply_scar
+            if best_offer.offer_type == "initial":
+                # Defection - apply scar and negative feelings
+                apply_scar(scholar, "defection", old_employer, timestamp)
+                scholar.memory.adjust_feeling(old_employer, -4.0)
+                scholar.memory.adjust_feeling(winner_id, 2.0)
+            else:
+                # Stayed with patron - positive feelings
+                scholar.memory.adjust_feeling(winner_id, 3.0)
+                scholar.memory.adjust_feeling(loser_id, -2.0)
+
+            self.state.save_scholar(scholar)
+
+            # Create press release
+            headline = f"{scholar.name} {'Defects to' if best_offer.offer_type == 'initial' else 'Remains with'} {winner_id}"
+            body = f"After intense negotiations, {scholar.name} has chosen to {'join' if best_offer.offer_type == 'initial' else 'remain with'} {winner_id}.\n"
+            body += f"Winning offer: {', '.join(f'{v} {k}' for k, v in best_offer.influence_offered.items())} influence.\n"
+            body += f"Probability of acceptance was {best_probability:.1%}."
+
+            release = PressRelease(
+                type="negotiation_resolved",
+                headline=headline,
+                body=body,
+                metadata={
+                    "scholar": scholar.id,
+                    "winner": winner_id,
+                    "loser": loser_id,
+                    "offer_id": best_offer.id,
+                }
+            )
+            self._archive_press(release, timestamp)
+            press.append(release)
+
+            # Mark all offers as resolved
+            for offer in offer_chain:
+                status = "accepted" if offer.id == best_offer.id else "rejected"
+                self.state.update_offer_status(offer.id, status, timestamp)
+
+            # Return escrowed influence for losing offers
+            for offer in offer_chain:
+                if offer.id != best_offer.id:
+                    player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                    for faction, amount in offer.influence_offered.items():
+                        player.influence[faction] += amount
+                    self.state.upsert_player(player)
+
+            # Winner pays the influence cost (already deducted)
+            # No need to return it
+
+            # Schedule followup for potential return (if defected)
+            if best_offer.offer_type == "initial":
+                resolve_at = timestamp + self._FOLLOWUP_DELAYS.get("defection_return", timedelta(days=30))
+                self.state.schedule_followup(
+                    scholar.id,
+                    "defection_return",
+                    resolve_at,
+                    {"former_employer": old_employer, "new_faction": best_offer.faction},
+                )
+
+        else:
+            # Scholar rejects all offers
+            headline = f"{scholar.name} Rejects All Offers"
+            body = f"{scholar.name} has decided to remain with their current patron.\n"
+            body += f"Best offer had {best_probability:.1%} chance of success but failed."
+
+            release = PressRelease(
+                type="negotiation_resolved",
+                headline=headline,
+                body=body,
+                metadata={
+                    "scholar": scholar.id,
+                    "all_rejected": True,
+                }
+            )
+            self._archive_press(release, timestamp)
+            press.append(release)
+
+            # Mark all offers as rejected and return influence
+            for offer in offer_chain:
+                self.state.update_offer_status(offer.id, "rejected", timestamp)
+                player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                for faction, amount in offer.influence_offered.items():
+                    player.influence[faction] += amount
+                self.state.upsert_player(player)
+
+            # Adjust feelings
+            scholar.memory.adjust_feeling(best_offer.rival_id, -1.0)
+            self.state.save_scholar(scholar)
+
+        # Record event
+        self.state.append_event(
+            Event(
+                timestamp=timestamp,
+                action="negotiation_resolved",
+                payload={
+                    "offer_chain": [o.id for o in offer_chain],
+                    "best_offer": best_offer.id if best_offer else None,
+                    "probability": best_probability,
+                    "roll": roll,
+                    "accepted": roll < best_probability,
+                }
+            )
+        )
+
+        return press
+
+    def list_player_offers(self, player_id: str) -> List[OfferRecord]:
+        """Get all active offers involving a player."""
+        return self.state.list_active_offers(player_id)
 
     def player_status(self, player_id: str) -> Dict[str, object]:
         player = self.state.get_player(player_id)
@@ -1186,6 +1616,24 @@ class GameService:
         press = self.state.list_press_releases(limit=limit)
         return {"events": events[-limit:], "press": press}
 
+    def export_web_archive(self, output_dir: Path | None = None) -> Path:
+        """Export the complete game history as a static web archive.
+
+        Args:
+            output_dir: Directory to export to. Defaults to ./web_archive
+
+        Returns:
+            Path to the exported archive directory
+        """
+        from pathlib import Path
+        from .web_archive import WebArchive
+
+        if output_dir is None:
+            output_dir = Path("web_archive")
+
+        archive = WebArchive(self.state, output_dir)
+        return archive.export_full_archive()
+
     def advance_digest(self) -> List[PressRelease]:
         """Advance the digest tick, decaying cooldowns and maintaining the roster."""
 
@@ -1429,6 +1877,24 @@ class GameService:
             elif kind == "recruitment_grudge":
                 scholar.memory.adjust_feeling(payload.get("player", "Unknown"), -1.0)
                 quote = "The slighted scholar sharpens their public retort."
+            elif kind == "evaluate_offer":
+                # Resolve offer negotiation
+                offer_id = payload.get("offer_id")
+                if offer_id:
+                    negotiation_press = self.resolve_offer_negotiation(offer_id)
+                    releases.extend(negotiation_press)
+                    self.state.clear_followup(followup_id)
+                    continue  # Skip the normal gossip generation
+                quote = "The negotiation deadline has arrived."
+            elif kind == "evaluate_counter":
+                # Resolve counter-offer negotiation
+                counter_offer_id = payload.get("counter_offer_id")
+                if counter_offer_id:
+                    negotiation_press = self.resolve_offer_negotiation(counter_offer_id)
+                    releases.extend(negotiation_press)
+                    self.state.clear_followup(followup_id)
+                    continue  # Skip the normal gossip generation
+                quote = "The counter-offer awaits final resolution."
             else:
                 quote = "An unresolved thread lingers in the archives."
             press = academic_gossip(
@@ -1489,6 +1955,163 @@ class GameService:
             self.state.save_scholar(scholar)
             feeling = scholar.memory.feelings.get(order.player_id, 0.0)
             self.state.update_relationship(scholar_id, order.player_id, feeling)
+
+    def _apply_sideways_effects(
+        self, order: ExpeditionOrder, result, player: Player
+    ) -> List[PressRelease]:
+        """Apply mechanical effects from sideways discoveries."""
+        if not result.sideways_effects:
+            return []
+
+        releases = []
+        now = datetime.now(timezone.utc)
+
+        for effect in result.sideways_effects:
+            if effect.effect_type == SidewaysEffectType.FACTION_SHIFT:
+                # Apply faction influence change
+                faction = effect.payload["faction"]
+                amount = effect.payload["amount"]
+                old_influence = player.influence.get(faction, 0)
+                self._apply_influence_change(player, faction, amount)
+                releases.append(
+                    PressRelease(
+                        type="faction_shift",
+                        headline=f"Expedition Discovery Shifts {faction} Relations",
+                        body=f"{effect.description}. {player.name}'s {faction} influence changes by {amount} (from {old_influence} to {player.influence[faction]}).",
+                        metadata={"player": player.name, "faction": faction, "change": amount},
+                    )
+                )
+
+            elif effect.effect_type == SidewaysEffectType.SPAWN_THEORY:
+                # Create a new theory from the discovery
+                theory_text = effect.payload["theory"]
+                confidence = ConfidenceLevel(effect.payload["confidence"])
+                theory_record = TheoryRecord(
+                    player_id=order.player_id,
+                    theory=theory_text,
+                    confidence=confidence.value,
+                    timestamp=now,
+                )
+                self.state.record_theory(theory_record)
+                releases.append(
+                    PressRelease(
+                        type="discovery_theory",
+                        headline="Discovery Spawns New Theory",
+                        body=f"{effect.description}. {player.name} proposes: '{theory_text}' with {confidence.value} confidence.",
+                        metadata={"player": player.name, "theory": theory_text},
+                    )
+                )
+
+            elif effect.effect_type == SidewaysEffectType.CREATE_GRUDGE:
+                # Create a grudge between scholars
+                target_id = effect.payload["target"]
+                intensity = effect.payload["intensity"]
+
+                # If target is "random", pick a random scholar
+                if target_id == "random":
+                    scholars = list(self.state.all_scholars())
+                    # Filter out scholars on the same team as the expedition
+                    eligible = [s for s in scholars if s.id not in order.team]
+                    if eligible:
+                        target = self._rng.choice(eligible)
+                        target_id = target.id
+                        # Make the target scholar dislike the player
+                        target.memory.adjust_feeling(order.player_id, -intensity)
+                        self.state.save_scholar(target)
+                        releases.append(
+                            PressRelease(
+                                type="scholar_grudge",
+                                headline=f"{target.name} Objects to Expedition Approach",
+                                body=f"{effect.description}. {target.name} expresses concerns about {player.name}'s expedition methods.",
+                                metadata={"scholar": target.name, "player": player.name},
+                            )
+                        )
+
+            elif effect.effect_type == SidewaysEffectType.QUEUE_ORDER:
+                # Queue a follow-up order (conference, summit, etc.)
+                order_type = effect.payload["order_type"]
+                order_data = effect.payload["order_data"]
+
+                if order_type == "conference":
+                    # Auto-schedule a conference by first creating a theory
+                    theory_text = order_data.get("topic", "Emergency colloquium on expedition findings")
+                    # Submit the theory first
+                    theory_record = TheoryRecord(
+                        player_id=order.player_id,
+                        theory=theory_text,
+                        confidence=ConfidenceLevel.SUSPECT.value,
+                        timestamp=now,
+                    )
+                    self.state.record_theory(theory_record)
+                    # Get the theory ID we just created
+                    theory_id = self.state.get_last_theory_id_by_player(order.player_id)
+                    # Now launch a conference on this theory
+                    if theory_id:
+                        # Pick some random scholars as supporters/opposition
+                        scholars = list(self.state.all_scholars())[:6]
+                        supporters = [s.id for s in scholars[:3]]
+                        opposition = [s.id for s in scholars[3:6]]
+                        self.launch_conference(
+                            order.player_id,
+                            theory_id,
+                            ConfidenceLevel.SUSPECT,
+                            supporters,
+                            opposition
+                        )
+                        releases.append(
+                            PressRelease(
+                                type="conference_scheduled",
+                                headline="Emergency Colloquium Scheduled",
+                                body=f"{effect.description}. Conference scheduled to discuss expedition findings.",
+                                metadata={"player": player.name},
+                            )
+                        )
+
+            elif effect.effect_type == SidewaysEffectType.REPUTATION_CHANGE:
+                # Change player reputation
+                amount = effect.payload["amount"]
+                old_rep = player.reputation
+                player.reputation = max(
+                    self.settings.reputation_bounds[0],
+                    min(self.settings.reputation_bounds[1], player.reputation + amount),
+                )
+                releases.append(
+                    PressRelease(
+                        type="reputation_shift",
+                        headline="Discovery Affects Academic Standing",
+                        body=f"{effect.description}. {player.name}'s reputation changes by {amount} (from {old_rep} to {player.reputation}).",
+                        metadata={"player": player.name, "change": amount},
+                    )
+                )
+
+            elif effect.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY:
+                # Store opportunity in followups table for later resolution
+                opportunity_type = effect.payload["type"]
+                details = effect.payload["details"]
+                deadline = now + timedelta(days=details.get("expires_in_days", 3))
+
+                self.state.save_followup(
+                    source_type="expedition_opportunity",
+                    source_id=order.code,
+                    scheduled_for=deadline,
+                    action_type=opportunity_type,
+                    action_payload=details,
+                )
+                releases.append(
+                    PressRelease(
+                        type="opportunity_unlocked",
+                        headline="New Opportunity Emerges",
+                        body=f"{effect.description}. Opportunity expires in {details.get('expires_in_days', 3)} days.",
+                        metadata={"player": player.name, "opportunity": opportunity_type},
+                    )
+                )
+
+        # Save player changes and archive press releases
+        self.state.upsert_player(player)
+        for release in releases:
+            self._archive_press(release, now)
+
+        return releases
 
     def _maybe_spawn_sidecast(self, order: ExpeditionOrder, result) -> Optional[PressRelease]:
         if result.outcome == ExpeditionOutcome.FAILURE:

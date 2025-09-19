@@ -47,6 +47,14 @@ class GazetteScheduler:
         for press in releases:
             self._emit_release(press)
 
+        # Export web archive after digest
+        try:
+            from pathlib import Path
+            archive_path = self.service.export_web_archive(Path("web_archive"))
+            logger.info(f"Web archive exported to {archive_path}")
+        except Exception:
+            logger.exception("Failed to export web archive during digest")
+
     def _host_symposium(self) -> None:
         """Host weekly symposium with randomly selected topic."""
         # List of potential symposium topics

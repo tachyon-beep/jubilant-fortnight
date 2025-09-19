@@ -286,6 +286,174 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
 
+    @app_commands.command(name="poach", description="Attempt to poach another player's scholar")
+    @app_commands.describe(
+        scholar_id="Scholar to poach",
+        target_faction="Faction to recruit them to",
+        academic_influence="Academic influence to offer (0-100)",
+        government_influence="Government influence to offer (0-100)",
+        industry_influence="Industry influence to offer (0-100)",
+        religious_influence="Religious influence to offer (0-100)",
+        foreign_influence="Foreign influence to offer (0-100)",
+        guaranteed_funding="Offer guaranteed funding (true/false)",
+        exclusive_research="Offer exclusive research rights (true/false)",
+        leadership_role="Offer leadership position (true/false)",
+    )
+    async def poach(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        target_faction: str,
+        academic_influence: int = 0,
+        government_influence: int = 0,
+        industry_influence: int = 0,
+        religious_influence: int = 0,
+        foreign_influence: int = 0,
+        guaranteed_funding: bool = False,
+        exclusive_research: bool = False,
+        leadership_role: bool = False,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+
+        # Build influence offer
+        influence_offer = {}
+        if academic_influence > 0:
+            influence_offer["academic"] = academic_influence
+        if government_influence > 0:
+            influence_offer["government"] = government_influence
+        if industry_influence > 0:
+            influence_offer["industry"] = industry_influence
+        if religious_influence > 0:
+            influence_offer["religious"] = religious_influence
+        if foreign_influence > 0:
+            influence_offer["foreign"] = foreign_influence
+
+        if not influence_offer:
+            await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            return
+
+        # Build terms
+        terms = {}
+        if guaranteed_funding:
+            terms["guaranteed_funding"] = True
+        if exclusive_research:
+            terms["exclusive_research"] = True
+        if leadership_role:
+            terms["leadership_role"] = True
+
+        try:
+            offer_id, press_list = service.create_defection_offer(
+                rival_id=str(interaction.user.display_name),
+                scholar_id=scholar_id,
+                target_faction=target_faction,
+                influence_offer=influence_offer,
+                terms=terms,
+            )
+
+            message = f"Offer #{offer_id} created!\n"
+            for press in press_list:
+                message += f"{press.headline}\n{press.body}\n"
+
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @app_commands.command(name="counter", description="Counter a rival's poaching attempt")
+    @app_commands.describe(
+        offer_id="ID of the offer to counter",
+        academic_influence="Academic influence to offer (0-100)",
+        government_influence="Government influence to offer (0-100)",
+        industry_influence="Industry influence to offer (0-100)",
+        religious_influence="Religious influence to offer (0-100)",
+        foreign_influence="Foreign influence to offer (0-100)",
+        guaranteed_funding="Offer guaranteed funding (true/false)",
+        exclusive_research="Offer exclusive research rights (true/false)",
+        leadership_role="Offer leadership position (true/false)",
+    )
+    async def counter(
+        interaction: discord.Interaction,
+        offer_id: int,
+        academic_influence: int = 0,
+        government_influence: int = 0,
+        industry_influence: int = 0,
+        religious_influence: int = 0,
+        foreign_influence: int = 0,
+        guaranteed_funding: bool = False,
+        exclusive_research: bool = False,
+        leadership_role: bool = False,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+
+        # Build counter influence offer
+        counter_influence = {}
+        if academic_influence > 0:
+            counter_influence["academic"] = academic_influence
+        if government_influence > 0:
+            counter_influence["government"] = government_influence
+        if industry_influence > 0:
+            counter_influence["industry"] = industry_influence
+        if religious_influence > 0:
+            counter_influence["religious"] = religious_influence
+        if foreign_influence > 0:
+            counter_influence["foreign"] = foreign_influence
+
+        if not counter_influence:
+            await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            return
+
+        # Build terms
+        counter_terms = {}
+        if guaranteed_funding:
+            counter_terms["guaranteed_funding"] = True
+        if exclusive_research:
+            counter_terms["exclusive_research"] = True
+        if leadership_role:
+            counter_terms["leadership_role"] = True
+
+        try:
+            counter_id, press_list = service.counter_offer(
+                player_id=str(interaction.user.display_name),
+                original_offer_id=offer_id,
+                counter_influence=counter_influence,
+                counter_terms=counter_terms,
+            )
+
+            message = f"Counter-offer #{counter_id} created!\n"
+            for press in press_list:
+                message += f"{press.headline}\n{press.body}\n"
+
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.orders, message, purpose="orders")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+
+    @app_commands.command(name="view_offers", description="View active offers involving your scholars")
+    async def view_offers(interaction: discord.Interaction) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+
+        try:
+            offers = service.list_player_offers(str(interaction.user.display_name))
+
+            if not offers:
+                await interaction.response.send_message("No active offers involving you.", ephemeral=True)
+                return
+
+            message = "**Active Offers:**\n"
+            for offer in offers:
+                scholar = service.state.get_scholar(offer.scholar_id)
+                message += f"\n**Offer #{offer.id}** - {offer.status.upper()}\n"
+                message += f"Scholar: {scholar.name if scholar else offer.scholar_id}\n"
+                message += f"Type: {offer.offer_type}\n"
+                message += f"Rival: {offer.rival_id}, Patron: {offer.patron_id}\n"
+                message += f"Influence: {', '.join(f'{v} {k}' for k, v in offer.influence_offered.items())}\n"
+                if offer.terms:
+                    message += f"Terms: {offer.terms}\n"
+                message += f"Created: {offer.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+
+            await interaction.response.send_message(message, ephemeral=True)
+        except Exception as exc:
+            await interaction.response.send_message(f"Error: {exc}", ephemeral=True)
+
     @app_commands.command(name="conference", description="Launch a conference to debate a theory")
     @app_commands.describe(
         theory_id="Theory ID to debate",
@@ -413,6 +581,84 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         for event in log["events"]:
             event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
         await interaction.response.send_message("\n".join(press_lines + [""] + event_lines), ephemeral=True)
+
+    @app_commands.command(name="export_web_archive", description="Generate static HTML archive of game history")
+    async def export_web_archive(interaction: discord.Interaction) -> None:
+        """Export the complete game history as a static web archive."""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            from pathlib import Path
+            output_path = service.export_web_archive()
+
+            # Count files and get stats
+            press_count = len(list(service.state.list_press_releases()))
+            scholar_count = len(list(service.state.all_scholars()))
+
+            message = (
+                f"**Web Archive Generated Successfully!**\n\n"
+                f"📁 Location: `{output_path.absolute()}`\n"
+                f"📰 Press Releases: {press_count}\n"
+                f"🎓 Scholar Profiles: {scholar_count}\n\n"
+                f"The archive includes:\n"
+                f"• Individual pages for each press release with permalinks\n"
+                f"• Scholar profile pages with memories and relationships\n"
+                f"• Chronological timeline of events\n"
+                f"• Search and filter functionality\n\n"
+                f"Open `{output_path}/index.html` in a browser to view."
+            )
+            await interaction.followup.send(message, ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error generating archive: {e}", ephemeral=True)
+
+    @app_commands.command(name="archive_link", description="Get web archive permalink for a press release")
+    async def archive_link(interaction: discord.Interaction, headline_search: str) -> None:
+        """Return permalink for specific press release matching the search term."""
+        from .web_archive import WebArchive
+        from pathlib import Path
+
+        # Search for matching press releases
+        all_press = list(service.state.list_press_releases())
+        matches = []
+
+        for i, record in enumerate(all_press, start=1):
+            if headline_search.lower() in record.release.headline.lower():
+                matches.append((i, record))
+
+        if not matches:
+            await interaction.response.send_message(
+                f"No press releases found matching '{headline_search}'",
+                ephemeral=True
+            )
+            return
+
+        # Generate permalinks for matches
+        archive = WebArchive(service.state, Path("web_archive"))
+
+        if len(matches) == 1:
+            press_id, record = matches[0]
+            permalink = archive.generate_permalink(record)
+            message = (
+                f"**Found Press Release:**\n"
+                f"Headline: {record.release.headline}\n"
+                f"Date: {record.timestamp.strftime('%Y-%m-%d %H:%M UTC')}\n"
+                f"Permalink: `{permalink}`\n"
+                f"Press ID: #{press_id}"
+            )
+        else:
+            # Multiple matches - show first 5
+            lines = [f"**Found {len(matches)} matching press releases:**\n"]
+            for press_id, record in matches[:5]:
+                permalink = archive.generate_permalink(record)
+                lines.append(
+                    f"• {record.release.headline}\n"
+                    f"  Date: {record.timestamp.strftime('%Y-%m-%d')}\n"
+                    f"  Permalink: `{permalink}`\n"
+                )
+            if len(matches) > 5:
+                lines.append(f"\n...and {len(matches) - 5} more matches")
+            message = "\n".join(lines)
+
+        await interaction.response.send_message(message, ephemeral=True)
 
     @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
     async def table_talk(interaction: discord.Interaction, message: str) -> None:
@@ -550,6 +796,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(wager)
     bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
+    bot.tree.add_command(export_web_archive)
+    bot.tree.add_command(archive_link)
     bot.tree.add_command(table_talk)
     bot.tree.add_command(gw_admin)
     return bot

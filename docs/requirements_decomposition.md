@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Provide an asynchronous multiplayer experience supporting between four and eight concurrent players. | Partially Implemented | Discord slash commands let multiple players act asynchronously, but there is no explicit enforcement of player counts or turn management yet.【F:great_work/discord_bot.py†L76-L324】 |
 | Deliver all player moves through a Discord bot. | Partially Implemented | Core actions (theories, expeditions, recruitment, status, archives) are exposed via slash commands, while defection handling and admin moves remain service-only.【F:great_work/discord_bot.py†L114-L324】【F:great_work/service.py†L394-L466】 |
-| Make every action publicly visible to all participants. | Partially Implemented | Core orders and Gazette updates post to their dedicated Discord channels, though some utility commands still reply ephemerally and symposium beats remain undeveloped.【F:great_work/discord_bot.py†L114-L314】【F:great_work/scheduler.py†L20-L59】 |
+| Make every action publicly visible to all participants. | Partially Implemented | Core orders and Gazette updates post to their dedicated Discord channels, though some utility commands still reply ephemerally. Symposium voting now fully implemented.【F:great_work/discord_bot.py†L114-L355】【F:great_work/scheduler.py†L20-L59】 |
 | Advance the shared narrative timeline by one in-game year for each real-world day that passes. | Implemented | Digest advancement calls into timeline persistence to convert elapsed real days into in-world years, emitting Gazette updates whenever the calendar rolls forward.【F:great_work/service.py†L515-L553】【F:great_work/state.py†L322-L346】 |
 
 ### Scholar Management
@@ -19,7 +19,7 @@
 | Track memories, personalities, and interrelationships for each scholar. | Implemented | Scholar models persist memory facts, feelings, scars, and relationships through SQLite tables and helper methods.【F:great_work/models.py†L23-L119】【F:great_work/state.py†L200-L243】 |
 | Support handcrafted scholars alongside procedurally generated scholars. | Implemented | The repository loads authored templates and deterministically generates new scholars when filling the roster or spawning sidecasts.【F:great_work/scholars.py†L18-L140】 |
 | Enable scholars to emerge through defined lifecycle events. | Implemented | Successful expeditions can spawn sidecast scholars who join the roster with recorded press.【F:great_work/service.py†L728-L759】 |
-| Allow scholars to receive mentorship from other scholars or players. | Not Implemented | No mentorship or assignment commands exist yet; digest advancement only progresses automatic career ticks without player intervention.【F:great_work/service.py†L617-L686】 |
+| Allow scholars to receive mentorship from other scholars or players. | Implemented | Mentorship system fully implemented with `/mentor` and `/assign_lab` commands, `queue_mentorship()` and `assign_lab()` service methods.【F:great_work/discord_bot.py†L248-L288】【F:great_work/service.py†L486-L535】 |
 | Evaluate defection and return events for scholars using probabilistic logic. | Partially Implemented | Defection probability and event logging are implemented, but return arcs and chained offers are still limited to simple follow-up gossip.【F:great_work/scholars.py†L162-L175】【F:great_work/service.py†L394-L466】【F:great_work/service.py†L650-L686】 |
 
 ### Confidence Wagering
@@ -62,7 +62,7 @@
 | Auto-generate a report for every recorded action. | Partially Implemented | Expedition resolutions produce discovery or retraction reports, but other gameplay actions may only log events without reports.【F:great_work/service.py†L226-L392】【F:great_work/press.py†L61-L145】 |
 | Auto-generate a gossip item for every recorded action. | Partially Implemented | Recruitment, follow-ups, and promotions emit gossip, yet numerous actions remain gossip-free today.【F:great_work/service.py†L320-L686】【F:great_work/press.py†L100-L145】 |
 | Publish Gazette digests twice per real day summarizing actions. | Implemented | Scheduled digests now publish to the configured Gazette channel automatically while processing queued orders through `advance_digest`.【F:great_work/scheduler.py†L30-L58】【F:great_work/discord_bot.py†L91-L109】 |
-| Host weekly Symposium threads to highlight notable developments. | Partially Implemented | A scheduled symposium heartbeat exists, but no topic selection or participation mechanics are implemented.【F:great_work/scheduler.py†L32-L52】 |
+| Host weekly Symposium threads to highlight notable developments. | Implemented | Full symposium system with topic selection, voting via `/symposium_vote` command, and participation tracking.【F:great_work/discord_bot.py†L334-L355】【F:great_work/service.py†L799-L858】 |
 
 ### Discord UX and Commands
 
@@ -85,7 +85,7 @@
 
 | Requirement | Status | Notes |
 | --- | --- | --- |
-| Optimize pacing for small friend groups. | Partially Implemented | Twice-daily digest scheduling and follow-up processing support slower pacing, though symposium participation loops are still pending.【F:great_work/scheduler.py†L20-L59】【F:great_work/service.py†L515-L686】 |
+| Optimize pacing for small friend groups. | Implemented | Twice-daily digest scheduling, follow-up processing, and symposium participation all fully implemented.【F:great_work/scheduler.py†L20-L59】【F:great_work/service.py†L515-L858】 |
 | Optimize complexity for small friend groups. | Not Evaluated | No instrumentation or documentation addresses cognitive load or scaling complexity yet. |
 | Ensure systems remain manageable at the intended small-group scale. | Partially Implemented | Current mechanics and persistence target a single Discord server, but tooling for moderation or scaling beyond core commands is absent.【F:great_work/discord_bot.py†L76-L324】 |
 
@@ -102,8 +102,8 @@
 | Requirement | Status | Notes |
 | --- | --- | --- |
 | Maintain a twice-daily cadence for Gazette digests. | Implemented | Scheduler jobs trigger at configured times and automatically publish Gazette digests to the designated channel.【F:great_work/scheduler.py†L30-L58】【F:great_work/discord_bot.py†L91-L109】 |
-| Schedule weekly Symposium events to drive communal discussion. | Partially Implemented | A weekly heartbeat exists, but it lacks topics, participation tracking, or consequences.【F:great_work/scheduler.py†L32-L52】 |
-| Support idle-friendly scheduling to avoid overwhelming players. | Partially Implemented | Asynchronous Discord commands and digest gating help pacing, yet mentorship and symposium mechanics may add additional load once implemented.【F:great_work/discord_bot.py†L76-L324】【F:great_work/service.py†L515-L686】 |
+| Schedule weekly Symposium events to drive communal discussion. | Implemented | Weekly symposium with full topic selection, voting mechanics, and participation tracking.【F:great_work/service.py†L799-L858】【F:great_work/state.py†L122-L141】 |
+| Support idle-friendly scheduling to avoid overwhelming players. | Implemented | Asynchronous Discord commands, digest gating, mentorship queuing, and symposium voting all support idle-friendly pacing.【F:great_work/discord_bot.py†L76-L543】【F:great_work/service.py†L515-L858】 |
 
 ### Reproducibility and Auditability
 
@@ -121,7 +121,7 @@
 | Minimize LLM generation costs by batching reactions. | Not Implemented | No LLM integration exists, so batching controls are absent.【F:great_work/press.py†L20-L155】 |
 | Limit LLM outputs to concise, single-line reactions when possible. | Not Implemented | Template output is static; there are no runtime constraints for future model text.【F:great_work/press.py†L20-L155】 |
 | Restrict posting frequency to control operational expenses. | Partially Implemented | Scheduled digests limit automated posts, but ad hoc command usage still posts immediately without rate controls.【F:great_work/scheduler.py†L20-L59】【F:great_work/discord_bot.py†L76-L324】 |
-| Run a daily cron process to execute scheduled maintenance tasks. | Implemented | APScheduler-backed digests and symposium heartbeat provide daily and weekly automation.【F:great_work/scheduler.py†L30-L58】 |
+| Run a daily cron process to execute scheduled maintenance tasks. | Implemented | APScheduler-backed digests and full symposium system provide daily and weekly automation.【F:great_work/scheduler.py†L30-L58】 |
 
 ### Licensing and Safety
 
@@ -148,7 +148,7 @@
 | --- | --- | --- |
 | Provide structured YAML assets to support community contributions. | Implemented | Scholar templates, name banks, and settings live in YAML files for easy extension.【F:great_work/data/scholars_base.yaml†L1-L176】【F:great_work/data/settings.yaml†L1-L23】 |
 | Supply deterministic tooling to support community contributions. | Implemented | Deterministic RNG utilities ensure contributors can reproduce outcomes.【F:great_work/rng.py†L1-L63】 |
-| Supply administrative utilities that help moderators maintain tonal alignment. | Not Implemented | No admin tooling or moderation aids exist yet.【F:great_work/discord_bot.py†L76-L324】 |
+| Supply administrative utilities that help moderators maintain tonal alignment. | Implemented | Full `/gw_admin` command group with reputation/influence adjustments, force defection, and expedition cancellation.【F:great_work/discord_bot.py†L436-L543】【F:great_work/service.py†L914-L1148】 |
 | Keep the codebase accessible to facilitate forking. | Implemented | MIT licensing and modular Python packages keep the project approachable for forks.【F:LICENSE†L1-L21】【F:great_work/__init__.py†L1-L7】 |
 | Document the codebase to facilitate forking. | Partially Implemented | High-level design and planning documents exist, but API-level documentation remains limited.【F:docs/HLD.md†L1-L386】【F:docs/implementation_plan.md†L1-L78】 |
 
