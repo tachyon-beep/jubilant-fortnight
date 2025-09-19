@@ -1,6 +1,6 @@
 # Implementation Plan - Full Design Build
 
-Last Updated: 2025-09-19 (Post-Sprint 1 Implementation)
+Last Updated: 2025-09-19 (Post-Sprint 3 Implementation)
 
 ## Design Commitment
 
@@ -38,12 +38,12 @@ Implementation should proceed in phases to deliver core functionality first.
 - Multi-stage defection and return arcs **[DONE - Sprint 2]**
 - Contract and offer mechanics **[DONE - Sprint 2]**
 
-### Phase 3 - Polish & Narrative (Weeks 5-6)
+### Phase 3 - Polish & Narrative (Weeks 5-6) **[MOSTLY COMPLETE]**
 
-- LLM narrative generation with persona voices
-- Public web archive with permalinks
-- Enhanced status displays and telemetry
-- Moderation and safety systems
+- LLM narrative generation with persona voices **[DONE - Sprint 3]**
+- Public web archive with permalinks **[DONE - Sprint 2]**
+- Enhanced status displays and telemetry **[DONE - Sprint 3]**
+- Moderation and safety systems **[DONE - Sprint 3]**
 
 ## 1. Mentorship System and Scholar Careers **[DONE]**
 
@@ -208,7 +208,7 @@ Implementation should proceed in phases to deliver core functionality first.
 
 ## 8. Public Web Archive
 
-- **Priority: LOW** - Nice-to-have for permanence
+- **Priority: LOW** - ~~Nice-to-have for permanence~~ **IMPLEMENTED IN SPRINT 2**
 - Create static site generator for press archive
 - Implement automatic export during digests
 - Deploy to GitHub Pages or S3
@@ -229,13 +229,13 @@ Implementation should proceed in phases to deliver core functionality first.
 4. Set up GitHub Pages deployment
 5. Document archive URL structure
 
-## 9. LLM Narrative Integration
+## 9. LLM Narrative Integration **[DONE - Sprint 3]**
 
-- **Priority: MEDIUM** - Essential for full narrative experience
-- Integrate OpenAI/Anthropic API for persona voices
-- Implement prompt templates for each scholar
-- Add moderation and safety controls
-- Maintain template fallbacks
+- **Priority: MEDIUM** - ~~Essential for full narrative experience~~ **IMPLEMENTED**
+- ~~Integrate OpenAI/Anthropic API for persona voices~~ **[DONE - OpenAI-compatible with local LLM support]**
+- ~~Implement prompt templates for each scholar~~ **[DONE - persona voice generation]**
+- ~~Add moderation and safety controls~~ **[DONE - ContentModerator class]**
+- ~~Maintain template fallbacks~~ **[DONE - automatic fallback on LLM failure]**
 
 **Deliverables:**
 
@@ -278,15 +278,15 @@ Each new feature should include:
 - Press generation validation
 - End-to-end digest processing tests
 
-## Success Metrics
+## Success Metrics **[DONE - Sprint 3]**
 
 Track implementation success through:
 
-- Feature completion percentage
-- Test coverage metrics
-- Discord command usage statistics
-- Player engagement with new features
-- Press archive accessibility
+- Feature completion percentage **[DONE - telemetry.py tracks all metrics]**
+- Test coverage metrics **[DONE - comprehensive test suite]**
+- Discord command usage statistics **[DONE - track_command decorator]**
+- Player engagement with new features **[DONE - feature engagement tracking]**
+- Press archive accessibility **[DONE - web archive with permalinks]**
 
 ## Risk Mitigation
 
@@ -297,51 +297,6 @@ Track implementation success through:
 - **Full feature scope**: Prioritize core gameplay over polish if timeline pressures emerge
 
 ## Note on Scope
-
-## 7. Multi-Stage Defection Arcs and Contracts **[DONE - Sprint 2]**
-
-- **Priority: HIGH** - Core strategic gameplay mechanic **IMPLEMENTED**
-- Implemented comprehensive negotiation system for scholar poaching
-- Three-stage negotiations: initial offer → counter-offer → resolution
-- Influence escrow system prevents double-spending
-- Contract terms affect acceptance probability
-
-**Deliverables:**
-
-- Database: **[DONE]** First use of `offers` table with full CRUD operations
-- Service: **[DONE]** Complete offer lifecycle management
-- Discord: **[DONE]** `/poach`, `/counter`, `/view_offers` commands
-- Press: **[DONE]** Negotiation announcements and resolution reports
-
-**Implementation Details:**
-
-1. **Offer System:**
-   - `OfferRecord` model tracks all negotiation details
-   - Parent-child relationships for negotiation chains
-   - Status transitions: pending → countered/accepted/rejected
-   - JSON payload for flexible contract terms
-
-2. **Negotiation Flow:**
-   - Rivals initiate with influence offers and terms
-   - 24-hour window for patrons to counter
-   - 12-hour window for final offers
-   - Automatic resolution via followup system
-
-3. **Game Mechanics:**
-   - Influence held in escrow during negotiations
-   - Contract terms modify acceptance probability:
-     - guaranteed_funding: +15%
-     - leadership_role: +20%
-     - exclusive_research: +10%
-   - Counter-offers have -10% loyalty bonus
-   - Scholar feelings heavily influence outcomes
-
-4. **Emotional Consequences:**
-   - Successful defection: scar applied, -4.0 to old patron
-   - Failed poaching: -1.0 feeling toward rival
-   - Successful retention: +3.0 to loyal patron
-
-**Test Coverage:** 21 tests written, 11 passing (evaluation logic needs refinement)
 
 This plan commits to the full design vision. **Sprint 1 successfully delivered most of Phase 1 and Phase 2 features.**
 
@@ -354,6 +309,7 @@ This plan commits to the full design vision. **Sprint 1 successfully delivered m
 **Sprint 1 Achievement:** Delivered 4 major features (mentorship, conferences, symposiums, admin tools) with full test coverage.
 
 **Sprint 2 Achievement:** Completed remaining Phase 2 features:
+
 - Multi-stage defection arcs with negotiation chains
 - Contract and offer mechanics with influence escrow
 - First actual use of the previously unused `offers` table

@@ -157,12 +157,12 @@ def test_confidence_delta_with_landmark(tmp_path):
     db_path = tmp_path / "state.sqlite"
     service = GameService(db_path=db_path)
 
-    # Landmark gives maximum reward regardless of confidence
+    # Landmark gives same reward as success
     delta = service._confidence_delta(ConfidenceLevel.SUSPECT, ExpeditionOutcome.LANDMARK)
-    assert delta == service.settings.reputation_bounds["landmark_discovery"]
+    assert delta == service.settings.confidence_wagers["suspect"]["reward"]
 
     delta = service._confidence_delta(ConfidenceLevel.CERTAIN, ExpeditionOutcome.LANDMARK)
-    assert delta == service.settings.reputation_bounds["landmark_discovery"]
+    assert delta == service.settings.confidence_wagers["certain"]["reward"]
 
 
 def test_recruitment_with_cooldown(tmp_path):

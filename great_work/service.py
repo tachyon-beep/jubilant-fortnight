@@ -1,6 +1,7 @@
 """High-level game service orchestrating commands."""
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -19,7 +20,6 @@ from .models import (
     Player,
     PressRecord,
     PressRelease,
-    SidewaysEffect,
     SidewaysEffectType,
     TheoryRecord,
 )
@@ -696,7 +696,7 @@ class GameService:
         body = f"{player.display_name} has countered with: {', '.join(f'{v} {k}' for k, v in counter_influence.items())} influence.\n"
         if counter_terms:
             body += f"Additional terms: {counter_terms}\n"
-        body += f"The rival has 12 hours to make a final offer."
+        body += "The rival has 12 hours to make a final offer."
 
         release = PressRelease(
             type="negotiation",
@@ -965,6 +965,23 @@ class GameService:
             "cooldowns": dict(player.cooldowns),
             "thresholds": thresholds,
         }
+
+    def roster_status(self) -> List[Dict[str, object]]:
+        """Get status information for all scholars in the roster."""
+        roster = []
+        for scholar in self.state.all_scholars():
+            roster.append({
+                "id": scholar.id,
+                "name": scholar.name,
+                "archetype": scholar.archetype,
+                "stats": scholar.stats,
+                "memory": {
+                    "facts": scholar.memory.facts,
+                    "feelings": scholar.memory.feelings,
+                    "scars": scholar.memory.scars,
+                }
+            })
+        return roster
 
     def archive_digest(self) -> PressRelease:
         """Generate a summary digest of recent game events."""
@@ -1366,6 +1383,26 @@ class GameService:
 
         return press
 
+    def symposium_call(self) -> List[PressRelease]:
+        """Generate press releases for a symposium call."""
+        releases = []
+
+        # Generate a symposium announcement
+        release = PressRelease(
+            type="symposium_announcement",
+            headline="Weekly Symposium Call",
+            body="The weekly symposium is now open for discussion. All scholars are invited to participate.",
+        )
+        releases.append(release)
+
+        # Add to press archive
+        self.state.record_press_release(PressRecord(
+            timestamp=datetime.now(timezone.utc),
+            release=release,
+        ))
+
+        return releases
+
     def resolve_symposium(self) -> PressRelease:
         """Resolve the current symposium and announce the results."""
         current = self.state.get_current_symposium_topic()
@@ -1455,7 +1492,7 @@ class GameService:
         # Generate press release
         press = PressRelease(
             type="admin_action",
-            headline=f"Administrative Reputation Adjustment",
+            headline="Administrative Reputation Adjustment",
             body=(
                 f"Player {player.display_name}'s reputation adjusted by {delta:+d} "
                 f"(from {old_reputation} to {player.reputation})\n"
@@ -1515,7 +1552,7 @@ class GameService:
         # Generate press release
         press = PressRelease(
             type="admin_action",
-            headline=f"Administrative Influence Adjustment",
+            headline="Administrative Influence Adjustment",
             body=(
                 f"Player {player.display_name}'s {faction} influence adjusted by {delta:+d} "
                 f"(from {old_influence} to {player.influence[faction]})\n"
@@ -1578,7 +1615,7 @@ class GameService:
         # Add admin note to the press release
         admin_press = PressRelease(
             type="admin_action",
-            headline=f"Administrative Defection Order",
+            headline="Administrative Defection Order",
             body=(
                 f"Scholar {scholar.name} has been ordered to defect from {old_faction} to {new_faction}\n"
                 f"Reason: {reason}\n"
@@ -1648,7 +1685,7 @@ class GameService:
         # Generate press release
         press = PressRelease(
             type="admin_action",
-            headline=f"Expedition Cancelled by Administration",
+            headline="Expedition Cancelled by Administration",
             body=(
                 f"Expedition {expedition_code} has been cancelled\n"
                 f"Reason: {reason}\n"
@@ -2135,6 +2172,8 @@ class GameService:
                         theory=theory_text,
                         confidence=ConfidenceLevel.SUSPECT.value,
                         timestamp=now,
+                        supporters=[],  # Empty initially
+                        deadline=(now + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M")  # 48 hours for the conference
                     )
                     self.state.record_theory(theory_record)
                     # Get the theory ID we just created
@@ -2184,12 +2223,17 @@ class GameService:
                 details = effect.payload["details"]
                 deadline = now + timedelta(days=details.get("expires_in_days", 3))
 
-                self.state.save_followup(
-                    source_type="expedition_opportunity",
-                    source_id=order.code,
-                    scheduled_for=deadline,
-                    action_type=opportunity_type,
-                    action_payload=details,
+                # Schedule the opportunity as a followup
+                scholar_id = random.choice(order.team) if order.team else "unknown"
+                self.state.schedule_followup(
+                    scholar_id=scholar_id,
+                    kind=opportunity_type,
+                    resolve_at=deadline,
+                    payload={
+                        "source_type": "expedition_opportunity",
+                        "source_id": order.code,
+                        "details": details,
+                    }
                 )
                 releases.append(
                     PressRelease(

@@ -1,6 +1,6 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-19 (Post-Sprint 1 Update)
+Last Updated: 2025-09-19 (Post-Sprint 3 Implementation)
 
 ## 1. Scholar Lifecycle and Memory
 
@@ -18,7 +18,7 @@ Last Updated: 2025-09-19 (Post-Sprint 1 Update)
 
 - **Design intent:** Each expedition type should apply tailored costs, prep modifiers, and depth-aware failure tables that yield sideways discoveries with gameplay repercussions such as faction swings, gossip, or queued orders.【F:docs/HLD.md†L57-L138】
 - **Implementation status:** Expedition launches deduct influence by type, persist preparation details, and resolve through an `ExpeditionResolver` that rolls d100, applies modifiers, consults depth-specific failure tables, and records the outcome along with reaction text and sideways flavour. **Sprint 2 Update:** Sideways discoveries now trigger mechanical effects via `SidewaysEffect` system.【F:great_work/service.py†L170-L318】【F:great_work/expeditions.py†L60-L240】【F:great_work/data/failure_tables.yaml†L1-L80】【F:great_work/press.py†L61-L96】
-- **Gap:** ~~Sideways discoveries remain narrative flavour with no faction effects~~ **[RESOLVED - Sprint 2]**. Deep preparation narrative beats still primarily text-based.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L1499-L1638】
+- **Gap:** ~~Sideways discoveries remain narrative flavour with no faction effects~~ **[RESOLVED - Sprint 2]**. Deep preparation narrative beats still primarily text-based.【F:docs/HLD.md†L90-L138】【F:great_work/service.py†L2050-L2113】
 
 ### 3.1 Great Projects - Status
 
@@ -77,8 +77,8 @@ Last Updated: 2025-09-19 (Post-Sprint 1 Update)
 ## 9. LLM and Narrative Integration
 
 - **Design intent:** Generate press and reactions through persona-driven LLM prompts with batching and moderation safeguards.【F:docs/HLD.md†L318-L369】
-- **Implementation status:** All press remains templated string substitution with no LLM calls or safety layers.【F:great_work/press.py†L20-L145】
-- **Gap:** The persona prompt pipeline, batching strategies, and moderation checks still need to be introduced to match the intended narrative richness.【F:docs/HLD.md†L318-L369】【F:great_work/press.py†L20-L145】
+- **Implementation status:** **[IMPLEMENTED - Current Sprint]** LLM integration complete with OpenAI-compatible API client (`llm_client.py`), configurable endpoints for local LLMs, persona voice generation, content moderation, and fallback templates.【F:great_work/llm_client.py†L1-280】
+- **Gap:** ~~The persona prompt pipeline, batching strategies, and moderation checks still need to be introduced~~ **[RESOLVED - Current Sprint]**
 
 ## Summary of Major Gaps
 
@@ -87,9 +87,9 @@ Last Updated: 2025-09-19 (Post-Sprint 1 Update)
 1. ~~**Mentorship System**: Fully implemented with `/mentor` and `/assign_lab` commands, `queue_mentorship()` and `assign_lab()` service methods~~
 2. ~~**Conference Mechanics**: Fully implemented with `/conference` command, database table, and resolution logic~~
 3. ~~**Symposium Implementation**: Voting system implemented with `/symposium_vote`, topics and voting tables~~
-4. **Public Archive**: No web presence or permanent archive beyond Discord exports
+4. ~~**Public Archive**: **[COMPLETED - Sprint 2]** Fully implemented web archive with static HTML generation, permalinks, and `/export_web_archive` Discord command~~
 5. ~~**Admin Tools**: Fully implemented `/gw_admin` command group with all moderation/hotfix commands~~
-6. **LLM Integration**: Complete absence of AI-driven narrative generation
+6. ~~**LLM Integration**: Fully implemented with OpenAI-compatible API support for local LLM endpoints~~ **[IMPLEMENTED - Current Sprint]**
 
 ### Correctly Implemented Features
 
@@ -101,26 +101,28 @@ Last Updated: 2025-09-19 (Post-Sprint 1 Update)
 6. **Conference System**: Public wager conferences with full resolution mechanics
 7. **Symposium Voting**: Topic selection and community voting system
 8. **Admin Tools**: Complete moderation toolkit with reputation/influence adjustments and force actions
+9. **Web Archive**: Static HTML generation with permalinks, scholar profiles, press history, and timeline view
+10. **Contracts/Poaching**: Multi-stage negotiation system with influence escrow, counter-offers, and contract terms
 
 ### Partially Complete
 
-1. **Defection Arcs**: Single-step follow-ups only, missing multi-stage negotiations
+1. ~~**Defection Arcs**: **[COMPLETED - Sprint 2]** Multi-stage negotiations fully implemented with `/poach`, `/counter`, `/view_offers` commands~~
 2. ~~**Order Batching**: Now includes mentorships and conferences along with expeditions~~
-3. **Press Generation**: Single artefacts per action, not layered bulletins/manifestos/reports
+3. ~~**Press Generation**: Multi-layer press system implemented with depth-based coverage~~ **[IMPLEMENTED - Current Sprint]**
 4. ~~**Sideways Discoveries**: Mechanical effects fully implemented via SidewaysEffect system~~ **[COMPLETED - Sprint 2]**
 
 ## Additional Implementation Details
 
 ### Database Infrastructure
 
-- **Offers Table**: Created but completely unused - no code references INSERT or SELECT operations
+- ~~**Offers Table**: **[NOW IN USE - Sprint 2]** Fully utilized for contract negotiations with complete CRUD operations~~
 - **Followups Table**: Actively used for defection grudges and recruitment follow-ups with delays
 - **Timeline Table**: Properly tracks game year progression based on real-time days
 - **Relationships Table**: Stores scholar-to-scholar and scholar-to-player relationships
 
 ### Service Layer Capabilities
 
-- **Defection Evaluation**: `evaluate_defection_offer()` method exists but not exposed via Discord (admin can force via `/gw_admin force_defection`)
+- **Defection Evaluation**: `evaluate_defection_offer()` method exposed via `/poach`, `/counter`, `/view_offers` commands
 - **Career Progression**: `_progress_careers()` runs automatically, plus player-driven via `queue_mentorship()` and `assign_lab()`
 - **Influence Management**: `_apply_influence_change()` enforces soft caps correctly
 - **Roster Management**: `_ensure_roster()` maintains 20-30 scholar count automatically

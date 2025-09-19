@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from html import escape
 
-from .models import Event, PressRecord, PressRelease, Scholar
+from .models import Event, PressRecord, Scholar
 from .state import GameState
 
 

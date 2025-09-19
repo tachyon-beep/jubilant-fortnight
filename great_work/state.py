@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import (
-    ConfidenceLevel,
     Event,
     ExpeditionRecord,
     OfferRecord,
@@ -224,8 +223,12 @@ class GameState:
                 "SELECT id, display_name, reputation, influence, cooldowns FROM players"
             ).fetchall()
         for row in rows:
-            influence = json.loads(row[3])
-            cooldowns = json.loads(row[4])
+            try:
+                influence = json.loads(row[3])
+                cooldowns = json.loads(row[4])
+            except (json.JSONDecodeError, TypeError):
+                # Skip rows with malformed JSON data
+                continue
             player = Player(
                 id=row[0],
                 display_name=row[1],
@@ -441,6 +444,19 @@ class GameState:
                     record.reputation_delta,
                     payload_json,
                 ),
+            )
+            # Also record as an event for audit trail
+            event_payload = {
+                "code": record.code,
+                "player_id": record.player_id,
+                "expedition_type": record.expedition_type,
+                "objective": record.objective,
+                "team": record.team,
+                "funding": record.funding,
+            }
+            conn.execute(
+                "INSERT INTO events (timestamp, action, payload) VALUES (?, ?, ?)",
+                (record.timestamp.isoformat(), "expedition_queued", json.dumps(event_payload))
             )
             conn.commit()
 

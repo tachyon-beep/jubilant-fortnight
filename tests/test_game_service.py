@@ -81,7 +81,7 @@ def test_queue_and_resolve_expedition_flow(tmp_path):
 
     if len(releases) > 1:
         gossip = releases[1]
-        assert gossip.type in {"academic_gossip", "retraction_notice", "discovery_report"}
+        assert gossip.type in {"academic_gossip", "retraction_notice", "discovery_report", "faction_shift", "opportunity_unlocked"}
 
     # Launch and resolution events should have been recorded.
     assert any(evt.action == "launch_expedition" and evt.payload["code"] == "AR-01" for evt in events)

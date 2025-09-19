@@ -16,6 +16,8 @@ from discord.ext import commands
 from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease
 from .scheduler import GazetteScheduler
 from .service import GameService
+from .telemetry import get_telemetry
+from .telemetry_decorator import track_command
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             logger.info("Started Gazette scheduler publishing to %s", router.gazette)
 
     @app_commands.command(name="submit_theory", description="Submit a theory to the Gazette")
+    @track_command
     @app_commands.describe(
         theory="The bold claim you are making",
         confidence="Confidence level",
@@ -147,6 +150,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await _post_to_channel(bot, router.orders, message, purpose="orders")
 
     @app_commands.command(name="launch_expedition", description="Queue an expedition for resolution")
+    @track_command
     @app_commands.describe(
         code="Expedition code",
         objective="Objective statement",
@@ -214,6 +218,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await _post_to_channel(bot, router.orders, text, purpose="orders")
 
     @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
+    @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
         faction="Faction making the offer",
@@ -516,6 +521,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.response.send_message(str(exc), ephemeral=True)
 
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
+    @track_command
     async def status(interaction: discord.Interaction) -> None:
         service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
         data = service.player_status(str(interaction.user.display_name))
@@ -587,7 +593,6 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         """Export the complete game history as a static web archive."""
         await interaction.response.defer(ephemeral=True)
         try:
-            from pathlib import Path
             output_path = service.export_web_archive()
 
             # Count files and get stats
@@ -659,6 +664,70 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             message = "\n".join(lines)
 
         await interaction.response.send_message(message, ephemeral=True)
+
+    @app_commands.command(name="telemetry_report", description="View telemetry and usage statistics (admin only)")
+    @track_command
+    async def telemetry_report(interaction: discord.Interaction) -> None:
+        """Generate and display telemetry report."""
+        # Check for admin permissions
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            telemetry = get_telemetry()
+            telemetry.flush()  # Ensure all buffered metrics are saved
+            report = telemetry.generate_report()
+
+            # Format report for Discord
+            lines = [
+                "**📊 Telemetry Report**",
+                f"Generated: {report['generated_at']}",
+                f"Uptime: {report['uptime_seconds'] / 3600:.1f} hours\n",
+                "**Overall Statistics:**",
+                f"• Total events: {report['overall']['total_events']:,}",
+                f"• Unique players: {report['overall']['unique_players']}",
+            ]
+
+            # Command usage
+            if report['command_stats']:
+                lines.append("\n**Command Usage:**")
+                for cmd, stats in sorted(report['command_stats'].items(), key=lambda x: x[1]['usage_count'], reverse=True)[:10]:
+                    lines.append(f"• /{cmd}: {stats['usage_count']} uses, {stats['success_rate']:.0%} success")
+
+            # Feature engagement
+            if report['feature_engagement_7d']:
+                lines.append("\n**Feature Engagement (7 days):**")
+                for feature, stats in sorted(report['feature_engagement_7d'].items(), key=lambda x: x[1]['total_uses'], reverse=True)[:5]:
+                    lines.append(f"• {feature}: {stats['total_uses']} uses by {stats['unique_users']} players")
+
+            # Recent errors
+            if report['errors_24h']:
+                lines.append("\n**Errors (24 hours):**")
+                for error_type, count in sorted(report['errors_24h'].items(), key=lambda x: x[1], reverse=True)[:5]:
+                    lines.append(f"• {error_type}: {count} occurrences")
+
+            # Performance
+            if report['performance_1h']:
+                lines.append("\n**Performance (1 hour):**")
+                for op, perf in sorted(report['performance_1h'].items(), key=lambda x: x[1]['avg_duration_ms'], reverse=True)[:5]:
+                    lines.append(f"• {op}: avg {perf['avg_duration_ms']:.1f}ms ({perf['sample_count']} samples)")
+
+            message = "\n".join(lines)
+
+            # Split message if too long
+            if len(message) > 2000:
+                message = message[:1997] + "..."
+
+            await interaction.followup.send(message, ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(f"Error generating report: {e}", ephemeral=True)
 
     @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
     async def table_talk(interaction: discord.Interaction, message: str) -> None:
