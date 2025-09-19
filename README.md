@@ -2,8 +2,8 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue)](https://github.com/your-repo/the-great-work)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-192%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-70%25-yellow)]()
+![Tests](https://img.shields.io/badge/tests-192%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-70%25-yellow)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 The Great Work is an asynchronous, fully public research drama played through Discord. Players direct scholars, make proclamations, and resolve expeditions that can succeed spectacularly or fail into sideways discoveries.
@@ -11,6 +11,7 @@ The Great Work is an asynchronous, fully public research drama played through Di
 ## Features
 
 ### Core Gameplay
+
 * **Scholar System**: 20-30 memorable scholars with unique personalities, memories, and relationships
 * **Expedition Mechanics**: Three expedition types (think tanks, field expeditions, great projects) with d100 resolution
 * **Confidence Wagers**: Risk/reward system with reputation stakes (suspect +2/-1, certain +5/-7, stake_my_career +15/-25)
@@ -20,6 +21,7 @@ The Great Work is an asynchronous, fully public research drama played through Di
 * **Symposium Voting**: Weekly community topics with player participation
 
 ### Advanced Features
+
 * **Contract Negotiations**: Multi-stage poaching system with influence escrow
 * **Sideways Discoveries**: Expeditions trigger mechanical consequences (faction shifts, theories, grudges)
 * **Multi-layer Press System**: Depth-based narrative coverage for all events
@@ -30,6 +32,7 @@ The Great Work is an asynchronous, fully public research drama played through Di
 * **Telemetry System**: Comprehensive metrics tracking with admin reporting
 
 ### Technical Infrastructure
+
 * **Event Sourcing**: Complete audit trail of all game actions
 * **Deterministic RNG**: Reproducible game mechanics for fair play
 * **Discord Integration**: 20 slash commands for complete player interaction
@@ -40,6 +43,7 @@ The Great Work is an asynchronous, fully public research drama played through Di
 ## Installation
 
 ### Prerequisites
+
 * Python 3.12 or newer
 * Discord bot token and application ID
 * (Optional) OpenAI API key for LLM features
@@ -48,25 +52,29 @@ The Great Work is an asynchronous, fully public research drama played through Di
 ### Quick Start
 
 1. **Clone the repository**:
+
 ```bash
 git clone https://github.com/your-repo/the-great-work.git
 cd the-great-work
 ```
 
-2. **Set up Python environment**:
+1. **Set up Python environment**:
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .[dev]
 ```
 
-3. **Configure environment**:
+1. **Configure environment**:
+
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
 Required environment variables:
+
 ```env
 # Discord Configuration
 DISCORD_TOKEN=your_bot_token_here
@@ -81,14 +89,16 @@ LLM_API_KEY=your_api_key_here
 LLM_MODEL=gpt-4-turbo-preview
 ```
 
-4. **Initialize database**:
+1. **Initialize database**:
+
 ```bash
 make seed  # Seeds canonical scholars
 # Or manually:
 python -m great_work.tools.seed_db great_work.db
 ```
 
-5. **Run the bot**:
+1. **Run the bot**:
+
 ```bash
 make run  # Loads .env automatically
 # Or manually:
@@ -98,6 +108,7 @@ python -m great_work.discord_bot
 ## Discord Commands
 
 ### Player Commands
+
 * `/submit_theory` - Publish an Academic Bulletin with confidence wager
 * `/launch_expedition` - Queue an expedition (think tank, field work, or great project)
 * `/mentor` - Guide a scholar's career development
@@ -110,6 +121,7 @@ python -m great_work.discord_bot
 * `/recruit` - Attempt to recruit new scholars
 
 ### Information Commands
+
 * `/status` - View your reputation, influence, and cooldowns
 * `/roster` - Display all scholars and their affiliations
 * `/wager` - Review confidence stakes and thresholds
@@ -118,6 +130,7 @@ python -m great_work.discord_bot
 * `/export_log` - Export game events for analysis
 
 ### Admin Commands
+
 * `/gw_admin seed` - Initialize canonical scholars
 * `/gw_admin digest` - Manually trigger gazette digest
 * `/gw_admin followup` - Process scheduled events
@@ -128,16 +141,19 @@ python -m great_work.discord_bot
 ### Docker Deployment (Recommended)
 
 1. **Build and run with Docker Compose**:
+
 ```bash
 docker-compose up -d
 ```
 
 This starts:
+
 * Discord bot container
 * Qdrant vector database (if enabled)
 * Automatic volume management for persistence
 
-2. **Monitor logs**:
+1. **Monitor logs**:
+
 ```bash
 docker-compose logs -f bot
 ```
@@ -145,12 +161,14 @@ docker-compose logs -f bot
 ### Production Deployment
 
 1. **System Requirements**:
+
 * Linux server (Ubuntu 22.04+ recommended)
 * 2GB RAM minimum, 4GB recommended
 * 10GB disk space for database and archives
 * Python 3.12+ runtime
 
-2. **Systemd Service** (create `/etc/systemd/system/great-work.service`):
+1. **Systemd Service** (create `/etc/systemd/system/great-work.service`):
+
 ```ini
 [Unit]
 Description=The Great Work Discord Bot
@@ -170,7 +188,8 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-3. **Enable and start service**:
+1. **Enable and start service**:
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable great-work
@@ -224,6 +243,7 @@ pytest -n auto
 ```
 
 Test suite includes 192 tests covering:
+
 * Scholar generation and deterministic RNG
 * Expedition resolution and d100 mechanics
 * Contract negotiations and defection arcs
@@ -247,7 +267,7 @@ mypy great_work/
 
 ### Project Structure
 
-```
+```text
 great_work/
 ├── models.py          # Core domain models
 ├── state.py           # GameState persistence layer
@@ -353,6 +373,7 @@ Code is released under the MIT License. Narrative assets and persona sheets defa
 ## Support
 
 For issues, questions, or suggestions:
+
 * Open an issue on GitHub
 * Join our Discord server (link coming soon)
 * Check the [documentation](docs/)
