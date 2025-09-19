@@ -2,8 +2,8 @@
 
 ## Test Suite Improvements
 
-### Before Cleanup:
-- **Total Tests**: 157
+### Before Cleanup
+
 - **Passing**: 117
 - **Failing**: 40
 - **Pass Rate**: 74.5%
