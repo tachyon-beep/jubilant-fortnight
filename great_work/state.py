@@ -337,6 +337,18 @@ class GameState:
             conn.execute("DELETE FROM followups WHERE id = ?", (followup_id,))
             conn.commit()
 
+    def list_followups(self) -> List[Tuple[int, str, str, datetime, Dict[str, object]]]:
+        """List all followups (not just due ones)."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, scholar_id, kind, resolve_at, payload
+                FROM followups ORDER BY resolve_at ASC"""
+            ).fetchall()
+        return [
+            (row[0], row[1], row[2], datetime.fromisoformat(row[3]), json.loads(row[4]))
+            for row in rows
+        ]
+
     def export_events(self) -> List[Event]:
         events: List[Event] = []
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -772,6 +784,35 @@ class GameState:
                 (player_id,),
             ).fetchone()
             return row[0] if row else None
+
+    def pending_theories(self) -> List[Tuple[int, TheoryRecord]]:
+        """Get all theories with deadlines that haven't passed yet."""
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            rows = conn.execute(
+                """
+                SELECT id, player_id, theory, confidence, supporters, timestamp, deadline
+                FROM theories
+                WHERE deadline >= ?
+                ORDER BY deadline ASC
+                """,
+                (current_date,)
+            ).fetchall()
+
+        return [
+            (
+                row[0],
+                TheoryRecord(
+                    player_id=row[1],
+                    theory=row[2],
+                    confidence=row[3],
+                    supporters=json.loads(row[4]) if row[4] else [],
+                    timestamp=datetime.fromisoformat(row[5]),
+                    deadline=row[6]
+                )
+            )
+            for row in rows
+        ]
 
     def list_theories(self, limit: int | None = None) -> List[Tuple[int, TheoryRecord]]:
         """List all theories with their IDs, optionally limited."""

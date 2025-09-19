@@ -241,6 +241,57 @@ class GameService:
         self._archive_press(press, order.timestamp)
         return press
 
+    def launch_expedition(
+        self,
+        player_id: str,
+        expedition_type: str,
+        objective: str,
+        team: List[str],
+        funding: Dict[str, int],
+        confidence: ConfidenceLevel,
+        prep_depth: str = "standard",
+    ) -> PressRelease:
+        """Simplified expedition launching for tests and external callers.
+
+        This is a convenience wrapper around queue_expedition that handles
+        parameter conversion and code generation.
+        """
+        # Generate expedition code using timestamp for uniqueness
+        import time
+        timestamp_part = str(int(time.time() * 1000))[-6:]  # Last 6 digits of timestamp
+        code = f"{expedition_type.upper()[:2]}-{timestamp_part}"
+
+        # Convert funding dict to list
+        funding_list = []
+        for faction, amount in funding.items():
+            for _ in range(amount):
+                funding_list.append(faction)
+
+        # Create minimal preparation with zero bonuses
+        preparation = ExpeditionPreparation(
+            think_tank_bonus=0,
+            expertise_bonus=0,
+            site_friction=0,
+            political_friction=0
+        )
+
+        # Queue the expedition
+        return self.queue_expedition(
+            code=code,
+            player_id=player_id,
+            expedition_type=expedition_type,
+            objective=objective,
+            team=team,
+            funding=funding_list,
+            preparation=preparation,
+            prep_depth=prep_depth,
+            confidence=confidence,
+        )
+
+    def resolve_expeditions(self) -> List[PressRelease]:
+        """Alias for resolve_pending_expeditions for backward compatibility."""
+        return self.resolve_pending_expeditions()
+
     def resolve_pending_expeditions(self) -> List[PressRelease]:
         releases: List[PressRelease] = []
         for code, order in list(self._pending_expeditions.items()):
@@ -713,7 +764,7 @@ class GameService:
             if fact.kind == "discovery" and
             (datetime.now(timezone.utc) - fact.when).days < 90
         ]
-        plateau = 0.0 if recent_discoveries else 2.0
+        plateau = 0.0 if recent_discoveries else 0.2
 
         # Use existing defection probability calculation
         from .scholars import defection_probability
@@ -895,23 +946,63 @@ class GameService:
         """Get all active offers involving a player."""
         return self.state.list_active_offers(player_id)
 
-    def player_status(self, player_id: str) -> Dict[str, object]:
+    def player_status(self, player_id: str) -> Optional[Dict[str, object]]:
         player = self.state.get_player(player_id)
         if not player:
-            raise ValueError("Unknown player")
+            return None
         self._ensure_influence_structure(player)
         cap = self._influence_cap(player)
         thresholds = {
             action: value for action, value in self.settings.action_thresholds.items()
         }
         return {
-            "player": player.display_name,
+            "id": player.id,
+            "display_name": player.display_name,
+            "player": player.display_name,  # Keep for backward compatibility
             "reputation": player.reputation,
             "influence": dict(player.influence),
             "influence_cap": cap,
             "cooldowns": dict(player.cooldowns),
             "thresholds": thresholds,
         }
+
+    def archive_digest(self) -> PressRelease:
+        """Generate a summary digest of recent game events."""
+        # Get recent press releases
+        recent_press = self.state.list_press_releases(limit=10)
+
+        # Count events by type
+        event_counts = {}
+        for press_record in recent_press:
+            event_type = press_record.release.type
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+
+        # Generate summary body
+        body_lines = ["Summary of recent events:"]
+
+        if event_counts:
+            for event_type, count in sorted(event_counts.items()):
+                body_lines.append(f"- {count} {event_type.replace('_', ' ').title()} events")
+        else:
+            body_lines.append("- No recent events to report")
+
+        # Add some recent headlines
+        if recent_press:
+            body_lines.append("\nRecent headlines:")
+            for press_record in recent_press[:3]:
+                body_lines.append(f"- {press_record.release.headline}")
+
+        release = PressRelease(
+            type="archive_digest",
+            headline="Archive Digest",
+            body="\n".join(body_lines),
+            metadata={"event_count": len(recent_press)}
+        )
+
+        # Archive the digest itself
+        self._archive_press(release, datetime.now(timezone.utc))
+
+        return release
 
     def queue_mentorship(
         self,
@@ -1977,8 +2068,8 @@ class GameService:
                     PressRelease(
                         type="faction_shift",
                         headline=f"Expedition Discovery Shifts {faction} Relations",
-                        body=f"{effect.description}. {player.name}'s {faction} influence changes by {amount} (from {old_influence} to {player.influence[faction]}).",
-                        metadata={"player": player.name, "faction": faction, "change": amount},
+                        body=f"{effect.description}. {player.display_name}'s {faction} influence changes by {amount} (from {old_influence} to {player.influence[faction]}).",
+                        metadata={"player": player.display_name, "faction": faction, "change": amount},
                     )
                 )
 
@@ -1986,19 +2077,22 @@ class GameService:
                 # Create a new theory from the discovery
                 theory_text = effect.payload["theory"]
                 confidence = ConfidenceLevel(effect.payload["confidence"])
+                deadline = (now + timedelta(days=7)).strftime("%Y-%m-%d")  # 7 days to support/challenge
                 theory_record = TheoryRecord(
                     player_id=order.player_id,
                     theory=theory_text,
                     confidence=confidence.value,
                     timestamp=now,
+                    supporters=[],  # Empty initially
+                    deadline=deadline
                 )
                 self.state.record_theory(theory_record)
                 releases.append(
                     PressRelease(
                         type="discovery_theory",
                         headline="Discovery Spawns New Theory",
-                        body=f"{effect.description}. {player.name} proposes: '{theory_text}' with {confidence.value} confidence.",
-                        metadata={"player": player.name, "theory": theory_text},
+                        body=f"{effect.description}. {player.display_name} proposes: '{theory_text}' with {confidence.value} confidence.",
+                        metadata={"player": player.display_name, "theory": theory_text},
                     )
                 )
 
@@ -2022,8 +2116,8 @@ class GameService:
                             PressRelease(
                                 type="scholar_grudge",
                                 headline=f"{target.name} Objects to Expedition Approach",
-                                body=f"{effect.description}. {target.name} expresses concerns about {player.name}'s expedition methods.",
-                                metadata={"scholar": target.name, "player": player.name},
+                                body=f"{effect.description}. {target.name} expresses concerns about {player.display_name}'s expedition methods.",
+                                metadata={"scholar": target.name, "player": player.display_name},
                             )
                         )
 
@@ -2063,7 +2157,7 @@ class GameService:
                                 type="conference_scheduled",
                                 headline="Emergency Colloquium Scheduled",
                                 body=f"{effect.description}. Conference scheduled to discuss expedition findings.",
-                                metadata={"player": player.name},
+                                metadata={"player": player.display_name},
                             )
                         )
 
@@ -2072,15 +2166,15 @@ class GameService:
                 amount = effect.payload["amount"]
                 old_rep = player.reputation
                 player.reputation = max(
-                    self.settings.reputation_bounds[0],
-                    min(self.settings.reputation_bounds[1], player.reputation + amount),
+                    self.settings.reputation_bounds["min"],
+                    min(self.settings.reputation_bounds["max"], player.reputation + amount),
                 )
                 releases.append(
                     PressRelease(
                         type="reputation_shift",
                         headline="Discovery Affects Academic Standing",
-                        body=f"{effect.description}. {player.name}'s reputation changes by {amount} (from {old_rep} to {player.reputation}).",
-                        metadata={"player": player.name, "change": amount},
+                        body=f"{effect.description}. {player.display_name}'s reputation changes by {amount} (from {old_rep} to {player.reputation}).",
+                        metadata={"player": player.display_name, "change": amount},
                     )
                 )
 
@@ -2102,7 +2196,7 @@ class GameService:
                         type="opportunity_unlocked",
                         headline="New Opportunity Emerges",
                         body=f"{effect.description}. Opportunity expires in {details.get('expires_in_days', 3)} days.",
-                        metadata={"player": player.name, "opportunity": opportunity_type},
+                        metadata={"player": player.display_name, "opportunity": opportunity_type},
                     )
                 )
 
