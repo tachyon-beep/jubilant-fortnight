@@ -15,5 +15,21 @@ qdrant_storage/
 postgres_data/
 
 # IDE and tools
-#Ignore vscode AI rules
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+*.cover
+
+# GitHub AI instructions
 .github/instructions/codacy.instructions.md

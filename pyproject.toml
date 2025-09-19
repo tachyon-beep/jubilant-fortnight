@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "the-great-work"
-version = "0.1.0"
+version = "1.0.0-rc1"
 description = "The Great Work: Collaborative Knowledge Game"
 authors = [{name = "Great Work Dev Team"}]
 license = {file = "LICENSE"}
