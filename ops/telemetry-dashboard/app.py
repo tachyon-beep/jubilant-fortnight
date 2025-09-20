@@ -45,11 +45,20 @@ def build_context(report: dict) -> dict:
         key=lambda item: item[1]["total_calls"],
         reverse=True,
     )
+    symposium = report.get("symposium", {})
+    symposium_scoring = symposium.get("scoring", {})
+    scoring_top = symposium_scoring.get("top", [])
+    symposium_debts = symposium.get("debts", [])
+    symposium_reprisal = symposium.get("reprisals", [])
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
         "press_cadence": press_cadence,
         "llm_activity": llm_activity,
+        "symposium_scoring": symposium_scoring,
+        "symposium_scoring_top": scoring_top,
+        "symposium_debts": symposium_debts,
+        "symposium_reprisal": symposium_reprisal,
     }
     return context
 

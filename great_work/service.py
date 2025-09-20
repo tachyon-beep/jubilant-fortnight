@@ -55,6 +55,42 @@ from .press_tone import get_tone_seed
 logger = logging.getLogger(__name__)
 
 
+_DEFAULT_SYMPOSIUM_TOPICS: List[Tuple[str, str]] = [
+    (
+        "The Nature of Truth",
+        "Does objective truth exist in scientific inquiry, or is all knowledge relative to the observer?",
+    ),
+    (
+        "Ethics of Discovery",
+        "Should there be limits on what knowledge humanity pursues?",
+    ),
+    (
+        "Collaboration vs Competition",
+        "Does competition or collaboration lead to greater scientific advancement?",
+    ),
+    (
+        "The Role of Intuition",
+        "What place does intuition have in rigorous academic work?",
+    ),
+    (
+        "Funding Priorities",
+        "Should research funding favor practical applications or pure discovery?",
+    ),
+    (
+        "The Great Work Itself",
+        "What is the true purpose of our collective academic endeavor?",
+    ),
+    (
+        "Knowledge Ownership",
+        "Can ideas truly be owned, or does all knowledge belong to humanity?",
+    ),
+    (
+        "Academic Hierarchy",
+        "Do traditional academic structures help or hinder progress?",
+    ),
+]
+
+
 @dataclass
 class ExpeditionOrder:
     code: str
@@ -129,6 +165,7 @@ class GameService:
         self._pause_source: Optional[str] = None
         self._admin_notifications: deque[str] = deque()
         self._telemetry = get_telemetry()
+        self._latest_symposium_scoring: List[Dict[str, object]] = []
         if not any(True for _ in self.state.all_scholars()):
             self.state.seed_base_scholars()
         self._ensure_roster()
@@ -471,7 +508,18 @@ class GameService:
         persona_traits: Optional[Dict[str, object]] = None,
         extra_context: Optional[Dict[str, object]] = None,
     ) -> PressRelease:
-        self._ensure_not_paused()
+        allowed_while_paused = {
+            "admin_action",
+            "admin_update",
+            "symposium_reminder",
+        }
+        event_type = (extra_context or {}).get("event_type") if extra_context else None
+        if (
+            self._paused
+            and release.type not in allowed_while_paused
+            and event_type != "admin"
+        ):
+            raise GameService.GamePausedError(self._pause_reason or "Game is paused")
         telemetry = getattr(self, "_telemetry", None)
         if telemetry is None:
             telemetry = get_telemetry()
@@ -2091,36 +2139,422 @@ class GameService:
 
         return releases
 
-    def start_symposium(self, topic: str, description: str) -> PressRelease:
-        """Start a new symposium with the given topic."""
+    def submit_symposium_proposal(
+        self,
+        player_id: str,
+        topic: str,
+        description: str,
+    ) -> PressRelease:
+        """Allow players to submit symposium topic proposals."""
+
+        self._ensure_not_paused()
+        if not topic.strip():
+            raise ValueError("Topic cannot be empty")
+        if not description.strip():
+            raise ValueError("Description cannot be empty")
+
+        self.ensure_player(player_id)
+        now = datetime.now(timezone.utc)
+        expired_ids = self.state.expire_symposium_proposals(now)
+        if expired_ids:
+            self._queue_admin_notification(
+                f"🗂️ Expired {len(expired_ids)} symposium proposal(s) during new submission."
+            )
+
+        pending_count = self.state.count_pending_symposium_proposals(now=now)
+        if pending_count >= self.settings.symposium_max_backlog:
+            raise ValueError("Proposal backlog is full; wait for pending topics to be scheduled.")
+
+        player_pending = self.state.count_player_pending_symposium_proposals(
+            player_id, now=now
+        )
+        if player_pending >= self.settings.symposium_max_per_player:
+            raise ValueError(
+                "You already have the maximum number of active proposals. Wait for one to resolve."
+            )
+
+        expire_at = now + timedelta(days=self.settings.symposium_proposal_expiry_days)
+        priority = int(now.timestamp())
+        proposal_id = self.state.submit_symposium_proposal(
+            player_id=player_id,
+            topic=topic.strip(),
+            description=description.strip(),
+            created_at=now,
+            expire_at=expire_at,
+            priority=priority,
+        )
+
+        player = self.state.get_player(player_id)
+        display_name = player.display_name if player else player_id
+        press = PressRelease(
+            type="symposium_proposal",
+            headline=f"Symposium Proposal Submitted — {topic.strip()}",
+            body=(
+                f"{display_name} proposes this week's symposium: {topic.strip()}\n\n"
+                f"{description.strip()}\n\n"
+                "Peers may review proposals with /symposium_proposals.\n"
+                f"This proposal expires on {expire_at.strftime('%Y-%m-%d')} if not selected."
+            ),
+            metadata={
+                "proposal_id": proposal_id,
+                "player_id": player_id,
+                "topic": topic.strip(),
+                "expires_at": expire_at.isoformat(),
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=display_name,
+            persona_traits=None,
+            extra_context={
+                "event": "symposium_proposal",
+                "topic": topic.strip(),
+            },
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="symposium_proposal_submitted",
+                payload={
+                    "proposal_id": proposal_id,
+                    "player": player_id,
+                    "topic": topic.strip(),
+                    "expires_at": expire_at.isoformat(),
+                },
+            )
+        )
+
+        return press
+
+    def list_symposium_proposals(self, *, limit: int = 5) -> List[Dict[str, object]]:
+        """Return pending symposium proposals with proposer display names."""
+
+        now = datetime.now(timezone.utc)
+        proposals = self.state.list_pending_symposium_proposals(limit=limit, now=now)
+        enriched: List[Dict[str, object]] = []
+        for proposal in proposals:
+            player = self.state.get_player(proposal["player_id"])
+            enriched.append(
+                {
+                    "id": proposal["id"],
+                    "topic": proposal["topic"],
+                    "description": proposal["description"],
+                    "created_at": proposal["created_at"],
+                    "player_id": proposal["player_id"],
+                    "expires_at": proposal.get("expire_at"),
+                    "priority": proposal.get("priority", 0),
+                    "proposer": player.display_name if player else proposal["player_id"],
+                }
+            )
+        return enriched
+
+    def symposium_pledge_status(self, player_id: str) -> Dict[str, object]:
+        """Return pledge/grace state for the requested player."""
+
+        self.ensure_player(player_id)
+        player = self.state.get_player(player_id)
+        assert player is not None
+
+        participation = self.state.get_symposium_participation(player_id)
+        grace_limit = self.settings.symposium_grace_misses
+        miss_streak = int(participation.get("miss_streak", 0)) if participation else 0
+        grace_used = int(participation.get("grace_miss_consumed", 0)) if participation else 0
+        grace_remaining = max(0, grace_limit - grace_used)
+        grace_window_start = (
+            participation.get("grace_window_start") if participation else None
+        )
+        last_voted_at = participation.get("last_voted_at") if participation else None
+        raw_debts = self.state.list_symposium_debts(player_id)
+        debts_payload = [
+            {
+                "faction": entry["faction"],
+                "amount": entry["amount"],
+                "created_at": entry["created_at"].isoformat()
+                if entry.get("created_at")
+                else None,
+                "updated_at": entry["updated_at"].isoformat()
+                if entry.get("updated_at")
+                else None,
+            }
+            for entry in raw_debts
+        ]
+
+        current_topic = self.state.get_current_symposium_topic()
+        current_summary: Optional[Dict[str, object]] = None
+        if current_topic is not None:
+            topic_id, topic, description, proposal_id, _ = current_topic
+            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player_id)
+            if pledge:
+                current_summary = {
+                    "topic_id": topic_id,
+                    "topic": topic,
+                    "pledge_amount": pledge["pledge_amount"],
+                    "faction": pledge.get("faction"),
+                    "status": pledge.get("status"),
+                    "created_at": (
+                        pledge["created_at"].isoformat() if pledge.get("created_at") else None
+                    ),
+                    "resolved_at": (
+                        pledge["resolved_at"].isoformat() if pledge.get("resolved_at") else None
+                    ),
+                }
+            else:
+                current_summary = {
+                    "topic_id": topic_id,
+                    "topic": topic,
+                    "pledge_amount": self.settings.symposium_pledge_base + miss_streak,
+                    "faction": self._select_pledge_faction(player),
+                    "status": "none",
+                }
+
+        history = self.state.list_recent_symposium_pledges_for_player(player_id, limit=5)
+        history_payload = [
+            {
+                "topic_id": entry["topic_id"],
+                "topic": entry["topic"],
+                "symposium_date": entry["symposium_date"].isoformat()
+                if entry.get("symposium_date")
+                else None,
+                "pledge_amount": entry["pledge_amount"],
+                "faction": entry["faction"],
+                "status": entry["status"],
+                "created_at": entry["created_at"].isoformat()
+                if entry.get("created_at")
+                else None,
+                "resolved_at": entry["resolved_at"].isoformat()
+                if entry.get("resolved_at")
+                else None,
+            }
+            for entry in history
+        ]
+
+        return {
+            "player_id": player.id,
+            "display_name": player.display_name,
+            "miss_streak": miss_streak,
+            "grace_remaining": grace_remaining,
+            "grace_limit": grace_limit,
+            "grace_window_start": grace_window_start.isoformat()
+            if isinstance(grace_window_start, datetime)
+            else None,
+            "last_voted_at": last_voted_at.isoformat()
+            if isinstance(last_voted_at, datetime)
+            else None,
+            "current": current_summary,
+            "history": history_payload,
+            "debts": debts_payload,
+            "outstanding_debt": sum(debt["amount"] for debt in raw_debts),
+        }
+
+    def symposium_backlog_report(self) -> Dict[str, object]:
+        """Return the current backlog scoring snapshot for Discord surfaces."""
+
+        now = datetime.now(timezone.utc)
+        proposals = self.state.list_pending_symposium_proposals(now=now)
+        backlog_cap = self.settings.symposium_max_backlog
+        score_snapshot = [
+            {
+                "proposal_id": entry["proposal_id"],
+                "topic": entry["topic"],
+                "player_id": entry["player_id"],
+                "score": entry["score"],
+                "age_days": entry["age_days"],
+                "created_at": entry["created_at"].isoformat()
+                if isinstance(entry.get("created_at"), datetime)
+                else None,
+            }
+            for entry in self._latest_symposium_scoring
+        ]
+        player_names: Dict[str, str] = {}
+        for proposal in proposals:
+            player = self.state.get_player(proposal["player_id"])
+            if player:
+                player_names[proposal["player_id"]] = player.display_name
+        def _display_name(player_id: str) -> str:
+            if player_id in player_names:
+                return player_names[player_id]
+            player = self.state.get_player(player_id)
+            if player:
+                player_names[player_id] = player.display_name
+                return player.display_name
+            return player_id
+        for entry in score_snapshot:
+            entry["display_name"] = _display_name(entry["player_id"])
+        slots_remaining = max(0, backlog_cap - len(proposals))
+        debt_summary: Dict[str, int] = {}
+        for player in self.state.all_players():
+            outstanding = self.state.total_symposium_debt(player.id)
+            if outstanding:
+                debt_summary[player.display_name] = outstanding
+        return {
+            "backlog_size": len(proposals),
+            "slots_remaining": slots_remaining,
+            "scoring": score_snapshot,
+            "debt_summary": debt_summary,
+            "config": {
+                "max_backlog": backlog_cap,
+                "recent_window": self.settings.symposium_recent_window,
+                "fresh_bonus": self.settings.symposium_scoring_fresh_bonus,
+                "repeat_penalty": self.settings.symposium_scoring_repeat_penalty,
+                "age_weight": self.settings.symposium_scoring_age_weight,
+            },
+        }
+
+    def start_symposium(
+        self,
+        topic: Optional[str] = None,
+        description: Optional[str] = None,
+        *,
+        proposal_id: Optional[int] = None,
+    ) -> PressRelease:
+        """Start a new symposium, preferring player proposals when available."""
+
         self._ensure_not_paused()
         now = datetime.now(timezone.utc)
+        expired_ids = self.state.expire_symposium_proposals(now)
+        if expired_ids:
+            self._queue_admin_notification(
+                f"🗂️ Expired {len(expired_ids)} symposium proposal(s) prior to launch."
+            )
 
         # Resolve any previous symposium first
         current = self.state.get_current_symposium_topic()
         if current:
             self.resolve_symposium()
 
-        # Create new symposium topic
+        selected_proposal: Optional[Dict[str, object]] = None
+        if topic is None or description is None:
+            if proposal_id is not None:
+                selected_proposal = self.state.get_symposium_proposal(proposal_id)
+            if selected_proposal is None:
+                selected_proposal = self._select_symposium_proposal(now)
+            if selected_proposal:
+                expires_at = selected_proposal.get("expire_at")
+                if expires_at is not None and expires_at <= now:
+                    # Proposal expired in the same tick; skip it.
+                    self.state.update_symposium_proposal_status(
+                        selected_proposal["id"],
+                        status="expired",
+                        selected_topic_id=None,
+                    )
+                    selected_proposal = None
+                else:
+                    topic = selected_proposal["topic"]
+                    description = selected_proposal["description"]
+                    proposal_id = selected_proposal["id"]
+        if topic is None or description is None:
+            topic, description = random.choice(_DEFAULT_SYMPOSIUM_TOPICS)
+            proposal_id = None
+            selected_proposal = None
+
+        topic = topic.strip()
+        description = description.strip()
+
         topic_id = self.state.create_symposium_topic(
             symposium_date=now,
             topic=topic,
             description=description,
+            proposal_id=proposal_id,
         )
+        if proposal_id is not None:
+            self.state.update_symposium_proposal_status(
+                proposal_id,
+                status="selected",
+                selected_topic_id=topic_id,
+            )
 
-        # Generate press release
+        proposer_display = None
+        if selected_proposal is not None:
+            proposer = self.state.get_player(selected_proposal["player_id"])
+            proposer_display = proposer.display_name if proposer else selected_proposal["player_id"]
+
+        pledges = self._initialize_symposium_pledges(topic_id=topic_id, now=now)
+        pledge_base = self.settings.symposium_pledge_base
+        pledge_cap = self.settings.symposium_pledge_escalation_cap
+        grace_misses = self.settings.symposium_grace_misses
+        grace_window_days = self.settings.symposium_grace_window_days
+
+        body_lines = [
+            f"The Academy announces this week's symposium topic: {topic}",
+            "",
+            description,
+            "",
+            "Cast your votes with /symposium_vote:",
+            "Option 1: Support the proposition",
+            "Option 2: Oppose the proposition",
+            "Option 3: Call for further study",
+            "",
+            (
+                f"Silent scholars risk forfeiting {pledge_base} influence plus 1 per consecutive miss "
+                f"(up to {pledge_base + pledge_cap})."
+            ),
+            (
+                f"Everyone receives {grace_misses} grace miss per {grace_window_days}-day window; "
+                "voting refreshes your grace."
+            ),
+        ]
+        if proposer_display:
+            body_lines.insert(1, f"Proposed by {proposer_display}.")
+        pending_count = self.state.count_pending_symposium_proposals(now=now)
+        total_pledged = sum(data["amount"] for data in pledges.values())
+        slots_remaining = max(0, self.settings.symposium_max_backlog - pending_count)
+        try:
+            self._telemetry.track_game_progression(
+                "symposium_pledges_created",
+                float(total_pledged),
+                details={
+                    "topic_id": topic_id,
+                    "players": len(pledges),
+                },
+            )
+            self._telemetry.track_game_progression(
+                "symposium_backlog_size",
+                float(pending_count),
+                details={
+                    "slots_remaining": slots_remaining,
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry is optional
+            logger.debug("Failed to record symposium telemetry", exc_info=True)
+        body_lines.append("")
+        body_lines.append(f"Backlog awaiting selection: {pending_count} proposal(s).")
+        reprisal_notes = []
+        for pledge_info in pledges.values():
+            for reprisal in pledge_info.get("reprisals", []):
+                faction = reprisal.get("faction")
+                penalty_influence = reprisal.get("penalty_influence", 0)
+                penalty_rep = reprisal.get("penalty_reputation", 0)
+                if penalty_influence:
+                    reprisal_notes.append(
+                        f"{reprisal['display_name']} loses {penalty_influence} {faction} influence for sustained debt."
+                    )
+                elif penalty_rep:
+                    reprisal_notes.append(
+                        f"{reprisal['display_name']} suffers a reputation reprimand for unpaid symposium debt."
+                    )
+        if reprisal_notes:
+            body_lines.append("")
+            body_lines.append("Faction reprisals enacted:")
+            body_lines.extend(f" - {note}" for note in reprisal_notes)
         press = PressRelease(
             type="symposium_announcement",
             headline=f"Symposium Topic: {topic}",
-            body=(
-                f"The Academy announces this week's symposium topic: {topic}\n\n"
-                f"{description}\n\n"
-                "Cast your votes with /symposium_vote:\n"
-                "Option 1: Support the proposition\n"
-                "Option 2: Oppose the proposition\n"
-                "Option 3: Call for further study"
-            ),
-            metadata={"topic_id": topic_id, "topic": topic},
+            body="\n".join(body_lines),
+            metadata={
+                "topic_id": topic_id,
+                "topic": topic,
+                "proposal_id": proposal_id,
+                "pledge": {
+                    "base": pledge_base,
+                    "escalation_cap": pledge_cap,
+                    "grace_misses": grace_misses,
+                    "grace_window_days": grace_window_days,
+                    "players": len(pledges),
+                },
+            },
         )
         press = self._enhance_press_release(
             press,
@@ -2138,7 +2572,12 @@ class GameService:
             Event(
                 timestamp=now,
                 action="symposium_started",
-                payload={"topic_id": topic_id, "topic": topic},
+                payload={
+                    "topic_id": topic_id,
+                    "topic": topic,
+                    "proposal_id": proposal_id,
+                    "pledges": pledges,
+                },
             )
         )
 
@@ -2155,6 +2594,13 @@ class GameService:
             event_type="symposium",
         )
 
+        self._schedule_symposium_reminders(
+            topic_id=topic_id,
+            topic=topic,
+            start_time=now,
+            pledge_base=pledge_base,
+        )
+
         return press
 
     def vote_symposium(self, player_id: str, vote_option: int) -> PressRelease:
@@ -2168,13 +2614,23 @@ class GameService:
         if not current:
             raise ValueError("No symposium is currently active")
 
-        topic_id, topic, description, options = current
+        topic_id, topic, description, proposal_id, options = current
 
         if vote_option not in options:
             raise ValueError(f"Invalid vote option. Choose from {options}")
 
         # Record the vote
         self.state.record_symposium_vote(topic_id, player_id, vote_option)
+        self.state.complete_symposium_reminders_for_player(topic_id, player_id)
+        now = datetime.now(timezone.utc)
+        self._record_symposium_vote_participation(player_id=player_id, voted_at=now)
+        if self.state.get_symposium_pledge(topic_id=topic_id, player_id=player_id):
+            self.state.update_symposium_pledge_status(
+                topic_id=topic_id,
+                player_id=player_id,
+                status="fulfilled",
+                resolved_at=now,
+            )
 
         # Generate press release
         vote_text = {
@@ -2212,6 +2668,8 @@ class GameService:
                     "player": player_id,
                     "topic_id": topic_id,
                     "vote_option": vote_option,
+                    "proposal_id": proposal_id,
+                    "pledge_status": "fulfilled",
                 },
             )
         )
@@ -2258,7 +2716,7 @@ class GameService:
                 metadata={},
             )
 
-        topic_id, topic, description, _ = current
+        topic_id, topic, description, proposal_id, _ = current
         votes = self.state.get_symposium_votes(topic_id)
 
         # Determine winner
@@ -2278,21 +2736,109 @@ class GameService:
 
         # Resolve the topic
         self.state.resolve_symposium_topic(topic_id, winner)
+        self.state.cancel_symposium_reminders(topic_id)
 
-        # Generate press release
+        topic_meta = self.state.get_symposium_topic(topic_id)
+        if proposal_id and topic_meta is not None:
+            self.state.update_symposium_proposal_status(
+                proposal_id,
+                status="resolved",
+                selected_topic_id=topic_id,
+            )
+        # Generate press release with pledge outcomes
+        player_records = list(self.state.all_players())
+        voted_players = set(self.state.list_symposium_voters(topic_id))
+        non_voter_players = [
+            player for player in player_records if player.id not in voted_players
+        ]
+        penalty_records: List[Dict[str, object]] = []
+        now = datetime.now(timezone.utc)
+        for player in non_voter_players:
+            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
+            if not pledge or pledge.get("status") in {"forfeited", "waived"}:
+                continue
+            penalty_record = self._handle_symposium_non_voter(
+                topic_id=topic_id,
+                player=player,
+                pledge=pledge,
+                now=now,
+            )
+            if penalty_record:
+                penalty_records.append(penalty_record)
+        # Ensure any pending pledges for voters are fulfilled
+        for player in player_records:
+            if player.id in voted_players:
+                pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
+                if pledge and pledge.get("status") == "pending":
+                    self.state.update_symposium_pledge_status(
+                        topic_id=topic_id,
+                        player_id=player.id,
+                        status="fulfilled",
+                        resolved_at=now,
+                    )
+
+        non_voters = [player.display_name for player in non_voter_players]
+        body_lines = [
+            f"The symposium on '{topic}' has concluded.",
+            "",
+            f"Result: {winner_text}",
+            "",
+            "The Academy thanks all participants for their thoughtful contributions.",
+        ]
+        if non_voters:
+            body_lines.append("")
+            body_lines.append("Outstanding responses required from: " + ", ".join(non_voters))
+        if penalty_records:
+            body_lines.append("")
+            body_lines.append("Participation stakes:")
+            for record in penalty_records:
+                if record["status"] == "waived":
+                    body_lines.append(
+                        f"- {record['display_name']} invoked grace; no influence forfeited."
+                    )
+                elif record["deducted"] > 0 and record["faction"]:
+                    body_lines.append(
+                        f"- {record['display_name']} forfeits {record['deducted']} {record['faction']} influence."
+                    )
+                else:
+                    body_lines.append(
+                        f"- {record['display_name']} lacked influence to cover the {record['pledge_amount']} pledge."
+                    )
+                remaining = record.get("remaining_debt", 0)
+                if remaining:
+                    body_lines.append(
+                        f"  Outstanding debt recorded: {remaining} influence."
+                    )
+        forfeited_total = sum(
+            record.get("deducted", 0)
+            for record in penalty_records
+            if record["status"] in {"forfeited", "debt"}
+        )
+        waived_total = sum(1 for record in penalty_records if record["status"] == "waived")
+        try:
+            self._telemetry.track_game_progression(
+                "symposium_penalties",
+                float(forfeited_total),
+                details={
+                    "topic_id": topic_id,
+                    "waived": waived_total,
+                    "non_voters": len(non_voter_players),
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry optional
+            logger.debug("Failed to record symposium penalty telemetry", exc_info=True)
         press = PressRelease(
             type="symposium_resolution",
             headline=f"Symposium Resolved: {topic}",
-            body=(
-                f"The symposium on '{topic}' has concluded.\n\n"
-                f"Result: {winner_text}\n\n"
-                "The Academy thanks all participants for their thoughtful contributions."
-            ),
+            body="\n".join(body_lines),
             metadata={
                 "topic_id": topic_id,
                 "topic": topic,
                 "winner": winner,
                 "votes": votes,
+                "proposal_id": proposal_id,
+                "non_voters": non_voters,
+                "penalties": penalty_records,
             },
         )
         press = self._enhance_press_release(
@@ -2307,7 +2853,6 @@ class GameService:
             },
         )
 
-        now = datetime.now(timezone.utc)
         self._archive_press(press, now)
         self.state.append_event(
             Event(
@@ -2317,6 +2862,9 @@ class GameService:
                     "topic_id": topic_id,
                     "winner": winner,
                     "votes": votes,
+                    "proposal_id": proposal_id,
+                    "non_voters": non_voters,
+                    "penalties": penalty_records,
                 },
             )
         )
@@ -2336,6 +2884,412 @@ class GameService:
         )
 
         return press
+
+    # Symposium helpers -------------------------------------------------
+    def _initialize_symposium_pledges(self, *, topic_id: int, now: datetime) -> Dict[str, Dict[str, object]]:
+        pledges: Dict[str, Dict[str, object]] = {}
+        grace_window = timedelta(days=self.settings.symposium_grace_window_days)
+        for player in self.state.all_players():
+            participation = self.state.get_symposium_participation(player.id)
+            participation_data = (
+                dict(participation)
+                if participation is not None
+                else {
+                    "player_id": player.id,
+                    "miss_streak": 0,
+                    "grace_window_start": now,
+                    "grace_miss_consumed": 0,
+                    "last_voted_at": None,
+                }
+            )
+            grace_start = participation_data.get("grace_window_start")
+            if grace_start is None or grace_start + grace_window <= now:
+                participation_data["grace_window_start"] = now
+                participation_data["grace_miss_consumed"] = 0
+            self.state.save_symposium_participation(
+                player_id=player.id,
+                miss_streak=int(participation_data.get("miss_streak", 0)),
+                grace_window_start=participation_data.get("grace_window_start"),
+                grace_miss_consumed=int(participation_data.get("grace_miss_consumed", 0)),
+                last_voted_at=participation_data.get("last_voted_at"),
+                updated_at=now,
+            )
+            pledge_amount = self._calculate_symposium_pledge(participation_data)
+            faction = self._select_pledge_faction(player)
+            debt_summary = self._settle_symposium_debts(player, now)
+            outstanding_debt = debt_summary.get("outstanding", 0)
+            if outstanding_debt > 0:
+                debt_penalty = min(
+                    outstanding_debt,
+                    self.settings.symposium_pledge_escalation_cap,
+                )
+                pledge_amount += debt_penalty
+            else:
+                debt_penalty = 0
+            self.state.record_symposium_pledge(
+                topic_id=topic_id,
+                player_id=player.id,
+                pledge_amount=pledge_amount,
+                faction=faction,
+                created_at=now,
+            )
+            grace_iso = participation_data.get("grace_window_start")
+            pledges[player.id] = {
+                "display_name": player.display_name,
+                "amount": pledge_amount,
+                "faction": faction,
+                "miss_streak": int(participation_data.get("miss_streak", 0)),
+                "grace_miss_consumed": int(participation_data.get("grace_miss_consumed", 0)),
+                "grace_window_start": grace_iso.isoformat() if grace_iso else None,
+                "outstanding_debt": outstanding_debt,
+                "debt_settled": debt_summary.get("settled", 0),
+                "debt_penalty": debt_penalty,
+                "debts": debt_summary.get("details", []),
+                "reprisals": debt_summary.get("reprisals", []),
+            }
+            if outstanding_debt > 0:
+                try:
+                    self._telemetry.track_game_progression(
+                        "symposium_debt_outstanding",
+                        float(outstanding_debt),
+                        player_id=player.id,
+                        details={"faction": faction or "unknown"},
+                    )
+                except Exception:  # pragma: no cover
+                    logger.debug("Failed to record debt telemetry", exc_info=True)
+        return pledges
+
+    def _select_symposium_proposal(
+        self,
+        now: datetime,
+    ) -> Optional[Dict[str, object]]:
+        proposals = self.state.list_pending_symposium_proposals(now=now)
+        if not proposals:
+            self._latest_symposium_scoring = []
+            return None
+        recent_topics = self.state.list_recent_symposium_topics(
+            limit=self.settings.symposium_recent_window
+        )
+        recent_proposers: Dict[str, datetime] = {}
+        for topic in recent_topics:
+            proposal_id = topic.get("proposal_id")
+            if not proposal_id:
+                continue
+            proposal_meta = self.state.get_symposium_proposal(proposal_id)
+            if not proposal_meta:
+                continue
+            recent_proposers[proposal_meta["player_id"]] = (
+                topic.get("symposium_date") or topic.get("created_at") or now
+            )
+
+        scored_entries: List[Dict[str, object]] = []
+        best: Optional[Dict[str, object]] = None
+        best_score = float("-inf")
+        max_age_days = max(1, self.settings.symposium_scoring_max_age_days)
+        for proposal in proposals:
+            created_at = proposal.get("created_at") or now
+            age_days = max(
+                0.0,
+                (now - created_at).total_seconds() / 86400.0,
+            )
+            age_decay = max(0.0, (max_age_days - age_days) / max_age_days)
+            score = age_decay * self.settings.symposium_scoring_age_weight
+            if proposal["player_id"] not in recent_proposers:
+                score += self.settings.symposium_scoring_fresh_bonus
+            else:
+                score -= self.settings.symposium_scoring_repeat_penalty
+            entry = {
+                "proposal_id": proposal["id"],
+                "player_id": proposal["player_id"],
+                "topic": proposal["topic"],
+                "score": score,
+                "age_days": age_days,
+                "created_at": created_at,
+            }
+            scored_entries.append(entry)
+            try:
+                self._telemetry.track_game_progression(
+                    "symposium_score",
+                    float(score),
+                    player_id=proposal["player_id"],
+                    details={
+                        "proposal_id": proposal["id"],
+                        "age_days": age_days,
+                        "recent_proposer": str(proposal["player_id"] in recent_proposers),
+                    },
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to record symposium score telemetry", exc_info=True)
+            if (
+                best is None
+                or score > best_score
+                or (
+                    abs(score - best_score) < 1e-9
+                    and created_at < (best.get("created_at") or now)
+                )
+            ):
+                best = proposal
+                best_score = score
+        scored_entries.sort(key=lambda item: item["score"], reverse=True)
+        self._latest_symposium_scoring = scored_entries
+        return best
+
+    def _calculate_symposium_pledge(self, participation: Dict[str, object]) -> int:
+        base = self.settings.symposium_pledge_base
+        cap = self.settings.symposium_pledge_escalation_cap
+        miss_streak = int(participation.get("miss_streak", 0))
+        escalation = min(max(miss_streak, 0), cap)
+        return base + escalation
+
+    def _select_pledge_faction(self, player: Player) -> Optional[str]:
+        self._ensure_influence_structure(player)
+        positive_balances = [
+            (faction, value)
+            for faction, value in player.influence.items()
+            if value > 0
+        ]
+        if not positive_balances:
+            return None
+        faction, _ = max(positive_balances, key=lambda item: item[1])
+        return faction
+
+    def _record_symposium_vote_participation(
+        self,
+        *,
+        player_id: str,
+        voted_at: datetime,
+    ) -> None:
+        self.state.save_symposium_participation(
+            player_id=player_id,
+            miss_streak=0,
+            grace_window_start=voted_at,
+            grace_miss_consumed=0,
+            last_voted_at=voted_at,
+            updated_at=voted_at,
+        )
+
+    def _handle_symposium_non_voter(
+        self,
+        *,
+        topic_id: int,
+        player: Player,
+        pledge: Dict[str, object],
+        now: datetime,
+    ) -> Optional[Dict[str, object]]:
+        participation = self.state.get_symposium_participation(player.id) or {
+            "miss_streak": 0,
+            "grace_window_start": None,
+            "grace_miss_consumed": 0,
+            "last_voted_at": None,
+        }
+        grace_window = timedelta(days=self.settings.symposium_grace_window_days)
+        grace_start: Optional[datetime] = participation.get("grace_window_start")
+        grace_miss_consumed = int(participation.get("grace_miss_consumed", 0))
+        if grace_start is None or grace_start + grace_window <= now:
+            grace_start = now
+            grace_miss_consumed = 0
+        miss_streak = int(participation.get("miss_streak", 0)) + 1
+        pledge_amount = int(pledge.get("pledge_amount", self.settings.symposium_pledge_base))
+        grace_limit = self.settings.symposium_grace_misses
+
+        status = "waived"
+        deducted = 0
+        faction = pledge.get("faction")
+        reason = "grace"
+        remaining_debt = 0
+        if grace_miss_consumed >= grace_limit:
+            penalty_result = self._apply_symposium_penalty(player, pledge_amount)
+            deducted = penalty_result["deducted"]
+            if penalty_result["faction"]:
+                faction = penalty_result["faction"]
+            status = "forfeited"
+            reason = "insufficient_influence" if deducted == 0 else "penalty"
+            if deducted == 0:
+                self._queue_admin_notification(
+                    f"⚠️ {player.display_name} had insufficient influence to cover a {pledge_amount} pledge."
+                )
+            if deducted < pledge_amount:
+                remaining_debt = pledge_amount - deducted
+                debt_faction = faction or self._select_pledge_faction(player) or self._FACTIONS[0]
+                self.state.record_symposium_debt(
+                    player_id=player.id,
+                    faction=debt_faction,
+                    amount=remaining_debt,
+                    now=now,
+                )
+                faction = debt_faction
+                status = "debt"
+        else:
+            grace_miss_consumed += 1
+
+        self.state.update_symposium_pledge_status(
+            topic_id=topic_id,
+            player_id=player.id,
+            status=status,
+            resolved_at=now,
+            faction=faction,
+            pledge_amount=pledge_amount,
+        )
+        self.state.save_symposium_participation(
+            player_id=player.id,
+            miss_streak=miss_streak,
+            grace_window_start=grace_start,
+            grace_miss_consumed=grace_miss_consumed,
+            last_voted_at=participation.get("last_voted_at"),
+            updated_at=now,
+        )
+        return {
+            "player_id": player.id,
+            "display_name": player.display_name,
+            "status": status,
+            "pledge_amount": pledge_amount,
+            "deducted": deducted,
+            "faction": faction,
+            "miss_streak": miss_streak,
+            "grace_miss_consumed": grace_miss_consumed,
+            "reason": reason,
+            "remaining_debt": remaining_debt,
+        }
+
+    def _apply_symposium_penalty(self, player: Player, pledge_amount: int) -> Dict[str, object]:
+        if pledge_amount <= 0:
+            return {"deducted": 0, "faction": None}
+        faction = self._select_pledge_faction(player)
+        if not faction:
+            return {"deducted": 0, "faction": None}
+        balance = player.influence.get(faction, 0)
+        deducted = min(balance, pledge_amount)
+        if deducted <= 0:
+            return {"deducted": 0, "faction": faction}
+        self._apply_influence_change(player, faction, -deducted)
+        self.state.upsert_player(player)
+        return {"deducted": deducted, "faction": faction}
+
+    def _apply_symposium_debt_reprisal(
+        self,
+        *,
+        player: Player,
+        debt_details: List[Dict[str, object]],
+        now: datetime,
+    ) -> List[Dict[str, object]]:
+        threshold = self.settings.symposium_debt_reprisal_threshold
+        penalty = self.settings.symposium_debt_reprisal_penalty
+        cooldown = timedelta(days=self.settings.symposium_debt_reprisal_cooldown_days)
+        reprisals: List[Dict[str, object]] = []
+        for debt in debt_details:
+            remaining = debt.get("remaining", 0)
+            if remaining < threshold:
+                continue
+            faction = debt.get("faction")
+            if not faction:
+                continue
+            debt_record = self.state.get_symposium_debt_record(
+                player_id=player.id,
+                faction=faction,
+            )
+            last_reprisal = debt_record.get("last_reprisal_at") if debt_record else None
+            if last_reprisal and isinstance(last_reprisal, datetime):
+                if last_reprisal + cooldown > now:
+                    continue
+            influence_before = player.influence.get(faction, 0)
+            penalty_applied = min(influence_before, penalty)
+            reputation_penalty = 0
+            if penalty_applied > 0:
+                self._apply_influence_change(player, faction, -penalty_applied)
+                self.state.upsert_player(player)
+            else:
+                reputation_penalty = 1
+                player.adjust_reputation(
+                    -reputation_penalty,
+                    self.settings.reputation_bounds["min"],
+                    self.settings.reputation_bounds["max"],
+                )
+                self.state.upsert_player(player)
+            reprisal_level = (debt_record.get("reprisal_level", 0) + 1) if debt_record else 1
+            self.state.update_symposium_debt_reprisal(
+                player_id=player.id,
+                faction=faction,
+                reprisal_level=reprisal_level,
+                now=now,
+            )
+            message = {
+                "player_id": player.id,
+                "display_name": player.display_name,
+                "faction": faction,
+                "penalty_influence": penalty_applied,
+                "penalty_reputation": reputation_penalty,
+                "reprisal_level": reprisal_level,
+                "remaining": remaining,
+            }
+            reprisals.append(message)
+            try:
+                self._telemetry.track_game_progression(
+                    "symposium_debt_reprisal",
+                    float(penalty_applied or -reputation_penalty),
+                    player_id=player.id,
+                    details={
+                        "faction": faction,
+                        "reprisal_level": reprisal_level,
+                        "remaining": remaining,
+                    },
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to record debt reprisal telemetry", exc_info=True)
+        return reprisals
+
+    def _settle_symposium_debts(
+        self,
+        player: Player,
+        now: datetime,
+    ) -> Dict[str, object]:
+        debts = self.state.list_symposium_debts(player.id)
+        if not debts:
+            return {"settled": 0, "outstanding": 0, "details": []}
+        settled_total = 0
+        outstanding_total = 0
+        updated = False
+        details: List[Dict[str, object]] = []
+        reprisal_events: List[Dict[str, object]] = []
+        for debt in debts:
+            faction = debt["faction"]
+            amount = int(debt["amount"])
+            balance = player.influence.get(faction, 0)
+            payment = min(balance, amount)
+            if payment > 0:
+                self._apply_influence_change(player, faction, -payment)
+                self.state.apply_symposium_debt_payment(
+                    player_id=player.id,
+                    faction=faction,
+                    amount=payment,
+                    now=now,
+                )
+                settled_total += payment
+                amount -= payment
+                updated = True
+            if amount > 0:
+                outstanding_total += amount
+            details.append(
+                {
+                    "faction": faction,
+                    "remaining": amount,
+                    "reprisal_level": debt.get("reprisal_level", 0),
+                    "last_reprisal_at": debt.get("last_reprisal_at"),
+                }
+            )
+        if updated:
+            self.state.upsert_player(player)
+        if details:
+            reprisal_events = self._apply_symposium_debt_reprisal(
+                player=player,
+                debt_details=details,
+                now=now,
+            )
+        return {
+            "settled": settled_total,
+            "outstanding": outstanding_total,
+            "details": details,
+            "reprisals": reprisal_events,
+        }
 
     # Admin tools ---------------------------------------------------
     def admin_adjust_reputation(
@@ -2755,6 +3709,11 @@ class GameService:
         self._ensure_not_paused()
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
+        expired_ids = self.state.expire_symposium_proposals(now)
+        if expired_ids:
+            self._queue_admin_notification(
+                f"🗂️ Expired {len(expired_ids)} symposium proposal(s) during digest."
+            )
         releases.extend(self.release_scheduled_press(now))
         years_elapsed, current_year = self.state.advance_timeline(
             now, self.settings.time_scale_days_per_year
@@ -2790,6 +3749,7 @@ class GameService:
         self._ensure_roster()
         releases.extend(self._progress_careers())
         releases.extend(self._resolve_followups())
+        releases.extend(self._process_symposium_reminders())
         releases.extend(self.resolve_conferences())
         return releases
 
@@ -3115,6 +4075,173 @@ class GameService:
             self.state.clear_followup(followup_id)
         return releases
 
+    def _schedule_symposium_reminders(
+        self,
+        *,
+        topic_id: int,
+        topic: str,
+        start_time: datetime,
+        pledge_base: int,
+    ) -> None:
+        players = list(self.state.all_players())
+        if not players:
+            return
+
+        first_delay = max(self.settings.symposium_first_reminder_hours, 0.0)
+        escalation_delay = max(self.settings.symposium_escalation_hours, 0.0)
+
+        first_delta = timedelta(hours=first_delay)
+        escalation_delta = timedelta(hours=escalation_delay)
+
+        for player in players:
+            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
+            pledged_amount = int(pledge.get("pledge_amount", pledge_base)) if pledge else pledge_base
+            if first_delay >= 0:
+                self.state.enqueue_order(
+                    "symposium_vote_reminder",
+                    actor_id=player.id,
+                    subject_id=str(topic_id),
+                    payload={
+                        "topic_id": topic_id,
+                        "player_id": player.id,
+                        "topic": topic,
+                        "reminder": "first",
+                        "pledge_amount": pledged_amount,
+                    },
+                    scheduled_at=start_time + first_delta,
+                )
+            if escalation_delay > first_delay:
+                self.state.enqueue_order(
+                    "symposium_vote_reminder",
+                    actor_id=player.id,
+                    subject_id=str(topic_id),
+                    payload={
+                        "topic_id": topic_id,
+                        "player_id": player.id,
+                        "topic": topic,
+                        "reminder": "escalation",
+                        "pledge_amount": pledged_amount,
+                    },
+                    scheduled_at=start_time + escalation_delta,
+                )
+
+    def _process_symposium_reminders(self) -> List[PressRelease]:
+        releases: List[PressRelease] = []
+        now = datetime.now(timezone.utc)
+        due_orders = self.state.fetch_due_orders("symposium_vote_reminder", now)
+        for order in due_orders:
+            order_id = order["id"]
+            payload = order["payload"]
+            topic_id = int(order.get("subject_id") or payload.get("topic_id"))
+            player_id = order.get("actor_id") or payload.get("player_id")
+            reminder_level = payload.get("reminder", "first")
+
+            topic_meta = self.state.get_symposium_topic(topic_id)
+            if not topic_meta or topic_meta.get("status") != "voting":
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "topic_closed"},
+                )
+                continue
+
+            if not player_id:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "missing_player"},
+                )
+                continue
+
+            if self.state.has_symposium_vote(topic_id, player_id):
+                self.state.update_order_status(
+                    order_id,
+                    "completed",
+                    result={"reason": "already_voted"},
+                )
+                continue
+
+            player = self.state.get_player(player_id)
+            if not player:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "player_missing"},
+                )
+                continue
+
+            topic = payload.get("topic") or topic_meta.get("topic", "the symposium topic")
+            pledged_amount = int(
+                payload.get("pledge_amount", self.settings.symposium_pledge_base)
+            )
+            participation = self.state.get_symposium_participation(player_id)
+            grace_limit = self.settings.symposium_grace_misses
+            grace_used = int(participation.get("grace_miss_consumed", 0)) if participation else 0
+            grace_remaining = max(0, grace_limit - grace_used)
+            if reminder_level == "escalation":
+                body = (
+                    f"{player.display_name}, the Academy notes you have not yet cast a vote on "
+                    f"'{topic}'. Missing this symposium will forfeit {pledged_amount} influence. "
+                    "Use /symposium_vote before resolution to keep your pledge intact."
+                )
+            else:
+                if grace_remaining > 0:
+                    plural = "s" if grace_remaining != 1 else ""
+                    grace_text = (
+                        f"You have {grace_remaining} grace miss{plural} remaining; voting preserves it."
+                    )
+                else:
+                    grace_text = (
+                        f"You are out of grace—silence will cost {pledged_amount} influence."
+                    )
+                body = (
+                    f"{player.display_name} is requested to cast a vote on '{topic}'. "
+                    f"{grace_text} Use /symposium_vote to weigh in."
+                )
+
+            press = PressRelease(
+                type="symposium_reminder",
+                headline=f"Vote Required: {topic}",
+                body=body,
+                metadata={
+                    "topic_id": topic_id,
+                    "player_id": player_id,
+                    "reminder_level": reminder_level,
+                    "pledge_amount": pledged_amount,
+                },
+            )
+            press = self._enhance_press_release(
+                press,
+                base_body=press.body,
+                persona_name="The Academy",
+                persona_traits=None,
+                extra_context={
+                    "event": "symposium_reminder",
+                    "topic": topic,
+                    "player": player.display_name,
+                    "reminder_level": reminder_level,
+                },
+            )
+            self._archive_press(press, now)
+            releases.append(press)
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="symposium_vote_reminder",
+                    payload={
+                        "topic_id": topic_id,
+                        "player": player_id,
+                        "reminder_level": reminder_level,
+                        "pledge_amount": pledged_amount,
+                    },
+                )
+            )
+            self.state.update_order_status(
+                order_id,
+                "completed",
+                result={"reminder": reminder_level},
+            )
+        return releases
     def _apply_reputation_change(
         self, player: Player, delta: int, confidence: ConfidenceLevel
     ) -> int:

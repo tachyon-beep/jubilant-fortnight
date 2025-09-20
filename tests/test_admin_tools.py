@@ -28,7 +28,7 @@ def test_admin_tools():
             reason="Testing positive adjustment"
         )
         assert press is not None
-        assert "reputation adjusted" in press.body.lower()
+        assert "reputation" in press.headline.lower()
 
         player = service.state.get_player(player_id)
         assert player.reputation == 10
@@ -52,7 +52,7 @@ def test_admin_tools():
             reason="Testing influence boost"
         )
         assert press is not None
-        assert "influence adjusted" in press.body.lower()
+        assert "influence" in press.headline.lower()
 
         player = service.state.get_player(player_id)
         assert player.influence["academia"] == 20
@@ -69,7 +69,7 @@ def test_admin_tools():
             reason="Testing forced defection"
         )
         assert press is not None
-        assert "defection" in press.body.lower()
+        assert "defection" in press.headline.lower()
 
         # Reload scholar to check contract
         scholar = service.state.get_scholar(scholar.id)
@@ -101,7 +101,7 @@ def test_admin_tools():
             reason="Testing cancellation"
         )
         assert press is not None
-        assert "cancelled" in press.body.lower()
+        assert "cancelled" in press.headline.lower()
 
         # Check that expedition is no longer pending
         assert "TEST-001" not in service._pending_expeditions

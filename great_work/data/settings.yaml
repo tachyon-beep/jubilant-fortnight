@@ -6,6 +6,29 @@ timing:
     - "13:00"
     - "21:00"
   symposium_day: "Friday"
+symposium:
+  reminder_hours:
+    first: 12
+    escalation: 24
+  proposal_backlog: 12
+  proposal_expiry_days: 28
+  max_per_player: 3
+  pledge:
+    base_influence: 2
+    escalation_cap: 5
+  grace:
+    window_days: 28
+    misses: 1
+  scoring:
+    recent_window: 4
+    max_age_days: 28
+    age_weight: 1.0
+    fresh_bonus: 0.5
+    repeat_penalty: 0.75
+  debt:
+    reprisal_threshold: 6
+    reprisal_penalty: 2
+    reprisal_cooldown_days: 7
 confidence_wagers:
   suspect:
     reward: 2

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -643,6 +644,174 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             return
         await _flush_admin_notifications()
 
+    @app_commands.command(name="symposium_propose", description="Propose a symposium topic for consideration")
+    @track_command
+    @app_commands.describe(
+        topic="Title of the proposed symposium debate",
+        description="Brief description that frames the question the academy should tackle",
+    )
+    async def symposium_propose(
+        interaction: discord.Interaction,
+        topic: str,
+        description: str,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            press = service.submit_symposium_proposal(
+                player_id=str(interaction.user.display_name),
+                topic=topic,
+                description=description,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.orders, message, purpose="orders")
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="symposium_proposals", description="List pending symposium proposals")
+    @track_command
+    async def symposium_proposals(interaction: discord.Interaction) -> None:
+        now = datetime.now(timezone.utc)
+        proposals = service.list_symposium_proposals(limit=5)
+        if not proposals:
+            await interaction.response.send_message(
+                "No symposium proposals are pending. Submit one with /symposium_propose!",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        total = service.state.count_pending_symposium_proposals(now=now)
+        backlog_cap = service.settings.symposium_max_backlog
+        per_player_cap = service.settings.symposium_max_per_player
+        expiry_days = service.settings.symposium_proposal_expiry_days
+
+        slots_remaining = max(0, backlog_cap - total)
+        lines = [
+            f"**Pending Symposium Proposals ({total}/{backlog_cap}, {slots_remaining} slot(s) free)**",
+            f"Each player may hold up to {per_player_cap} active proposal(s); entries expire after {expiry_days} days.",
+            "",
+        ]
+        for proposal in proposals:
+            created_at = proposal.get("created_at")
+            created_str = (
+                created_at.strftime("%Y-%m-%d %H:%M UTC") if created_at else "recently"
+            )
+            expires_at = proposal.get("expires_at")
+            if expires_at:
+                remaining = expires_at - now
+                if remaining.total_seconds() <= 0:
+                    expiry_str = "expired"
+                elif remaining.days >= 1:
+                    expiry_str = f"in {remaining.days}d"
+                else:
+                    hours = max(1, remaining.seconds // 3600)
+                    expiry_str = f"in {hours}h"
+                expires_display = f"expires {expires_at.strftime('%Y-%m-%d')} ({expiry_str})"
+            else:
+                expires_display = "no expiry"
+            lines.append(
+                f"• [{proposal['id']}] {proposal['topic']} — proposed by {proposal['proposer']} ({created_str}; {expires_display})"
+            )
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="symposium_backlog", description="Show scoring details for pending symposium proposals")
+    @track_command
+    async def symposium_backlog(interaction: discord.Interaction) -> None:
+        report = service.symposium_backlog_report()
+        lines = [
+            f"**Symposium Backlog** ({report['backlog_size']}/{report['config']['max_backlog']} slots, {report['slots_remaining']} free)",
+            "Scoring weights: "
+            f"fresh +{report['config']['fresh_bonus']}, repeat −{report['config']['repeat_penalty']}, age weight {report['config']['age_weight']}"
+        ]
+        scoring = report.get("scoring") or []
+        if scoring:
+            lines.append("")
+            lines.append("**Current Ranking**")
+            for entry in scoring:
+                lines.append(
+                    f"• {entry['topic']} — {entry['display_name']} (score {entry['score']:.2f}, age {entry['age_days']:.1f}d)"
+                )
+        else:
+            lines.append("")
+            lines.append("No proposals scored yet.")
+
+        debts = report.get("debt_summary") or {}
+        if debts:
+            lines.append("")
+            lines.append("**Outstanding Debts**")
+            for display_name, amount in debts.items():
+                lines.append(f"• {display_name}: {amount} influence")
+
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="symposium_status", description="Show your symposium pledge status and history")
+    @track_command
+    async def symposium_status(interaction: discord.Interaction) -> None:
+        player_id = str(interaction.user.display_name)
+        service.ensure_player(player_id, interaction.user.display_name)
+        status = service.symposium_pledge_status(player_id)
+
+        lines = [f"**Symposium Pledge Status — {status['display_name']}**"]
+        lines.append(
+            f"Current miss streak: {status['miss_streak']} | Grace remaining: {status['grace_remaining']} of {status['grace_limit']}"
+        )
+        if status.get("grace_window_start"):
+            lines.append(f"Grace window reset: {status['grace_window_start']}")
+        if status.get("last_voted_at"):
+            lines.append(f"Last voted at: {status['last_voted_at']}")
+        outstanding = status.get("outstanding_debt", 0)
+        if outstanding:
+            lines.append(f"Outstanding symposium debt: {outstanding} influence")
+
+        current = status.get("current")
+        if current:
+            current_lines = ["", "**Active Symposium**"]
+            current_lines.append(f"Topic: {current['topic']}")
+            current_lines.append(f"Pledge: {current['pledge_amount']} influence")
+            faction = current.get("faction")
+            if faction:
+                current_lines.append(f"Faction at stake: {faction}")
+            current_lines.append(f"Status: {current.get('status', 'pending')}")
+            lines.extend(current_lines)
+
+        debts = status.get("debts") or []
+        if debts:
+            lines.append("")
+            lines.append("**Outstanding Debts**")
+            for debt in debts:
+                lines.append(
+                    f"• {debt['amount']} influence ({debt['faction']}) — last updated {debt.get('updated_at') or 'recently'}"
+                )
+
+        history = status.get("history") or []
+        if history:
+            lines.append("")
+            lines.append("**Recent Symposium Outcomes**")
+            for entry in history:
+                lines.append(
+                    "• {topic} — {status} ({amount} influence{faction})".format(
+                        topic=entry.get("topic") or f"Topic {entry['topic_id']}",
+                        status=entry.get("status", "unknown"),
+                        amount=entry.get("pledge_amount", 0),
+                        faction=f" / {entry['faction']}" if entry.get("faction") else "",
+                    )
+                )
+                if entry.get("status") == "debt" and entry.get("resolved_at") is None:
+                    lines.append("  Debt outstanding until paid")
+        else:
+            lines.append("")
+            lines.append("No prior symposium pledges on record.")
+
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await _flush_admin_notifications()
+
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
     @track_command
     async def status(interaction: discord.Interaction) -> None:
@@ -943,6 +1112,58 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         f"• Alert threshold: {threshold} pending items"
                     )
 
+            symposium_metrics = report.get('symposium', {})
+            scoring_metrics = symposium_metrics.get('scoring', {})
+            if scoring_metrics.get('count'):
+                lines.append("\n**Symposium Scoring (24 hours):**")
+                lines.append(
+                    "• {count} proposals scored | avg {avg:.2f}".format(
+                        count=scoring_metrics.get('count', 0),
+                        avg=scoring_metrics.get('average', 0.0),
+                    )
+                )
+                for entry in scoring_metrics.get('top', [])[:5]:
+                    player_name = entry.get('player_id') or 'unknown'
+                    player_obj = service.state.get_player(player_name)
+                    display = player_obj.display_name if player_obj else player_name
+                    lines.append(
+                        "• {player} — {score:.2f} (age {age:.1f}d)".format(
+                            player=display,
+                            score=entry.get('score', 0.0),
+                            age=entry.get('age_days', 0.0),
+                        )
+                    )
+
+            debt_metrics = symposium_metrics.get('debts', [])
+            if debt_metrics:
+                lines.append("\n**Symposium Debt Snapshot:**")
+                for entry in debt_metrics[:5]:
+                    player_name = entry.get('player_id') or 'unknown'
+                    player_obj = service.state.get_player(player_name)
+                    display = player_obj.display_name if player_obj else player_name
+                    lines.append(
+                        "• {player}: {debt:.1f} influence ({faction})".format(
+                            player=display,
+                            debt=entry.get('debt', 0.0),
+                            faction=entry.get('faction') or 'mixed',
+                        )
+                    )
+
+            reprisal_metrics = symposium_metrics.get('reprisals', [])
+            if reprisal_metrics:
+                lines.append("\n**Symposium Reprisals (24 hours):**")
+                for entry in reprisal_metrics[:5]:
+                    player_name = entry.get('player_id') or 'unknown'
+                    player_obj = service.state.get_player(player_name)
+                    display = player_obj.display_name if player_obj else player_name
+                    lines.append(
+                        "• {player}: {count} reprisal(s), total penalty {penalty:.1f}".format(
+                            player=display,
+                            count=entry.get('count', 0),
+                            penalty=entry.get('total_penalty', 0.0),
+                        )
+                    )
+
             system_events = report.get('system_events_24h', [])
             if system_events:
                 lines.append("\n**System Events (24 hours):**")
@@ -1131,6 +1352,10 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(assign_lab)
     bot.tree.add_command(conference)
     bot.tree.add_command(symposium_vote)
+    bot.tree.add_command(symposium_propose)
+    bot.tree.add_command(symposium_proposals)
+    bot.tree.add_command(symposium_backlog)
+    bot.tree.add_command(symposium_status)
     bot.tree.add_command(status)
     bot.tree.add_command(wager)
     bot.tree.add_command(gazette)

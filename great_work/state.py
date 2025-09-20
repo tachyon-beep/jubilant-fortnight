@@ -119,6 +119,23 @@ CREATE TABLE IF NOT EXISTS conferences (
     result_payload TEXT,
     FOREIGN KEY (theory_id) REFERENCES theories (id)
 );
+CREATE TABLE IF NOT EXISTS symposium_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    selected_topic_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    expire_at TEXT,
+    priority INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (selected_topic_id) REFERENCES symposium_topics (id)
+);
+CREATE INDEX IF NOT EXISTS idx_symposium_proposals_status
+    ON symposium_proposals (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_symposium_proposals_expire
+    ON symposium_proposals (status, expire_at);
 CREATE TABLE IF NOT EXISTS symposium_topics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symposium_date TEXT NOT NULL,
@@ -126,7 +143,9 @@ CREATE TABLE IF NOT EXISTS symposium_topics (
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'voting',
     winner TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    proposal_id INTEGER,
+    FOREIGN KEY (proposal_id) REFERENCES symposium_proposals (id)
 );
 CREATE TABLE IF NOT EXISTS symposium_votes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +174,37 @@ CREATE INDEX IF NOT EXISTS idx_orders_status_scheduled
     ON orders (status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_orders_type_status
     ON orders (order_type, status);
+CREATE TABLE IF NOT EXISTS symposium_pledges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL,
+    player_id TEXT NOT NULL,
+    pledge_amount INTEGER NOT NULL,
+    faction TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY (topic_id) REFERENCES symposium_topics (id)
+);
+CREATE INDEX IF NOT EXISTS idx_symposium_pledges_topic_status
+    ON symposium_pledges (topic_id, status);
+CREATE TABLE IF NOT EXISTS symposium_participation (
+    player_id TEXT PRIMARY KEY,
+    miss_streak INTEGER NOT NULL DEFAULT 0,
+    grace_window_start TEXT,
+    grace_miss_consumed INTEGER NOT NULL DEFAULT 0,
+    last_voted_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS symposium_debts (
+    player_id TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    reprisal_level INTEGER NOT NULL DEFAULT 0,
+    last_reprisal_at TEXT,
+    PRIMARY KEY (player_id, faction)
+);
 CREATE TABLE IF NOT EXISTS queued_press (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     release_at TEXT NOT NULL,
@@ -184,6 +234,28 @@ class GameState:
     def _ensure_schema(self) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.executescript(_DB_SCHEMA)
+            columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info('symposium_proposals')").fetchall()
+            }
+            if "expire_at" not in columns:
+                conn.execute("ALTER TABLE symposium_proposals ADD COLUMN expire_at TEXT")
+            if "priority" not in columns:
+                conn.execute(
+                    "ALTER TABLE symposium_proposals ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
+                )
+            debt_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info('symposium_debts')").fetchall()
+            }
+            if "reprisal_level" not in debt_columns:
+                conn.execute(
+                    "ALTER TABLE symposium_debts ADD COLUMN reprisal_level INTEGER NOT NULL DEFAULT 0"
+                )
+            if "last_reprisal_at" not in debt_columns:
+                conn.execute(
+                    "ALTER TABLE symposium_debts ADD COLUMN last_reprisal_at TEXT"
+                )
             conn.commit()
 
     def _ensure_timeline(self) -> None:
@@ -1119,6 +1191,8 @@ class GameState:
         symposium_date: datetime,
         topic: str,
         description: str,
+        *,
+        proposal_id: int | None = None,
         created_at: datetime | None = None,
     ) -> int:
         """Create a new symposium topic for voting."""
@@ -1126,26 +1200,27 @@ class GameState:
         with closing(sqlite3.connect(self._db_path)) as conn:
             cursor = conn.execute(
                 """INSERT INTO symposium_topics
-                   (symposium_date, topic, description, status, created_at)
-                   VALUES (?, ?, ?, 'voting', ?)""",
+                   (symposium_date, topic, description, status, created_at, proposal_id)
+                   VALUES (?, ?, ?, 'voting', ?, ?)""",
                 (
                     symposium_date.isoformat(),
                     topic,
                     description,
                     now.isoformat(),
+                    proposal_id,
                 ),
             )
             conn.commit()
             return cursor.lastrowid
 
-    def get_current_symposium_topic(self) -> Optional[Tuple[int, str, str, List[int]]]:
+    def get_current_symposium_topic(self) -> Optional[Tuple[int, str, str, int | None, List[int]]]:
         """Get the current symposium topic if in voting phase.
 
-        Returns: (topic_id, topic, description, list of vote options) or None
+        Returns: (topic_id, topic, description, proposal_id, list of vote options) or None
         """
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
-                """SELECT id, topic, description
+                """SELECT id, topic, description, proposal_id
                    FROM symposium_topics
                    WHERE status = 'voting'
                    ORDER BY created_at DESC
@@ -1153,7 +1228,7 @@ class GameState:
             ).fetchone()
             if row:
                 # Generate 3 voting options
-                return (row[0], row[1], row[2], [1, 2, 3])
+                return (row[0], row[1], row[2], row[3], [1, 2, 3])
             return None
 
     def record_symposium_vote(
@@ -1192,7 +1267,617 @@ class GameState:
                    GROUP BY vote_option""",
                 (topic_id,),
             ).fetchall()
-            return {option: count for option, count in rows}
+        return {option: count for option, count in rows}
+
+    def list_symposium_voters(self, topic_id: int) -> List[str]:
+        """Return the player ids that have voted for the symposium."""
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT player_id FROM symposium_votes WHERE topic_id = ?",
+                (topic_id,),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def get_symposium_topic(self, topic_id: int) -> Optional[Dict[str, object]]:
+        """Return metadata for the requested symposium topic."""
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, symposium_date, topic, description, status, winner, created_at, proposal_id
+                   FROM symposium_topics
+                   WHERE id = ?""",
+                (topic_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "symposium_date": datetime.fromisoformat(row[1]) if row[1] else None,
+            "topic": row[2],
+            "description": row[3],
+            "status": row[4],
+            "winner": row[5],
+            "created_at": datetime.fromisoformat(row[6]) if row[6] else None,
+            "proposal_id": row[7],
+        }
+
+    def has_symposium_vote(self, topic_id: int, player_id: str) -> bool:
+        """Return True if the player has already voted on the topic."""
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM symposium_votes WHERE topic_id = ? AND player_id = ?",
+                (topic_id, player_id),
+            ).fetchone()
+        return row is not None
+
+    # Symposium proposals ----------------------------------------------
+    def submit_symposium_proposal(
+        self,
+        *,
+        player_id: str,
+        topic: str,
+        description: str,
+        created_at: datetime | None = None,
+        expire_at: datetime | None = None,
+        priority: int = 0,
+    ) -> int:
+        now = created_at or datetime.now(timezone.utc)
+        expire_iso = expire_at.isoformat() if expire_at else None
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO symposium_proposals
+                   (player_id, topic, description, status, created_at, updated_at, expire_at, priority)
+                   VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)""",
+                (
+                    player_id,
+                    topic,
+                    description,
+                    now.isoformat(),
+                    now.isoformat(),
+                    expire_iso,
+                    priority,
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def count_pending_symposium_proposals(
+        self,
+        now: datetime | None = None,
+    ) -> int:
+        clause = "status = 'pending'"
+        params: List[object] = []
+        if now is not None:
+            clause += " AND (expire_at IS NULL OR expire_at > ?)"
+            params.append(now.isoformat())
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM symposium_proposals WHERE {clause}",
+                params,
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def count_player_pending_symposium_proposals(
+        self,
+        player_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        clause = "status = 'pending' AND player_id = ?"
+        params: List[object] = [player_id]
+        if now is not None:
+            clause += " AND (expire_at IS NULL OR expire_at > ?)"
+            params.append(now.isoformat())
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM symposium_proposals WHERE {clause}",
+                params,
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def expire_symposium_proposals(self, cutoff: datetime) -> List[int]:
+        cutoff_iso = cutoff.isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id FROM symposium_proposals
+                       WHERE status = 'pending' AND expire_at IS NOT NULL AND expire_at <= ?""",
+                (cutoff_iso,),
+            ).fetchall()
+            expired_ids = [int(row[0]) for row in rows]
+            if expired_ids:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.executemany(
+                    """UPDATE symposium_proposals
+                           SET status = 'expired', updated_at = ?
+                           WHERE id = ?""",
+                    [(now_iso, proposal_id) for proposal_id in expired_ids],
+                )
+                conn.commit()
+        return expired_ids
+
+    def list_pending_symposium_proposals(
+        self,
+        *,
+        limit: int | None = None,
+        now: datetime | None = None,
+    ) -> List[Dict[str, object]]:
+        sql = (
+            "SELECT id, player_id, topic, description, status, created_at, updated_at, expire_at, priority "
+            "FROM symposium_proposals WHERE status = 'pending'"
+        )
+        params: List[object] = []
+        if now is not None:
+            sql += " AND (expire_at IS NULL OR expire_at > ?)"
+            params.append(now.isoformat())
+        sql += " ORDER BY priority DESC, created_at"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        proposals: List[Dict[str, object]] = []
+        for row in rows:
+            proposals.append(
+                {
+                    "id": row[0],
+                    "player_id": row[1],
+                    "topic": row[2],
+                    "description": row[3],
+                    "status": row[4],
+                    "created_at": datetime.fromisoformat(row[5]) if row[5] else None,
+                    "updated_at": datetime.fromisoformat(row[6]) if row[6] else None,
+                    "expire_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                    "priority": row[8],
+                }
+            )
+        return proposals
+
+    def fetch_next_symposium_proposal(
+        self,
+        now: datetime | None = None,
+    ) -> Optional[Dict[str, object]]:
+        proposals = self.list_pending_symposium_proposals(limit=1, now=now)
+        return proposals[0] if proposals else None
+
+    def get_symposium_proposal(self, proposal_id: int) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, player_id, topic, description, status, created_at, updated_at, selected_topic_id, expire_at, priority
+                   FROM symposium_proposals
+                   WHERE id = ?""",
+                (proposal_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "player_id": row[1],
+            "topic": row[2],
+            "description": row[3],
+            "status": row[4],
+            "created_at": datetime.fromisoformat(row[5]) if row[5] else None,
+            "updated_at": datetime.fromisoformat(row[6]) if row[6] else None,
+            "selected_topic_id": row[7],
+            "expire_at": datetime.fromisoformat(row[8]) if row[8] else None,
+            "priority": row[9],
+        }
+
+    def update_symposium_proposal_status(
+        self,
+        proposal_id: int,
+        *,
+        status: str,
+        selected_topic_id: int | None = None,
+        expire_at: datetime | None = None,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        expire_iso = expire_at.isoformat() if expire_at else None
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE symposium_proposals
+                   SET status = ?,
+                       selected_topic_id = COALESCE(?, selected_topic_id),
+                       expire_at = COALESCE(?, expire_at),
+                       updated_at = ?
+                   WHERE id = ?""",
+                (status, selected_topic_id, expire_iso, now, proposal_id),
+            )
+            conn.commit()
+
+    # Symposium pledges & participation --------------------------------
+
+    def list_recent_symposium_topics(
+        self,
+        *,
+        limit: int,
+    ) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, symposium_date, topic, description, proposal_id, status, winner, created_at
+                       FROM symposium_topics
+                       ORDER BY created_at DESC
+                       LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        topics: List[Dict[str, object]] = []
+        for row in rows:
+            topics.append(
+                {
+                    "id": row[0],
+                    "symposium_date": datetime.fromisoformat(row[1]) if row[1] else None,
+                    "topic": row[2],
+                    "description": row[3],
+                    "proposal_id": row[4],
+                    "status": row[5],
+                    "winner": row[6],
+                    "created_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                }
+            )
+        return topics
+
+    def record_symposium_pledge(
+        self,
+        *,
+        topic_id: int,
+        player_id: str,
+        pledge_amount: int,
+        faction: Optional[str],
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        now = (created_at or datetime.now(timezone.utc)).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO symposium_pledges
+                       (topic_id, player_id, pledge_amount, faction, status, created_at)
+                       VALUES (?, ?, ?, ?, 'pending', ?)""",
+                (topic_id, player_id, pledge_amount, faction, now),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def update_symposium_pledge_status(
+        self,
+        *,
+        topic_id: int,
+        player_id: str,
+        status: str,
+        resolved_at: Optional[datetime] = None,
+        pledge_amount: Optional[int] = None,
+        faction: Optional[str] = None,
+    ) -> None:
+        now_iso = (resolved_at or datetime.now(timezone.utc)).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE symposium_pledges
+                       SET status = ?,
+                           resolved_at = ?,
+                           pledge_amount = COALESCE(?, pledge_amount),
+                           faction = COALESCE(?, faction)
+                       WHERE topic_id = ? AND player_id = ?""",
+                (status, now_iso, pledge_amount, faction, topic_id, player_id),
+            )
+            conn.commit()
+
+    def list_symposium_pledges(
+        self,
+        *,
+        topic_id: int,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        sql = (
+            "SELECT id, player_id, pledge_amount, faction, status, created_at, resolved_at "
+            "FROM symposium_pledges WHERE topic_id = ?"
+        )
+        params: List[object] = [topic_id]
+        if status is not None:
+            sql += " AND status = ?"
+            params.append(status)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(sql, params).fetchall()
+        pledges: List[Dict[str, object]] = []
+        for row in rows:
+            pledges.append(
+                {
+                    "id": row[0],
+                    "player_id": row[1],
+                    "pledge_amount": row[2],
+                    "faction": row[3],
+                    "status": row[4],
+                    "created_at": datetime.fromisoformat(row[5]) if row[5] else None,
+                    "resolved_at": datetime.fromisoformat(row[6]) if row[6] else None,
+                }
+            )
+        return pledges
+
+    def get_symposium_pledge(
+        self,
+        *,
+        topic_id: int,
+        player_id: str,
+    ) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, pledge_amount, faction, status, created_at, resolved_at
+                       FROM symposium_pledges
+                       WHERE topic_id = ? AND player_id = ?""",
+                (topic_id, player_id),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "pledge_amount": row[1],
+            "faction": row[2],
+            "status": row[3],
+            "created_at": datetime.fromisoformat(row[4]) if row[4] else None,
+            "resolved_at": datetime.fromisoformat(row[5]) if row[5] else None,
+        }
+
+    def list_recent_symposium_pledges_for_player(
+        self,
+        player_id: str,
+        *,
+        limit: int = 5,
+    ) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT p.topic_id, t.topic, t.symposium_date, p.pledge_amount, p.faction,
+                              p.status, p.created_at, p.resolved_at
+                       FROM symposium_pledges AS p
+                       LEFT JOIN symposium_topics AS t ON p.topic_id = t.id
+                       WHERE p.player_id = ?
+                       ORDER BY p.created_at DESC
+                       LIMIT ?""",
+                (player_id, limit),
+            ).fetchall()
+        pledges: List[Dict[str, object]] = []
+        for row in rows:
+            pledges.append(
+                {
+                    "topic_id": row[0],
+                    "topic": row[1],
+                    "symposium_date": datetime.fromisoformat(row[2]) if row[2] else None,
+                    "pledge_amount": row[3],
+                    "faction": row[4],
+                    "status": row[5],
+                    "created_at": datetime.fromisoformat(row[6]) if row[6] else None,
+                    "resolved_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                }
+            )
+        return pledges
+
+    def list_symposium_debts(
+        self,
+        player_id: str,
+    ) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at
+                       FROM symposium_debts WHERE player_id = ?""",
+                (player_id,),
+            ).fetchall()
+        debts: List[Dict[str, object]] = []
+        for row in rows:
+            debts.append(
+                {
+                    "player_id": player_id,
+                    "faction": row[0],
+                    "amount": int(row[1]),
+                    "created_at": datetime.fromisoformat(row[2]) if row[2] else None,
+                    "updated_at": datetime.fromisoformat(row[3]) if row[3] else None,
+                    "reprisal_level": int(row[4]) if row[4] is not None else 0,
+                    "last_reprisal_at": datetime.fromisoformat(row[5]) if row[5] else None,
+                }
+            )
+        return debts
+
+    def record_symposium_debt(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        now: Optional[datetime] = None,
+    ) -> None:
+        if amount <= 0:
+            return
+        timestamp = (now or datetime.now(timezone.utc)).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """INSERT INTO symposium_debts (player_id, faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at)
+                       VALUES (?, ?, ?, ?, ?, 0, NULL)
+                       ON CONFLICT(player_id, faction) DO UPDATE SET
+                           amount = symposium_debts.amount + excluded.amount,
+                           updated_at = excluded.updated_at""",
+                (player_id, faction, amount, timestamp, timestamp),
+            )
+            conn.commit()
+
+    def apply_symposium_debt_payment(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        now: Optional[datetime] = None,
+    ) -> int:
+        if amount <= 0:
+            return 0
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT amount FROM symposium_debts WHERE player_id = ? AND faction = ?",
+                (player_id, faction),
+            ).fetchone()
+            if not row:
+                return 0
+            current = int(row[0])
+            paid = min(current, amount)
+            remaining = current - paid
+            if remaining == 0:
+                conn.execute(
+                    "DELETE FROM symposium_debts WHERE player_id = ? AND faction = ?",
+                    (player_id, faction),
+                )
+            else:
+                conn.execute(
+                    """UPDATE symposium_debts
+                           SET amount = ?, updated_at = ?
+                           WHERE player_id = ? AND faction = ?""",
+                    (
+                        remaining,
+                        (now or datetime.now(timezone.utc)).isoformat(),
+                        player_id,
+                        faction,
+                    ),
+                )
+            conn.commit()
+            return paid
+
+    def update_symposium_debt_reprisal(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        reprisal_level: int,
+        now: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE symposium_debts
+                       SET reprisal_level = ?, last_reprisal_at = ?, updated_at = ?
+                       WHERE player_id = ? AND faction = ?""",
+                (
+                    reprisal_level,
+                    now.isoformat(),
+                    now.isoformat(),
+                    player_id,
+                    faction,
+                ),
+            )
+            conn.commit()
+
+    def get_symposium_debt_record(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+    ) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT amount, created_at, updated_at, reprisal_level, last_reprisal_at
+                       FROM symposium_debts
+                       WHERE player_id = ? AND faction = ?""",
+                (player_id, faction),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "player_id": player_id,
+            "faction": faction,
+            "amount": int(row[0]),
+            "created_at": datetime.fromisoformat(row[1]) if row[1] else None,
+            "updated_at": datetime.fromisoformat(row[2]) if row[2] else None,
+            "reprisal_level": int(row[3]) if row[3] is not None else 0,
+            "last_reprisal_at": datetime.fromisoformat(row[4]) if row[4] else None,
+        }
+
+    def total_symposium_debt(self, player_id: str) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT SUM(amount) FROM symposium_debts WHERE player_id = ?",
+                (player_id,),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def get_symposium_participation(
+        self,
+        player_id: str,
+    ) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT player_id, miss_streak, grace_window_start, grace_miss_consumed, last_voted_at, updated_at
+                       FROM symposium_participation
+                       WHERE player_id = ?""",
+                (player_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "player_id": row[0],
+            "miss_streak": row[1],
+            "grace_window_start": datetime.fromisoformat(row[2]) if row[2] else None,
+            "grace_miss_consumed": row[3],
+            "last_voted_at": datetime.fromisoformat(row[4]) if row[4] else None,
+            "updated_at": datetime.fromisoformat(row[5]) if row[5] else None,
+        }
+
+    def save_symposium_participation(
+        self,
+        *,
+        player_id: str,
+        miss_streak: int,
+        grace_window_start: Optional[datetime],
+        grace_miss_consumed: int,
+        last_voted_at: Optional[datetime],
+        updated_at: Optional[datetime] = None,
+    ) -> None:
+        now = (updated_at or datetime.now(timezone.utc)).isoformat()
+        grace_start_iso = grace_window_start.isoformat() if grace_window_start else None
+        last_vote_iso = last_voted_at.isoformat() if last_voted_at else None
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """INSERT INTO symposium_participation AS sp
+                       (player_id, miss_streak, grace_window_start, grace_miss_consumed, last_voted_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(player_id) DO UPDATE SET
+                           miss_streak = excluded.miss_streak,
+                           grace_window_start = excluded.grace_window_start,
+                           grace_miss_consumed = excluded.grace_miss_consumed,
+                           last_voted_at = excluded.last_voted_at,
+                           updated_at = excluded.updated_at""",
+                (
+                    player_id,
+                    miss_streak,
+                    grace_start_iso,
+                    grace_miss_consumed,
+                    last_vote_iso,
+                    now,
+                ),
+            )
+            conn.commit()
+
+    def cancel_symposium_reminders(self, topic_id: int) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE orders
+                   SET status = 'cancelled', updated_at = ?
+                   WHERE order_type = 'symposium_vote_reminder'
+                     AND subject_id = ?
+                     AND status = 'pending'""",
+                (now, str(topic_id)),
+            )
+            conn.commit()
+
+    def complete_symposium_reminders_for_player(
+        self,
+        topic_id: int,
+        player_id: str,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE orders
+                   SET status = 'completed', updated_at = ?
+                   WHERE order_type = 'symposium_vote_reminder'
+                     AND subject_id = ?
+                     AND actor_id = ?
+                     AND status = 'pending'""",
+                (now, str(topic_id), player_id),
+            )
+            conn.commit()
 
     def resolve_symposium_topic(
         self,

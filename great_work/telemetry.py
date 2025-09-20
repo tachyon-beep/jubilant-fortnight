@@ -800,6 +800,7 @@ class TelemetryCollector:
             "press_cadence_24h": self.get_press_cadence_summary(24, limit=10),
             "digest_health_24h": self.get_digest_summary(24),
             "queue_depth_24h": self.get_queue_depth_summary(24),
+            "symposium": self.get_symposium_metrics(24),
         }
 
         # Add overall statistics
@@ -821,6 +822,151 @@ class TelemetryCollector:
             }
 
         return report
+
+    def get_symposium_metrics(self, hours: int = 24) -> Dict[str, Any]:
+        """Summarise symposium scoring and debt telemetry."""
+
+        start_time = time.time() - (hours * 3600)
+        scoring_entries: List[Dict[str, Any]] = []
+        scoring_count = 0
+        debt_by_player: Dict[str, Dict[str, Any]] = {}
+        reprisal_counts: Dict[str, Dict[str, Any]] = {}
+
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                """SELECT COUNT(*), AVG(value)
+                       FROM metrics
+                       WHERE metric_type = ? AND name = ? AND timestamp >= ?""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "symposium_score",
+                    start_time,
+                ),
+            ).fetchone()
+            if row:
+                scoring_count = int(row[0] or 0)
+                average_score = float(row[1] or 0.0) if scoring_count else 0.0
+            else:
+                scoring_count = 0
+                average_score = 0.0
+
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.proposal_id') AS proposal_id,
+                               json_extract(metadata, '$.age_days') AS age_days,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                        ORDER BY value DESC
+                        LIMIT 10""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "symposium_score",
+                    start_time,
+                ),
+            )
+            for row in cursor.fetchall():
+                scoring_entries.append(
+                    {
+                        "score": float(row[0] or 0.0),
+                        "player_id": row[1],
+                        "proposal_id": row[2],
+                        "age_days": float(row[3] or 0.0),
+                        "recorded_at": datetime.fromtimestamp(row[4]).isoformat(),
+                    }
+                )
+
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.faction') AS faction,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                        ORDER BY timestamp DESC""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "symposium_debt_outstanding",
+                    start_time,
+                ),
+            )
+            for value, player_id, faction, ts in cursor.fetchall():
+                if not player_id:
+                    continue
+                if player_id in debt_by_player:
+                    continue
+                debt_by_player[player_id] = {
+                    "debt": float(value or 0.0),
+                    "faction": faction,
+                    "recorded_at": datetime.fromtimestamp(ts).isoformat(),
+                }
+
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.faction') AS faction,
+                               json_extract(metadata, '$.reprisal_level') AS level,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "symposium_debt_reprisal",
+                    start_time,
+                ),
+            )
+            for value, player_id, faction, level, ts in cursor.fetchall():
+                if not player_id:
+                    continue
+                summary = reprisal_counts.setdefault(
+                    player_id,
+                    {
+                        "count": 0,
+                        "total_penalty": 0.0,
+                        "factions": set(),
+                        "last_reprisal_at": None,
+                    },
+                )
+                summary["count"] += 1
+                summary["total_penalty"] += float(value or 0.0)
+                if faction:
+                    summary["factions"].add(faction)
+                summary["last_reprisal_at"] = datetime.fromtimestamp(ts).isoformat()
+
+        reprisal_summary: List[Dict[str, Any]] = []
+        for player_id, data in reprisal_counts.items():
+            reprisal_summary.append(
+                {
+                    "player_id": player_id,
+                    "count": data["count"],
+                    "total_penalty": data["total_penalty"],
+                    "factions": sorted(data["factions"]),
+                    "last_reprisal_at": data["last_reprisal_at"],
+                }
+            )
+        reprisal_summary.sort(key=lambda item: item["count"], reverse=True)
+
+        debt_list = [
+            {
+                "player_id": player_id,
+                "debt": details["debt"],
+                "faction": details.get("faction"),
+                "recorded_at": details.get("recorded_at"),
+            }
+            for player_id, details in debt_by_player.items()
+        ]
+        debt_list.sort(key=lambda item: item["debt"], reverse=True)
+
+        return {
+            "scoring": {
+                "average": average_score,
+                "count": scoring_count,
+                "top": scoring_entries,
+            },
+            "debts": debt_list,
+            "reprisals": reprisal_summary,
+        }
 
     def cleanup_old_data(self, days_to_keep: int = 30):
         """Clean up old telemetry data."""

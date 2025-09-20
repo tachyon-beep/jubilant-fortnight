@@ -126,24 +126,12 @@ class GazetteScheduler:
 
     def _host_symposium(self) -> None:
         """Host weekly symposium with randomly selected topic."""
-        # List of potential symposium topics
-        topics = [
-            ("The Nature of Truth", "Does objective truth exist in scientific inquiry, or is all knowledge relative to the observer?"),
-            ("Ethics of Discovery", "Should there be limits on what knowledge humanity pursues?"),
-            ("Collaboration vs Competition", "Does competition or collaboration lead to greater scientific advancement?"),
-            ("The Role of Intuition", "What place does intuition have in rigorous academic work?"),
-            ("Funding Priorities", "Should research funding favor practical applications or pure discovery?"),
-            ("The Great Work Itself", "What is the true purpose of our collective academic endeavor?"),
-            ("Knowledge Ownership", "Can ideas truly be owned, or does all knowledge belong to humanity?"),
-            ("Academic Hierarchy", "Do traditional academic structures help or hinder progress?"),
-        ]
+        try:
+            press = self.service.start_symposium()
+        except Exception:
+            logger.exception("Failed to start symposium")
+            return
 
-        # Randomly select a topic
-        import random
-        topic, description = random.choice(topics)
-
-        # Start the symposium
-        press = self.service.start_symposium(topic, description)
         self._emit_release(press)
         self._emit_admin_notifications()
 

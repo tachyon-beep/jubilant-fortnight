@@ -127,6 +127,98 @@
     </div>
 
     <div class="section">
+      <h2>Symposium Scoring (24h)</h2>
+      {% if symposium_scoring.count %}
+      <p>
+        Proposals scored: {{ symposium_scoring.count }} |
+        Average score: {{ '%.2f' | format(symposium_scoring.average) }}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Score</th>
+            <th>Age (days)</th>
+            <th>Recorded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_scoring_top[:10] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ '%.2f' | format(entry.score) }}</td>
+            <td>{{ '%.1f' | format(entry.age_days) }}</td>
+            <td>{{ entry.recorded_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No scored proposals in the last 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No proposal scoring telemetry recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Symposium Debt Snapshot</h2>
+      {% if symposium_debts %}
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Debt</th>
+            <th>Faction</th>
+            <th>Recorded At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_debts[:15] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ '%.1f' | format(entry.debt) }}</td>
+            <td>{{ entry.faction or '—' }}</td>
+            <td>{{ entry.recorded_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No outstanding symposium debt recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Symposium Reprisals (24h)</h2>
+      {% if symposium_reprisal %}
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Reprisals</th>
+            <th>Total Penalty</th>
+            <th>Factions</th>
+            <th>Last Reprisal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_reprisal[:15] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ entry.count }}</td>
+            <td>{{ '%.1f' | format(entry.total_penalty) }}</td>
+            <td>{{ entry.factions | join(', ') if entry.factions else '—' }}</td>
+            <td>{{ entry.last_reprisal_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No reprisals recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
       <h2>Recent System Events</h2>
       <table>
         <thead>

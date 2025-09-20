@@ -76,11 +76,18 @@ class ScholarRepository:
             )
             for fact in data.get("facts", [])
         ]
+        feelings_data = data.get("feelings", {})
+        if isinstance(feelings_data, dict) and "players" in feelings_data:
+            feelings = feelings_data.get("players", {})
+            decay = feelings_data.get("decay", 0.98)
+        else:
+            feelings = feelings_data if isinstance(feelings_data, dict) else {}
+            decay = data.get("decay", 0.98)
         memory = Memory(
             facts=facts,
-            feelings=data.get("feelings", {}).get("players", {}),
+            feelings=feelings,
             scars=list(data.get("scars", [])),
-            decay=data.get("feelings", {}).get("decay", 0.98),
+            decay=decay,
         )
         return memory
 

@@ -8,13 +8,14 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ### Current State
 - All slash commands flow through `track_command`, emitting command usage with player, guild, channel, duration, and success tags (`great_work/telemetry_decorator.py:12`).
-- LLM activity, system pause/resume events, queue-depth sampling, and player-state snapshots are recorded in `telemetry.db` and surfaced via `/telemetry_report` (`great_work/discord_bot.py:786`, `great_work/telemetry.py:520`).
+- LLM activity, system pause/resume events, queue-depth sampling, symposium scoring/debt telemetry, and player-state snapshots are recorded in `telemetry.db` and surfaced via `/telemetry_report` and the FastAPI dashboard (`great_work/telemetry.py:520`, `great_work/telemetry.py:788`, `ops/telemetry-dashboard/app.py:1`).
 - Requirements still call for engagement funnels and explicit success criteria tracking (`docs/requirements_evaluation.md:157`).
 
 ### Objectives
 1. Provide on-demand dashboards (Discord command + bundled HTML dashboard) covering:
    - Layered press production and release cadence (by type, scheduled vs immediate).
    - Engagement metrics: unique players per digest, symposium participation, table-talk volume.
+   - Symposium backlog health: proposal scoring weights, outstanding debt totals, reprisal counts.
    - Health signals: digest duration, LLM latency distribution, pause frequency.
 2. Define success metrics aligned with product goals (e.g., % public vs ephemeral replies, avg time from press schedule to release).
 3. Establish alert thresholds for pause duration, command error spikes, and archive export failures.
@@ -24,13 +25,18 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
   - Queue depth snapshots are emitted directly via `track_queue_depth`; continue enriching layered press counts (ingest from `press_scheduled` events and scheduled queue releases).
   - Record digest runtime via a `track_performance` call wrapping `advance_digest` and `resolve_pending_expeditions`.
 - **Reporting surfaces:**
-  - Extend `/telemetry_report` with new sections (layered press, engagement, digest health) and paginate when output exceeds Discord limits.
-  - Ship a lightweight FastAPI/Jinja dashboard inside the ops container to visualise historical metrics directly from `telemetry.db`.
+  - Extend `/telemetry_report` with new sections (layered press, engagement, digest health, symposium scoring/debt) and paginate when output exceeds Discord limits.
+  - Ship a lightweight FastAPI/Jinja dashboard inside the ops container to visualise historical metrics directly from `telemetry.db`, including symposium scoring tables, debt snapshots, and reprisal logs.
 - **Alerting:**
   - Configurable thresholds exposed via environment variables (`GREAT_WORK_ALERT_MAX_DIGEST_MS`, `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`). When breached, enqueue admin notifications and log system events.
 - **Operator notes:**
   - `/telemetry_report` now prints queue depth averages/maxima alongside the active thresholds, giving moderators a quick read on backlog health.
   - Queue depth snapshots are sampled when upcoming highlights are generated (default horizon 48h); adjust horizon via `GREAT_WORK_CHANNEL_UPCOMING` settings if cadence changes.
+  - Symposium sections list the highest-scored proposals (player, score, age) plus outstanding debt holders and any reprisals in the past 24 hours. Runbook:
+    1. If backlog scoring is dominated by one player for multiple cycles, review scoring weights (/symposium_backlog) and consider manual curation.
+    2. When a player’s debt exceeds the reprisal threshold for more than one digest, confirm a reprisal fired and ping moderators to nudge repayment.
+    3. Three or more reprisals in a 24h window should prompt a moderation follow-up and potentially manual influence adjustments.
+  - `/symposium_backlog` mirrors the dashboard ranking for ad-hoc Discord checks.
 
 ### Decision Points
 1. **Dashboard medium:** ✅ Use Discord `/telemetry_report` plus the bundled FastAPI/Jinja dashboard container for richer historical slices.
@@ -112,7 +118,7 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 ## Next Steps & Approvals
 
 1. Finalise success-metric thresholds (pause duration, engagement targets) for alerting defaults.
-2. Document dashboard container configuration presets (port mappings, sample compose entry) for operators.
+2. Document dashboard container configuration presets (port mappings, sample compose entry) for operators and include guidance on interpreting symposium scoring/debt widgets and reprisal thresholds.
 3. Confirm naming conventions for the opt-in upcoming-highlights channel and integrate into onboarding docs.
 
 With hosting, dashboard medium, and cadence cadence decisions set, we can proceed into implementation planning for Phase 3 polish.

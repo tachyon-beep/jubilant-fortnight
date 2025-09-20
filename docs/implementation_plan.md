@@ -78,8 +78,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 - Tests cover effect mapping and integration.
 
 ## 5. Symposium Implementation – **Complete / Enhancement backlog**
-- Weekly symposium scheduler launches topics, players vote via `/symposium_vote`, results resolve through `resolve_symposium()`.
-- **Enhancement:** replace static topic list with player-proposed topics and richer digest summaries.【F:great_work/scheduler.py†L52-L86】
+- Weekly symposium scheduler launches topics drawn from `/symposium_propose` submissions, prunes expired entries, enforces per-player backlog caps, scores proposals for freshness/diversity before selection, spins up pledge records for every player, surfaces pledge/grace state through reminders plus `/symposium_status`, `/symposium_backlog`, and telemetry dashboards, and now carries unpaid influence forward as symposium debt before escalating to reprisals; legacy prompts only fire when the curated backlog is empty.【F:great_work/service.py†L2094-L2700】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L640-L780】
+- **Enhancement:** expose backlog scoring insights to players, enrich long-form symposium wrap-ups once penalties resolve, and design faction-level reprisals/interest for chronic absences.
 
 ## 6. Admin Tools and Moderation – **Complete**
 - `/gw_admin` group exposes reputation/influence adjustments, forced defection, and expedition cancellation with audit press.
