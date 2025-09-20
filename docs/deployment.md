@@ -24,6 +24,17 @@ GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS=4000    # alert if average LLM latency excee
 GREAT_WORK_ALERT_LLM_FAILURE_RATE=0.25      # alert if LLM failures exceed 25%
 GREAT_WORK_ALERT_MAX_ORDER_PENDING=6        # alert if dispatcher backlog exceeds 6 orders
 GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS=8      # alert if any pending order ages past 8h
+# Optional outbound routing (leave blank to disable)
+# GREAT_WORK_ALERT_WEBHOOK_URL=
+# GREAT_WORK_ALERT_COOLDOWN_SECONDS=300
+# GREAT_WORK_ALERT_MUTED_EVENTS=
+# GREAT_WORK_ALERT_EMAIL_HOST=
+# GREAT_WORK_ALERT_EMAIL_PORT=587
+# GREAT_WORK_ALERT_EMAIL_USERNAME=
+# GREAT_WORK_ALERT_EMAIL_PASSWORD=
+# GREAT_WORK_ALERT_EMAIL_FROM=
+# GREAT_WORK_ALERT_EMAIL_TO=
+# GREAT_WORK_ALERT_EMAIL_STARTTLS=true
 
 # Narrative Tone (optional)
 GREAT_WORK_PRESS_SETTING=post_cyberpunk_collapse  # or high_fantasy, renaissance_europe_1400s
@@ -115,9 +126,11 @@ Update the environment variables to tune when alerts trigger, and capture any op
 - For a managed host, point `GREAT_WORK_ARCHIVE_PAGES_DIR` at a local clone of your GitHub Pages branch (for example, `gh-pages`). The scheduler mirrors each digest export into `<repo>/<GREAT_WORK_ARCHIVE_PAGES_SUBDIR>` (default `archive/`), drops a `.nojekyll` marker, and emits telemetry on success/failure. Commit and push the branch to publish.
 - Set `GREAT_WORK_ARCHIVE_BASE_URL` to match the public path (e.g., `/my-org/great-work/archive`) so generated permalinks resolve correctly on Pages.
 - Snapshots are now monitored via `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`; when the total ZIP size exceeds the limit the scheduler notifies the admin channel and records telemetry.
+- Configure `GREAT_WORK_ALERT_WEBHOOK_URL` and optional email settings (`GREAT_WORK_ALERT_EMAIL_*`) so guardrail hits reach your operations channels even when no one is watching Discord; leave them blank to rely on console logs only. For local smoke tests you can run `python -m great_work.tools.simple_alert_webhook --port 8085` and target `http://localhost:8085` to inspect payloads.
 - Refer to `docs/internal/ARCHIVE_OPERATIONS.md` for recovery steps, GitHub Pages workflow details, and manual export instructions.
 - Optional: enable the `Publish Archive to Pages` GitHub Action to auto-commit/push updates. Seed the `gh-pages` branch once, then run the workflow (push-trigger or manual dispatch) whenever `web_archive_public/` contains fresh exports.
 - `settings.yaml` also exposes `archive_publishing.github_pages` defaults so deployments can enable/disable Pages mirroring without environment overrides.
+- Configure `GREAT_WORK_ALERT_WEBHOOK_URL` plus cooldown/muting (and optional email) variables to forward guardrail hits to the operations webhook of your choice (Discord/Slack/etc.). When unset, alerts log to the bot console only.
 
 ## 5. Local LLM Persona Stack
 

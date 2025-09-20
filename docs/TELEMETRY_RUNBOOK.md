@@ -36,6 +36,20 @@ export GREAT_WORK_ALERT_MAX_QUEUE=8
 
 All thresholds are evaluated as warnings at 75 % of the configured value before escalating to alerts.
 
+### Alert Routing
+
+Set `GREAT_WORK_ALERT_WEBHOOK_URL` to forward guardrail breaches to an external destination (Discord webhook, Slack incoming URL, PagerDuty relay, etc.). Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP in addition to any webhook configured.
+
+Events emitted through `TelemetryCollector.track_system_event` using the `alert_` prefix—including dispatcher backlog warnings, health-check failures, and symposium reprisal spikes—automatically route through the webhook once their cooldown expires.
+
+For local testing or demos run the bundled webhook receiver:
+
+```bash
+python -m great_work.tools.simple_alert_webhook --port 8085
+```
+
+Then point `GREAT_WORK_ALERT_WEBHOOK_URL` at `http://localhost:8085` to see alert payloads logged to the console.
+
 ## Economy & Long-Tail Signals
 
 The telemetry report now includes:
@@ -72,6 +86,7 @@ If investments concentrate on one player, consider introducing temporary incenti
 - `archive_publish_pages_failed` indicates the mirror step hit an exception (usually permissions or an uninitialised Pages directory); check the admin channel alert and repair the working tree.
 - `archive_snapshot_usage` tracks rolling snapshot disk usage. When `archive_snapshot_usage_exceeded` fires, prune `web_archive/snapshots/` or offload older ZIPs before repeated digests fail.
 - Review the Git working tree under `GREAT_WORK_ARCHIVE_PAGES_DIR` after a failure; partially synced content should be committed/pushed only after validation.
+- The telemetry dashboard now exposes dispatcher backlog filters and CSV export—use the controls above the table to select the order type, time window, and download the latest events for moderation review.
 
 ## Quick Reference
 
@@ -82,5 +97,6 @@ If investments concentrate on one player, consider introducing temporary incenti
 | Cancel stuck order | `/gw_admin cancel_order order_id:<id>` |
 | Pause game due to alerts | `/gw_admin pause_game reason:"telemetry alert"` |
 | Resume after fix | `/gw_admin resume_game` |
+| Export dispatcher backlog CSV | Dashboard → Dispatcher Backlog → Export |
 
 Keep this runbook with the other ops docs so every on-call operator understands the guardrails and remediation steps.

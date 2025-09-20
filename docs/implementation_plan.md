@@ -138,7 +138,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 5. **Telemetry Expansion** – ⚠️ Partial
    - Decorator shares the bot's `GameService`, emitting command usage with player context, channel metrics, LLM latency/failure telemetry, layered-press cadence, digest health, queue depth, and the new symposium/economy guardrails.
-   - `/telemetry_report` highlights health checks, symposium scoring/debt, and long-tail economy summaries; the `docs/TELEMETRY_RUNBOOK.md` runbook documents remediation steps. Remaining work: external alert routing, richer dispatcher dashboards, and product-facing KPIs.
+   - `/telemetry_report` highlights health checks, symposium scoring/debt, and long-tail economy summaries; alerts now route through the configured webhook with cooldowns, and the dashboard adds dispatcher filters plus CSV export. Remaining work: product-facing KPIs and wiring alerts into the broader ops tooling.
 
 6. **Archive Automation & Docs** – ✅ Complete
    - Digest scheduler now exports the web archive automatically, syncs the output into the containerised static host, mirrors the build into a configured GitHub Pages repository (dropping `.nojekyll`), posts a timestamped ZIP to the admin channel, prunes old snapshots, and alerts when snapshot storage crosses configurable thresholds. Operator guides describe the Pages workflow and storage runbook.
@@ -177,5 +177,5 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 1. Use the new guardrails to collect telemetry on seasonal commitments, faction projects, investments, and archive endowments; feed real-world observations back into the runbook and dashboard tuning ahead of 1.0 playtests.
 2. Design the next tier of influence sinks (faction investments, archival endowments) and tie symposium debt escalations into those systems.
-3. Finalise telemetry/ops guardrails: external alert routing, dispatcher backlog exports, and moderator dashboards with filtering/search.
+3. Finalise telemetry/ops guardrails: layer in product KPIs, integrate alert webhooks with the on-call tooling, and extend dispatcher dashboards with historical comparisons.
 4. Integrate the GitHub Pages mirror with a lightweight CI/publish routine and expand deployment notes for tone/LLM safety configuration.

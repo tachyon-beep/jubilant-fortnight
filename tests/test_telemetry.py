@@ -5,6 +5,7 @@ import time
 import json
 from pathlib import Path
 
+from great_work.alerting import AlertRouter, set_alert_router
 from great_work.telemetry import (
     MetricType,
     MetricEvent,
@@ -217,6 +218,137 @@ def test_track_order_snapshot_and_summary():
         assert stats["latest_oldest_seconds"] == 1800.0
         assert "conference_resolution" in summary
         assert summary["conference_resolution"]["latest_pending"] == 1.0
+
+
+def test_get_order_backlog_events_filters_and_limits():
+    """Raw dispatcher backlog events should support filtering and limits."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "orders.db")
+
+        # Simulate interleaved order events
+        for pending in (3, 2, 1):
+            collector.track_order_snapshot(
+                order_type="mentorship_activation",
+                event="poll",
+                pending_count=pending,
+                oldest_pending_seconds=3600.0 * pending,
+            )
+        collector.track_order_snapshot(
+            order_type="conference_resolution",
+            event="poll",
+            pending_count=5,
+            oldest_pending_seconds=900.0,
+        )
+        collector.flush()
+
+        records = collector.get_order_backlog_events(order_type="mentorship_activation", hours=1, limit=5)
+        assert records
+        assert all(record["order_type"] == "mentorship_activation" for record in records)
+        assert records[0]["pending"] == 1.0  # latest entry first
+
+        limited = collector.get_order_backlog_events(hours=1, limit=2)
+        assert len(limited) == 2
+
+
+def test_track_system_event_alert_routing(monkeypatch):
+    """Alert-prefixed system events trigger the alert router with cooldown handling."""
+    monkeypatch.setenv("GREAT_WORK_ALERT_COOLDOWN_SECONDS", "60")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "alerts.db")
+
+        calls = []
+
+        class DummyRouter:
+            def notify(self, **kwargs):
+                calls.append(kwargs)
+                return True
+
+        set_alert_router(DummyRouter())
+        try:
+            collector.track_system_event(
+                "alert_dispatcher_pending",
+                source="dispatcher",
+                reason="Pending orders exceeded threshold",
+            )
+            # Second emit within cooldown should not trigger router
+            collector.track_system_event(
+                "alert_dispatcher_pending",
+                source="dispatcher",
+                reason="Pending still high",
+            )
+            assert len(calls) == 1
+
+            # Expire cooldown manually and emit again
+            collector._alert_history["alert_dispatcher_pending"] = time.time() - 120
+            collector.track_system_event(
+                "alert_dispatcher_pending",
+                source="dispatcher",
+                reason="Pending recovered",
+            )
+            assert len(calls) == 2
+            assert calls[0]["severity"] == "warning"
+        finally:
+            set_alert_router(None)
+
+
+def test_alert_router_email_delivery(monkeypatch):
+    """Alert router should deliver email notifications when SMTP config is present."""
+
+    sent_messages = []
+
+    class DummySMTP:
+        started_tls = False
+        logged_in = False
+
+        def __init__(self, host, port, timeout=None):
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+
+        def starttls(self):
+            DummySMTP.started_tls = True
+
+        def login(self, username, password):
+            DummySMTP.logged_in = True
+
+        def send_message(self, message):
+            sent_messages.append(message)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("smtplib.SMTP", DummySMTP)
+
+    router = AlertRouter(
+        email_host="smtp.example.com",
+        email_port=587,
+        email_username="user",
+        email_password="pass",
+        email_from="alerts@example.com",
+        email_recipients=["ops@example.com"],
+        email_use_tls=True,
+    )
+
+    routed = router.notify(
+        event="alert_test_event",
+        message="Test alert",
+        severity="critical",
+        source="unit-test",
+        metadata={"foo": "bar"},
+    )
+
+    assert routed is True
+    assert sent_messages, "Expected email to be sent"
+    email = sent_messages[0]
+    assert "alert_test_event" in email["Subject"]
+    assert "alerts@example.com" == email["From"]
+    assert "ops@example.com" in email["To"]
+    assert DummySMTP.started_tls is True
+    assert DummySMTP.logged_in is True
 
 
 def test_digest_summary():

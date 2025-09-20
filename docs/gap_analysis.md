@@ -85,5 +85,5 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 1. Seasonal commitments, faction projects, faction investments, and archive endowments now anchor long-tail pressure; next quantify balance via telemetry (alert thresholds, dashboards) and decide how relationship deltas unlock additional late-game content.
 2. Validate new faction investment/endowment knobs against live telemetry so late-game influence pressure stays meaningful without overwhelming players; fold findings into the economy playbook.
 3. Symposium scoring now surfaces weighting math and reprisal cadence; keep tuning heuristics with the new telemetry guardrails and iterate on the published runbook as playtests surface edge cases.【F:docs/TELEMETRY_RUNBOOK.md†L1-L120】
-4. Telemetry guardrails and the runbook are in place, but we still need external alert routing and richer moderator dashboards (filters/search, CSV export) before live pilots.
+4. Telemetry guardrails now emit webhook alerts and the dashboard exposes dispatcher filters + CSV export; remaining follow-up is product-facing KPIs and tying alerts into broader ops tooling before pilots.
 5. Static archives now auto-export, mirror into GitHub Pages, prune old snapshots, and alert operators when disk usage crosses the configured threshold.

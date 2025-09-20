@@ -116,7 +116,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Partially Implemented | 1 | 25% |
 | Not Implemented | 2 | 50% |
 
-**Notes:** Scheduler-based maintenance exists with pause/resume automation, configurable retry schedules, and admin notifications; telemetry guardrails and the published runbook now surface symposium debt, investment concentration, queue depth, and digest health for on-call operators. Remaining gaps: LLM batching/length controls and automated external alert routing so ops are paged without checking Discord manually.【F:great_work/scheduler.py†L20-L180】【F:great_work/service.py†L90-L320】【F:great_work/telemetry.py†L920-L1330】【F:docs/TELEMETRY_RUNBOOK.md†L1-L120】
+**Notes:** Scheduler-based maintenance exists with pause/resume automation, configurable retry schedules, admin notifications, and webhook-driven alert routing; telemetry guardrails plus the runbook surface symposium debt, investment concentration, queue depth, and digest health for on-call operators. Remaining gaps: LLM batching/length controls and deeper integration of the alerts with product-facing tooling.【F:great_work/scheduler.py†L20-L180】【F:great_work/service.py†L90-L320】【F:great_work/telemetry.py†L920-L1330】【F:docs/TELEMETRY_RUNBOOK.md†L1-L140】
 
 ### Licensing and Safety (5 requirements)
 

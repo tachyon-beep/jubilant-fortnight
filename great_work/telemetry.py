@@ -13,6 +13,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .alerting import get_alert_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,6 +93,10 @@ class TelemetryCollector:
         self._metrics_buffer: List[MetricEvent] = []
         self._flush_interval = 60  # Flush to DB every 60 seconds
         self._last_flush = time.time()
+        self._alert_history: Dict[str, float] = {}
+        self._alert_cooldown_seconds = float(
+            os.getenv("GREAT_WORK_ALERT_COOLDOWN_SECONDS", "300") or 300
+        )
 
     def _init_database(self):
         """Initialize telemetry database schema."""
@@ -116,6 +122,29 @@ class TelemetryCollector:
                 ON metrics(metric_type, name)
             """)
             conn.commit()
+
+    def _should_emit_alert(self, event: str) -> bool:
+        """Return True if the alert should be emitted based on cooldown history."""
+
+        if self._alert_cooldown_seconds <= 0:
+            return True
+        now = time.time()
+        last = self._alert_history.get(event, 0.0)
+        if now - last >= self._alert_cooldown_seconds:
+            self._alert_history[event] = now
+            return True
+        return False
+
+    @staticmethod
+    def _infer_alert_severity(event: str) -> str:
+        """Infer severity level from an alert event name."""
+
+        critical_suffixes = ("_failed", "_stale", "_pauses", "_halted")
+        if any(event.endswith(suffix) for suffix in critical_suffixes):
+            return "critical"
+        if "health_" in event:
+            return "critical"
+        return "warning"
 
     def track_command(
         self,
@@ -272,13 +301,20 @@ class TelemetryCollector:
     ) -> None:
         """Record internal pause/resume or health events."""
 
-        tags = {}
+        tags: Dict[str, str] = {}
         if source:
             tags["source"] = source
 
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         if reason:
             metadata["reason"] = reason
+
+        should_alert = False
+        severity = "warning"
+        if event.startswith("alert_"):
+            if self._should_emit_alert(event):
+                should_alert = True
+                severity = self._infer_alert_severity(event)
 
         self.record(
             MetricType.SYSTEM_EVENT,
@@ -287,6 +323,18 @@ class TelemetryCollector:
             tags=tags,
             metadata=metadata,
         )
+
+        if should_alert:
+            message = reason or event.replace("_", " ")
+            alert_metadata = metadata.copy()
+            alert_metadata.update(tags)
+            get_alert_router().notify(
+                event=event,
+                message=message,
+                severity=severity,
+                source=source,
+                metadata=alert_metadata or None,
+            )
 
     def track_press_layer(
         self,
@@ -969,6 +1017,53 @@ class TelemetryCollector:
 
         return summary
 
+    def get_order_backlog_events(
+        self,
+        *,
+        order_type: Optional[str] = None,
+        hours: int = 24,
+        limit: int = 250,
+    ) -> List[Dict[str, Any]]:
+        """Return raw dispatcher backlog events for filtering/export."""
+
+        start_time = time.time() - (hours * 3600)
+        params: List[Any] = [MetricType.ORDER_STATE.value, start_time]
+        where_clause = ""
+        if order_type:
+            where_clause = " AND name = ?"
+            params.append(order_type)
+
+        query = f"""
+            SELECT
+                name,
+                value,
+                json_extract(metadata, '$.oldest_pending_seconds') as oldest_seconds,
+                json_extract(tags, '$.event') as event,
+                timestamp
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?{where_clause}
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        records: List[Dict[str, Any]] = []
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, params)
+            for row in cursor.fetchall():
+                records.append(
+                    {
+                        "order_type": row[0],
+                        "pending": float(row[1] or 0.0),
+                        "oldest_pending_seconds": (
+                            float(row[2]) if row[2] is not None else None
+                        ),
+                        "event": row[3] or "",
+                        "timestamp": datetime.fromtimestamp(row[4]).isoformat(),
+                    }
+                )
+        return records
+
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
         report = {
@@ -1053,6 +1148,13 @@ class TelemetryCollector:
                     "window": window,
                 }
             )
+            if status == "alert":
+                alert_event = f"alert_health_{metric}"
+                self.track_system_event(
+                    alert_event,
+                    source="health_check",
+                    reason=detail,
+                )
 
         if digest_stats.get("total_digests", 0) > 0:
             max_runtime = digest_stats.get("max_duration_ms") or 0.0

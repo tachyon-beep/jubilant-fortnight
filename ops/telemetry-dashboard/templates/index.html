@@ -12,6 +12,13 @@
       tr:nth-child(even) { background: #111827; }
       .meta { font-size: 0.9rem; color: #cbd5f5; margin-bottom: 2rem; }
       .section { margin-bottom: 3rem; }
+      .filter-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+      .filter-bar label { font-size: 0.9rem; }
+      .filter-bar select { padding: 0.25rem 0.5rem; background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; }
+      .filter-bar button { padding: 0.35rem 0.75rem; background: #38bdf8; color: #0f172a; border: none; cursor: pointer; border-radius: 4px; }
+      .filter-bar button:hover { background: #0ea5e9; }
+      .filter-bar a { color: #f8fafc; text-decoration: none; font-size: 0.9rem; }
+      .filter-bar a:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
@@ -149,6 +156,32 @@
 
     <div class="section">
       <h2>Dispatcher Backlog</h2>
+      <div class="filter-bar">
+        <label>Order Type
+          <select id="order-filter">
+            <option value="">All</option>
+            {% for order_type in order_types %}
+            <option value="{{ order_type }}">{{ order_type.replace('_', ' ') }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Window
+          <select id="order-window">
+            {% for window in [6, 12, 24, 48, 72, 168] %}
+            <option value="{{ window }}" {% if window == 24 %}selected{% endif %}>{{ window }}h</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Limit
+          <select id="order-limit">
+            {% for cap in [50, 100, 250, 500, 1000] %}
+            <option value="{{ cap }}" {% if cap == 250 %}selected{% endif %}>{{ cap }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button id="order-refresh" type="button">Refresh</button>
+        <a id="order-export" href="#" download="order_backlog.csv">Export CSV</a>
+      </div>
       <table>
         <thead>
           <tr>
@@ -169,6 +202,22 @@
           {% else %}
           <tr><td colspan="4">No dispatcher activity recorded in the last 24 hours.</td></tr>
           {% endfor %}
+        </tbody>
+      </table>
+
+      <h3>Recent Events</h3>
+      <table id="order-records-table">
+        <thead>
+          <tr>
+            <th>Order Type</th>
+            <th>Pending</th>
+            <th>Oldest Pending Age</th>
+            <th>Event</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="order-records-body">
+          <tr><td colspan="5">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -320,5 +369,80 @@
         </tbody>
       </table>
     </div>
+    <script>
+      function formatOldest(seconds) {
+        if (seconds === null || seconds === undefined || seconds === "") {
+          return "—";
+        }
+        const value = Number(seconds);
+        if (Number.isNaN(value)) {
+          return "—";
+        }
+        if (value >= 3600) {
+          return `${(value / 3600).toFixed(1)} h`;
+        }
+        if (value >= 60) {
+          return `${(value / 60).toFixed(0)} m`;
+        }
+        return `${value.toFixed(0)} s`;
+      }
+
+      function refreshOrderRecords() {
+        const orderSelect = document.getElementById("order-filter");
+        const windowSelect = document.getElementById("order-window");
+        const limitSelect = document.getElementById("order-limit");
+        const params = new URLSearchParams({
+          hours: windowSelect.value,
+          limit: limitSelect.value,
+        });
+        if (orderSelect.value) {
+          params.append("order_type", orderSelect.value);
+        }
+
+        fetch(`/api/orders?${params.toString()}`)
+          .then((response) => response.json())
+          .then((payload) => {
+            const tbody = document.getElementById("order-records-body");
+            tbody.innerHTML = "";
+            if (!payload.records || payload.records.length === 0) {
+              const row = document.createElement("tr");
+              const cell = document.createElement("td");
+              cell.colSpan = 5;
+              cell.textContent = "No backlog events in the selected window.";
+              row.appendChild(cell);
+              tbody.appendChild(row);
+            } else {
+              payload.records.forEach((record) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                  <td>${record.order_type.replace(/_/g, " ")}</td>
+                  <td>${Number(record.pending).toFixed(0)}</td>
+                  <td>${formatOldest(record.oldest_pending_seconds)}</td>
+                  <td>${(record.event || "").replace(/_/g, " ")}</td>
+                  <td>${record.timestamp}</td>
+                `;
+                tbody.appendChild(row);
+              });
+            }
+
+            const exportLink = document.getElementById("order-export");
+            exportLink.href = `/api/orders.csv?${params.toString()}`;
+          })
+          .catch((error) => {
+            console.error("Failed to load dispatcher backlog records", error);
+            const tbody = document.getElementById("order-records-body");
+            tbody.innerHTML = "";
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 5;
+            cell.textContent = "Failed to load dispatcher backlog records.";
+            row.appendChild(cell);
+            tbody.appendChild(row);
+          });
+      }
+
+      document.getElementById("order-refresh").addEventListener("click", refreshOrderRecords);
+      document.addEventListener("DOMContentLoaded", refreshOrderRecords);
+    </script>
   </body>
 </html>
