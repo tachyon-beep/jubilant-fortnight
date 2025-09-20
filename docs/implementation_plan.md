@@ -38,7 +38,7 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 
 ### Phase 3 – Polish & Narrative ⚠️ In Progress
 - LLM persona voice integration ⚠️ core expedition/defection/symposium/admin flows enhanced and theory/table-talk surfaces now route through the LLM enhancer; next broaden blocklists/guard-LLM safety and codify operator guidance.
-- Multi-layer press rollout ⚠️ layered coverage spans expeditions/defections/symposium/admin/mentorship flows with digest highlight blurbs and opt-in upcoming channels; next broaden template variety, add recruitment/table-talk follow-ups, and document cadence presets for operators.
+- Multi-layer press rollout ⚠️ layered coverage spans expeditions/defections/symposium/admin/mentorship flows with digest highlight blurbs and opt-in upcoming channels; recruitment and table-talk now gain staged follow-ups, with remaining work focused on mentorship/sidecast long-form variety and operator cadence presets.
 - Telemetry coverage & dashboards ⚠️ all slash commands emit telemetry alongside layered-press/digest metrics and queue depth; define alert thresholds, retention windows, dispatcher instrumentation, and operator escalation guidance.
 - Archive publishing automation ⚠️ scheduler exports the archive, syncs it to the container-served static host, prunes snapshots, and posts ZIP snapshots to the admin channel; document external hosting extensions and hardening guidance.
 - Documentation pass for deployment/config ⚠️ pending.

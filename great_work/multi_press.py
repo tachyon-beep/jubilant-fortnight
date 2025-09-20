@@ -57,11 +57,33 @@ def recruitment_followup(context: Dict[str, Any]) -> PressRelease:
     )
 
 
+def recruitment_brief(context: Dict[str, Any]) -> PressRelease:
+    """Generate a faction briefing about recruitment outcomes."""
+
+    return PressRelease(
+        type=context.get("type", "recruitment_brief"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
 def table_talk_digest(context: Dict[str, Any]) -> PressRelease:
     """Generate a digest summarising table-talk reactions."""
 
     return PressRelease(
         type=context.get("type", "table_talk_digest"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def table_talk_roundup(context: Dict[str, Any]) -> PressRelease:
+    """Generate a roundup of table-talk whispers."""
+
+    return PressRelease(
+        type=context.get("type", "table_talk_roundup"),
         headline=context["headline"],
         body=context["body"],
         metadata=context.get("metadata", {}),
@@ -585,7 +607,7 @@ class MultiPressGenerator:
         random.shuffle(audience)
         reactions: List[Dict[str, str]] = []
 
-        for delay, observer in zip(safe_fast, audience[:3]):
+        for delay, observer in zip(safe_fast, audience[:4]):
             quote = self._generate_recruitment_quote(
                 commentator=observer.name,
                 scholar_name=scholar.name,
@@ -646,6 +668,44 @@ class MultiPressGenerator:
                 )
             )
 
+            faction_headline = f"Faction Briefing: {faction.capitalize()} eyes {scholar.name}"
+            briefing_body = (
+                f"Internal memos recap the approach to {scholar.name}.\n"
+                f"Chance: {chance:.0%}. Outcome: {'success' if success else 'failure'}."
+            )
+            briefing_body += "\nKey Reactions:" if reactions else ""
+            for item in reactions[:2]:
+                briefing_body += f"\n- {item['scholar']}: {item['quote']}"
+            briefing_metadata = {
+                "scholar": scholar.id,
+                "player": player,
+                "success": success,
+                "chance": chance,
+                "faction": faction,
+                "reactions": reactions,
+                "briefing": True,
+            }
+            briefing_ctx = {
+                "headline": faction_headline,
+                "body": briefing_body,
+                "metadata": briefing_metadata,
+                "persona": faction.capitalize(),
+                "type": "recruitment_brief",
+            }
+            if len(safe_long) > 1:
+                delay_minutes = safe_long[1]
+            else:
+                delay_minutes = safe_long[0] + 120
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay_minutes,
+                    type="recruitment_brief",
+                    generator=recruitment_brief,
+                    context=briefing_ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
         return layers
 
     def generate_table_talk_layers(
@@ -665,8 +725,7 @@ class MultiPressGenerator:
         audience = scholars[:]
         random.shuffle(audience)
         reactions: List[Dict[str, str]] = []
-
-        for delay, observer in zip(safe_fast, audience[:3]):
+        for delay, observer in zip(safe_fast, audience[:4]):
             quote = self._generate_table_talk_reaction(
                 commentator=observer.name,
                 speaker=speaker,
@@ -715,6 +774,33 @@ class MultiPressGenerator:
                     type="table_talk_digest",
                     generator=table_talk_digest,
                     context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+            roundup_body = "Whispers across the faculty warren:"\
+                + "\n" + "\n".join(
+                    f"• {item['scholar']}: {item['quote']}" for item in reactions[:4]
+                )
+            roundup_ctx = {
+                "headline": f"Commons Roundup — Re: {speaker}",
+                "body": roundup_body,
+                "metadata": {
+                    "speaker": speaker,
+                    "message": snippet,
+                    "reactions": reactions,
+                    "type": "roundup",
+                },
+                "persona": "Commons Bulletin",
+                "type": "table_talk_roundup",
+            }
+            delay_minutes = safe_long[1] if len(safe_long) > 1 else safe_long[0] + 60
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay_minutes,
+                    type="table_talk_roundup",
+                    generator=table_talk_roundup,
+                    context=roundup_ctx,
                     tone_seed=tone_seed,
                 )
             )

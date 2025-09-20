@@ -54,4 +54,27 @@ def test_recruitment_odds_sorted_by_chance() -> None:
         scholar_id = _first_scholar_id(service)
         odds = service.recruitment_odds("p1", scholar_id)
         chances = [entry["chance"] for entry in odds]
-        assert chances == sorted(chances, reverse=True)
+    assert chances == sorted(chances, reverse=True)
+
+
+def test_recruitment_layers_schedule_followups() -> None:
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = GameService(db_path)
+        service.ensure_player("p1", "Player One")
+        scholar_id = _first_scholar_id(service)
+        scholar = service.state.get_scholar(scholar_id)
+        assert scholar is not None
+
+        success, _ = service.attempt_recruitment(
+            player_id="p1",
+            scholar_id=scholar.id,
+            faction="academia",
+            base_chance=1.0,
+        )
+        assert success
+        queued = service.state.list_queued_press()
+        types = {payload["type"] for _, _, payload in queued}
+        assert "recruitment_followup" in types
+        assert "recruitment_brief" in types

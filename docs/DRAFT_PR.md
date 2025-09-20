@@ -9,6 +9,7 @@
 - Created press tone system with customizable personality packs
 - Extended press templates to all major game events
 - Added contract upkeep influence sink with automated debt tracking and reprisals
+- Expanded layered press for recruitment and table-talk, including faction briefings and commons roundups
 
 ### 2. Telemetry & Monitoring System
 - Built comprehensive telemetry system with channel metrics and event tracking
@@ -47,7 +48,7 @@
 - Added tests for scheduler, table talk, and service highlights
 - Updated all tests to support channel_id parameters
 - Verified multi-layer press scheduling and release mechanisms
-- Added recruitment odds and contract upkeep regression tests
+- Added recruitment odds, contract upkeep, and layered-press regression tests
 
 ## Infrastructure & DevOps
 - Docker Compose configuration for telemetry dashboard

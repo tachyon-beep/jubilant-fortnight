@@ -82,8 +82,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 
 ## Summary of Major Gaps
 
-1. Recruitment/table-talk flows still publish single-beat coverage and layered templates remain thin for long mentorship arcs and sideways discoveries, limiting the narrative variety called for in the design.
-2. Influence sinks remain limited to expeditions and poaching, leaving symposium commitments and longer-term obligations unimplemented.
-3. Symposium proposals are player-driven with automated expiries, scoring heuristics, and pledge penalties/debt carryover; remaining work is sharper economic escalation (faction reprisals, interest) and transparent backlog curation reports before launch.
-4. Telemetry dashboards and `/telemetry_report` now surface queue depth and digest health, but success KPI thresholds, escalation routing, and dispatcher instrumentation still need to be defined and documented for operators.
+1. Recruitment and table-talk now produce layered follow-ups; remaining narrative work is expanding mentorship/sidecast arcs and sideways discovery variety to match the rest of the design cadence.
+2. Symposium pledges and contract upkeep drain influence, but longer-term commitments (seasonal projects, faction contracts) are still pending to keep the economy pressure steady.
+3. Symposium proposals are player-driven with automated expiries, scoring heuristics, and pledge penalties/debt carryover; remaining work is sharper economic escalation (interest, faction projects) and transparent backlog curation reports before launch.
+4. Telemetry dashboards and `/telemetry_report` surface queue depth, scoring, and debt metrics, but success KPI thresholds, escalation routing, and dispatcher instrumentation still need to be defined and documented for operators.
 5. Static archives auto-export, sync to the container host, and prune snapshots; external hosting adapters and production monitoring guidance for the nginx container remain outstanding.

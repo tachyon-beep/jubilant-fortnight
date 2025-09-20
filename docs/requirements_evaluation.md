@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; digest highlights summarise pending drops, symposium reminders plus `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals, yet recruitment/table-talk coverage remains single-beat and sideways templates stay hand-authored.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L220-L2700】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L640-L780】【F:great_work/multi_press.py†L180-L520】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; digest highlights summarise pending drops, symposium reminders plus `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Remaining narrative work focuses on mentorship sidecasts and sideways discovery variety.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L220-L3525】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L317-L820】【F:great_work/multi_press.py†L520-L820】
 
 ### Discord UX and Commands (10 requirements)
 
