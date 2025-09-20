@@ -1,6 +1,22 @@
-# Sprint2 Branch - Comprehensive Change List for Pull Request
+# Sprint 2 — Comprehensive Change List for Pull Request
+
+## TL;DR
+
+- Consolidates the multi-layer press system, dispatcher, telemetry dashboard, and long-tail
+  economy (investments, archive endowments, seasonal commitments, faction projects).
+- Adds Guardian moderation guardrails, archive export + snapshots, and admin tools for
+  dispatcher visibility and intervention.
+- Docs for post-1.0 ideas were moved under `docs/post_1_0/`; the 1.0 PR focuses on core
+  gameplay, transparency, and observability.
+
+Scope is sized for playtests and operational trial; guardrails and runbooks included.
 
 ## Major Features & Enhancements
+
+### 0. Moderation & Safety Guardrails
+
+- Integrated Guardian moderation for player inputs and generated press copy
+- Added safety runbook notes and configuration toggles
 
 ### 1. Multi-Layer Press System & Narrative Enhancements
 
@@ -69,10 +85,17 @@
 - **Relationship Integration**: All economy features now factor in mentorship/sidecast history for cost/reward calculations
 - **Admin Controls**: `/gw_admin` commands for creating/updating commitments and projects
 
+## Compatibility & Migrations
+
+- Legacy `followups` table is automatically migrated to the dispatcher `orders` queue on
+  first run. No manual action required. great_work/state.py:510
+- Some documentation and conceptual work that is post-1.0 has been moved to
+  `docs/post_1_0/` to reduce churn in the release PR.
+
 ## Documentation Updates
 
 - Added comprehensive SYSTEM_ARCHITECTURE.md (1500+ lines)
-- Created GAME_ENHANCEMENTS.md with feature proposals (including Qdrant integration proposal)
+- Created `post_1_0/GAME_ENHANCEMENTS.md` with feature proposals (including Qdrant integration proposal)
 - Updated README for 1.0.0 release with full installation/deployment guides
 - Added CHANGELOG.md documenting all features
 - Created RELEASE_1.0_CHECKLIST.md for release preparation
@@ -81,19 +104,20 @@
 - **Comprehensive Writing Guide Update**: Fixed all gaps identified in ISSUE-2025-01-21-001
 - Created issue tracking system with template and resolved first issue
 - Added deployment documentation with systemd examples
+- Created `docs/post_1_0/` and moved post-1.0 concepts there
 
 ## Testing Improvements
 
-- Added 100+ new test cases across multiple modules
-- Expanded test coverage for telemetry, LLM, and multi-press features
-- Added tests for scheduler, table talk, and service highlights
-- Updated all tests to support channel_id parameters
-- Verified multi-layer press scheduling and release mechanisms
-- Added recruitment odds, contract upkeep, and layered-press regression tests
-- Added sideways effects application and vignette generation tests
-- **New Test Suites**: `test_commitments_projects.py`, `test_influence_sinks.py`
-- Added relationship modifier testing for recruitment and commitments
+- Expanded test coverage for telemetry, LLM, dispatcher, and multi-press features
+- Added tests for scheduler, table talk, and digest highlights
+- Updated tests to support channel_id parameters
+- Verified layered press scheduling and release mechanisms
+- Added recruitment odds, contract upkeep, and sideways vignette tests
+- New suites: `test_commitments_projects.py`, `test_influence_sinks.py`
+- Relationship modifier testing for recruitment and commitments
 - Expanded symposium tests with scoring and reprisal validation
+
+See CI for the current test count and runtime.
 
 ## Infrastructure & DevOps
 
@@ -112,9 +136,7 @@
 
 ## Files Changed Summary
 
-- **100+ files changed** (expanded from initial 83)
-- **15,000+ insertions** (expanded from 9,673)
-- **4,000+ deletions** (expanded from 3,124)
+- 123 files changed, 24,985 insertions, 4,255 deletions (current)
 - Major refactoring of agent documentation
 - Complete overhaul of multi-press and service modules
 - Significant expansion of telemetry and monitoring capabilities
@@ -124,30 +146,59 @@
 ## Key Metrics
 
 - Implementation progress: 71.4% of requirements fully implemented (55 of 77)
-- **250+ tests passing** (expanded from 192)
-- Zero linting warnings or errors
-- Production-ready with comprehensive documentation
-- **New Discord Commands**: `/invest`, `/endow_archive`, `/seasonal_commitments`, `/faction_projects`, `/recruit_odds`
-- **Enhanced Admin Tools**: Expanded `/gw_admin` with commitment and project management
+- Tests expanded across new features (see CI for totals)
+- Linting passes locally; CI enforces Ruff and pytest
+- New Discord commands: `/invest`, `/endow_archive`, `/seasonal_commitments`, `/faction_projects`, `/recruit_odds`
+- Enhanced Admin Tools: `/gw_admin list_orders`, `/gw_admin cancel_order`, `/gw_admin resume_game`
 
-## Commit History (Chronological)
+## Commit Highlights (oldest → newest)
 
-1. `aec1244` Apply Codacy patch: Fix markdown formatting issues
-2. `bed81a6` Prepare project for 1.0 release
-3. `f8c804e` Update README.md for 1.0.0 release
-4. `7837376` Add comprehensive Codacy lint report
-5. `3965b48` Fix all markdown linting issues
-6. `9810c21` Update Codacy lint report to show all issues resolved
-7. `39abb28` Update documentation and add contributor guide
-8. `cec69a6` Major Phase 3 improvements: telemetry, dispatcher, and multi-layer press
-9. `423b277` Apply project updates
-10. `6b2db32` Layer recruitment and table talk press
-11. `c7e8eea` Expose symposium scoring telemetry and reprisal handling
-12. `f54839d` Add recruitment odds preview and contract upkeep sinks
-13. `529ab35` Enrich layered press for recruitment and table talk
-14. `1512f44` Layer recruitment followups
-15. `9083430` Expose dispatcher telemetry
-16. `292dbd2` Complete narrative arcs
-17. `6f605a9` Expand vignette catalogue
-18. `44ad824` Tie seasonal commitments and faction projects to relationship history
-19. `76afd1a` Introduce long-tail influence sinks and surface economy controls
+1. `39abb28` Update documentation and add contributor guide
+2. `cec69a6` Major Phase 3 improvements: telemetry, dispatcher, multi-layer press
+3. `423b277` Apply project updates
+4. `6b2db32` Layer recruitment and table talk press
+5. `c7e8eea` Expose symposium scoring telemetry and reprisal handling
+6. `f54839d` Add recruitment odds preview and contract upkeep sinks
+7. `529ab35` Enrich layered press for recruitment and table talk
+8. `1512f44` Layer recruitment followups
+9. `9083430` Expose dispatcher telemetry
+10. `292dbd2` Complete narrative arcs
+11. `6f605a9` Expand vignette catalogue
+12. `44ad824` Tie seasonal commitments and faction projects to relationship history
+13. `76afd1a` Introduce long-tail influence sinks and surface economy controls
+14. `93f645e` Add telemetry guardrails and ops runbook
+15. `5662eaa` Automate archive publishing and document safety guardrails
+16. `eca5bd8` Integrate Guardian moderation guardrails
+17. `40c65ff` Tie moderation and safety into flows
+18. `a69c2dd` Tie sideways vignette tags to mechanical effects
+19. `b95d563` Instrument seasonal commitment telemetry alerts
+20. `d353815` Calibrate telemetry KPIs and seasonal alerts
+
+## Ops & Configuration
+
+- LLM client
+  - `LLM_MODE=mock` to run offline; `LLM_RETRY_ATTEMPTS`; `LLM_USE_FALLBACK`
+  - Optional `LLM_RETRY_SCHEDULE="1,3,10,30,60"`
+- Scheduler and archive
+  - `GREAT_WORK_ARCHIVE_PUBLISH_DIR` (e.g., `web_archive_public`)
+  - `GREAT_WORK_ARCHIVE_PAGES_ENABLED`, `GREAT_WORK_ARCHIVE_PAGES_DIR`, `GREAT_WORK_ARCHIVE_PAGES_SUBDIR`,
+    `GREAT_WORK_ARCHIVE_PAGES_NOJEKYLL`
+  - Snapshot controls: `GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS`, `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`
+- Alerts and guardrails
+  - Digest: `GREAT_WORK_ALERT_MAX_DIGEST_MS`, `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`
+  - Dispatcher: `GREAT_WORK_ALERT_MAX_ORDER_PENDING`, `GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`
+  - Seasonal/Symposium debt: `GREAT_WORK_ALERT_MAX_SEASONAL_DEBT`, `GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT`
+
+## Risk & Rollback
+
+- Risks: slow digests, dispatcher backlog, archive publish failures, debt reprisal loops
+- Mitigations: telemetry dashboard, admin `/gw_admin list_orders` and cancel tools, alerts
+- Rollback: disable publishing, set `LLM_MODE=mock`, pause/resume game, revert container; schema
+  additions are backward compatible and safe to leave in place
+
+## Reviewer Validation Guide
+
+- Run `/recruit_odds`, `/invest`, `/endow_archive`, `/seasonal_commitments`, `/faction_projects`
+- Use `/export_web_archive` and confirm ZIP snapshot publishes during digest
+- Check `/gw_admin list_orders` and cancel a test follow-up; verify telemetry reflects changes
+- Open telemetry dashboard (Compose service) and verify digest, queue, and debt guardrails
