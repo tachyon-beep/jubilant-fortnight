@@ -37,12 +37,24 @@ contracts:
     reprisal_cooldown_days: 7
 seasonal_commitments:
   base_cost: 3
-  duration_days: 90
-  relationship_weight: 0.02
+  duration_days: 28
+  relationship_weight: 0.05
+  min_relationship: 0.0
+  reprisal_threshold: 4
+  reprisal_penalty: 2
+  reprisal_cooldown_days: 7
 faction_projects:
-  base_progress_weight: 0.1
+  base_progress_weight: 0.08
   relationship_weight: 5.0
-  completion_reward: 5
+  completion_reward: 6
+faction_investments:
+  min_amount: 3
+  feeling_step: 3
+  feeling_bonus: 0.2
+archive_endowment:
+  min_amount: 4
+  reputation_threshold: 12
+  reputation_bonus: 1
 confidence_wagers:
   suspect:
     reward: 2

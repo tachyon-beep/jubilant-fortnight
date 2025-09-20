@@ -47,9 +47,19 @@ class Settings:
     seasonal_commitment_base_cost: int
     seasonal_commitment_duration_days: int
     seasonal_commitment_relationship_weight: float
+    seasonal_commitment_min_relationship: float
+    seasonal_commitment_reprisal_threshold: int
+    seasonal_commitment_reprisal_penalty: int
+    seasonal_commitment_reprisal_cooldown_days: int
     faction_project_base_progress_weight: float
     faction_project_relationship_weight: float
     faction_project_completion_reward: int
+    faction_investment_min_amount: int
+    faction_investment_feeling_step: int
+    faction_investment_feeling_bonus: float
+    archive_endowment_min_amount: int
+    archive_endowment_reputation_threshold: int
+    archive_endowment_reputation_bonus: int
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Settings":
@@ -81,6 +91,8 @@ class Settings:
         contract_debt_cfg = contract_cfg.get("debt", {})
         seasonal_cfg = data.get("seasonal_commitments", {})
         projects_cfg = data.get("faction_projects", {})
+        investments_cfg = data.get("faction_investments", {})
+        archive_cfg = data.get("archive_endowment", {})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
             timeline_start_year=int(data["time_scale"].get("start_year", 1920)),
@@ -112,11 +124,21 @@ class Settings:
             action_thresholds={k: int(v) for k, v in thresholds.items()},
             influence_caps={"base": float(influence_caps.get("base", 5)), "per_reputation": float(influence_caps.get("per_reputation", 0.0))},
             seasonal_commitment_base_cost=int(seasonal_cfg.get("base_cost", 3)),
-            seasonal_commitment_duration_days=int(seasonal_cfg.get("duration_days", 90)),
-            seasonal_commitment_relationship_weight=float(seasonal_cfg.get("relationship_weight", 0.02)),
-            faction_project_base_progress_weight=float(projects_cfg.get("base_progress_weight", 0.1)),
+            seasonal_commitment_duration_days=int(seasonal_cfg.get("duration_days", 28)),
+            seasonal_commitment_relationship_weight=float(seasonal_cfg.get("relationship_weight", 0.05)),
+            seasonal_commitment_min_relationship=float(seasonal_cfg.get("min_relationship", 0.0)),
+            seasonal_commitment_reprisal_threshold=int(seasonal_cfg.get("reprisal_threshold", 4)),
+            seasonal_commitment_reprisal_penalty=int(seasonal_cfg.get("reprisal_penalty", 2)),
+            seasonal_commitment_reprisal_cooldown_days=int(seasonal_cfg.get("reprisal_cooldown_days", 7)),
+            faction_project_base_progress_weight=float(projects_cfg.get("base_progress_weight", 0.08)),
             faction_project_relationship_weight=float(projects_cfg.get("relationship_weight", 5.0)),
-            faction_project_completion_reward=int(projects_cfg.get("completion_reward", 5)),
+            faction_project_completion_reward=int(projects_cfg.get("completion_reward", 6)),
+            faction_investment_min_amount=int(investments_cfg.get("min_amount", 3)),
+            faction_investment_feeling_step=int(investments_cfg.get("feeling_step", 3)),
+            faction_investment_feeling_bonus=float(investments_cfg.get("feeling_bonus", 0.2)),
+            archive_endowment_min_amount=int(archive_cfg.get("min_amount", 3)),
+            archive_endowment_reputation_threshold=int(archive_cfg.get("reputation_threshold", 12)),
+            archive_endowment_reputation_bonus=int(archive_cfg.get("reputation_bonus", 1)),
         )
 
 

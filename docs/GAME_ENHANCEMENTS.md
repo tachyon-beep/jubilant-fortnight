@@ -23,6 +23,7 @@ The Great Work succeeds by creating a perfect storm of academic drama through th
 ### Opportunities for Enhancement
 
 The current design has untapped potential in several areas:
+
 - Scholar relationships could be deeper and more complex
 - Failures could cascade in more dramatic ways
 - Player creativity could be channeled into more systems
@@ -33,48 +34,63 @@ The current design has untapped potential in several areas:
 ## Enhancement Ideas
 
 ### 1. **Scholar Romance and Affairs System**
+
 Scholars develop romantic relationships that affect their work. Affairs between scholars on rival teams create loyalty conflicts. Messy breakups tank collaborative efficiency. Love triangles generate soap opera drama in the Gazette.
 
 ### 2. **Academic Dynasties**
+
 Scholars can have children who inherit traits and grudges. Second-generation scholars remember their parents' treatment. Dynasty feuds span campaigns. Players can arrange academic marriages for political alliances.
 
 ### 3. **Secret Societies and Conspiracies**
+
 Hidden academic cabals work behind the scenes. Players can discover conspiracy theories about scholar networks. Secret handshakes and coded messages appear in press releases. Exposing conspiracies yields massive reputation.
 
 ### 4. **Catastrophic Cascade Failures**
+
 Failed expeditions can trigger domino effects. A botched dig collapses, trapping scholars. Failed theories can destroy entire academic departments. Reputation craters can trigger "academic bankruptcy" with special recovery mechanics.
 
 ### 5. **Rival Academic Institutions**
+
 NPC universities compete for discoveries. The Royal Academy vs Foreign Institute rivalry affects all scholars. Players can defect to rival institutions mid-campaign. Inter-institutional academic wars with sabotage and espionage.
 
 ### 6. **Scholar Mental Health System**
+
 Scholars suffer breakdowns from overwork or betrayal. Sabbaticals restore sanity but remove them from play. Mental scars affect future performance. Therapy sessions generate hilarious press quotes.
 
 ### 7. **Time Capsule Mechanics**
+
 Players can bury predictions to be opened later. Correct long-term predictions yield massive reputation. Failed predictions become legendary memes. Scholars can leave vengeful time capsules for rivals.
 
 ### 8. **Academic Trials and Tribunals**
+
 Major failures trigger public inquiries. Players must defend their theories in court. Scholars testify for or against based on relationships. Guilty verdicts create permanent "academic criminal" status.
 
 ### 9. **Dream Sequences and Prophecies**
+
 Scholars have prophetic dreams about discoveries. Dreams create limited-time expedition opportunities. Nightmares warn of impending betrayals. Collective dreams hint at campaign mysteries.
 
 ### 10. **Cross-Campaign Artifacts**
+
 Legendary items persist between campaigns. The Zathras Codex grants +10 to linguistics but curses bearer with credit theft. Failed expedition sites become cursed locations. Artifacts accumulate mythology over multiple games.
 
 ### 11. **Betting Markets on Theories**
+
 Players can wager influence on other players' theories. Scholars place side bets creating conflicts of interest. Market crashes when major theories fail. Insider trading scandals when scholars leak expedition results.
 
 ### 12. **Scholar Transformation Events**
+
 Major events fundamentally change scholars. Near-death experiences create new virtues/vices. Vindication transforms Postdocs into Visionaries. Repeated failures turn Empiricists into Mystics.
 
 ### 13. **Academic Cults and Zealotry**
+
 Failed theories spawn cult followings. Zealot scholars ignore contrary evidence. Players can cultivate or suppress academic cults. Cult expeditions have wild, unpredictable results.
 
 ### 14. **Generational Grudge System**
+
 Grudges intensify over time and pass to academic descendants. Blood feuds between scholar families affect all interactions. Reconciliation events require elaborate public ceremonies. Ancient grudges become campaign obstacles.
 
 ### 15. **Expedition Curses and Superstitions**
+
 Sites become cursed after spectacular failures. Scholars develop superstitions about methods and locations. Breaking taboos triggers supernatural events. Curse-lifting requires special redemption expeditions.
 
 ## Detailed Feature Proposals
@@ -86,6 +102,7 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 **Why It Enhances the Experience**: Creates long-term consequences spanning campaigns. Every scholar interaction gains weight knowing their children will remember. Dynasty feuds become epic multi-generational sagas that define campaign narratives.
 
 **Integration with Existing Systems**:
+
 - Uses existing memory system, extending it to inherited memories
 - Leverages relationship tracking for marriage compatibility
 - Builds on career progression with retirement triggers
@@ -102,6 +119,7 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 **Why It Enhances the Experience**: Transforms single failures into extended drama arcs. Creates natural cliffhangers between digests. Gives failing players spotlight through spectacular disasters. Generates "remember when everything went wrong" moments.
 
 **Integration with Existing Systems**:
+
 - Extends existing failure tables with cascade triggers
 - Uses multi-layer press system for escalating coverage
 - Creates special expedition types (rescue missions)
@@ -118,6 +136,7 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 **Why It Enhances the Experience**: Adds mystery-solving metagame layer. Creates paranoid atmosphere where any scholar might be compromised. Successful revelation moments become legendary. Failed conspiracy theories become running jokes.
 
 **Integration with Existing Systems**:
+
 - Hidden attributes in scholar data revealed through gameplay
 - Special expedition discoveries unlock conspiracy clues
 - Press releases include coded messages for attentive players
@@ -134,6 +153,7 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 **Why It Enhances the Experience**: Adds strategic layer to theory evaluation. Creates investment drama parallel to research drama. Market crashes become memorable shared catastrophes. Trading scandals generate gossip content.
 
 **Integration with Existing Systems**:
+
 - Runs parallel to influence economy
 - Scholars participate based on traits (risk appetite, integrity)
 - Press releases include market reports and trading scandals
@@ -150,6 +170,7 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 **Why It Enhances the Experience**: Creates character development arcs for scholars. Makes every expedition feel consequential for scholar futures. Transformation moments become campaign highlights. Players feel responsible for scholar psychological damage.
 
 **Integration with Existing Systems**:
+
 - Triggered by specific event patterns in scholar history
 - Changes archetype, virtues, vices, and catchphrases
 - Special press releases for transformation events
@@ -234,22 +255,89 @@ Sites become cursed after spectacular failures. Scholars develop superstitions a
 - Conspiracy failures becoming legendary paranoia memes
 - Failed romances generating soap opera entertainment
 
+## Technical Enhancement Proposals
+
+### 6. Semantic Memory System (Qdrant Integration)
+
+**Core Mechanic**: Integrate Qdrant vector database to enable semantic search and intelligent memory retrieval for scholars, press archives, and game history. Scholars can recall similar past events, players can search press archives with natural language, and the game can surface relevant historical context automatically.
+
+**Why It Enhances the Experience**:
+
+- **Living History**: Scholars intelligently reference similar past betrayals, expeditions, or theories when making decisions
+- **Narrative Continuity**: Press releases automatically reference relevant historical events, creating richer storytelling
+- **Player Discovery**: Natural language search lets players explore the game's accumulated mythology ("show me all times someone betrayed Dr. Zathras")
+- **Emergent Patterns**: AI can identify recurring themes and cycles across campaigns
+
+**Technical Architecture**:
+
+- **Dual Collections**: Separate `game-knowledge` (runtime) and `mcp-assistant` (development) collections
+- **Content Types**:
+  - Scholar memories and relationships (vectorized Facts and Feelings)
+  - Press releases and gazette archives (full text + metadata)
+  - Theory claims and expedition reports (semantic similarity matching)
+  - Player reputation events and notable moments
+- **Integration Points**:
+  - Scholar decision-making queries similar past experiences
+  - Press generation includes semantically relevant callbacks
+  - `/search_archives` command for natural language queries
+  - Digest summaries reference historically similar events
+
+**Implementation Details**:
+
+- Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
+- Update flows: Real-time indexing of press releases, batch updates for scholar memories
+- Query patterns: k-NN for similarity, filtered by time windows and relevance thresholds
+- Metadata schema: timestamps, player IDs, scholar IDs, event types, reputation impacts
+
+**Potential Use Cases**:
+
+1. **Grudge Callbacks**: When evaluating defection offers, scholars search for similar past betrayals
+2. **Theory Connections**: New theories automatically linked to semantically similar past claims
+3. **Press Enrichment**: Gazette includes "This Day in History" with similar events from past years
+4. **Reputation Patterns**: Identify players with similar reputation trajectories for matchmaking
+5. **Scholar Compatibility**: Find scholars with complementary research interests for expeditions
+
+**Potential Risks**:
+
+- Increased infrastructure complexity (requires Qdrant service)
+- Performance overhead for embedding generation
+- Storage growth with extensive game history
+- Need for collection maintenance and pruning strategies
+
+**Implementation Complexity**: Medium-High
+
+- Requires embedding pipeline for all game events
+- Need to design semantic schemas for different content types
+- Must handle collection migrations and versioning
+- Performance optimization for real-time queries
+
+**Quick Wins**:
+
+- Start with press archive search (read-only, low risk)
+- Add "similar expeditions" feature for planning
+- Enable scholar memory search for debugging/admin tools
+- Build reputation trajectory comparisons
+
 ## Implementation Priority Recommendations
 
 ### High Priority (Maximum Drama)
+
 1. Scholar Romance and Affairs - Easy to implement, massive drama payoff
 2. Catastrophic Cascades - Turns failures into extended content
 3. Betting Markets - Adds strategic depth and shared catastrophes
 
 ### Medium Priority (Deep Engagement)
+
 4. Academic Dynasties - Long-term progression hooks
 5. Scholar Transformations - Character development arcs
 6. Secret Societies - Mystery metagame layer
+7. **Semantic Memory System** - Enriches narrative continuity and enables discovery
 
 ### Low Priority (Polish)
-7. Time Capsules - Fun but not essential
-8. Academic Trials - Complex for occasional use
-9. Dream Sequences - Atmospheric but not core
+
+8. Time Capsules - Fun but not essential
+9. Academic Trials - Complex for occasional use
+10. Dream Sequences - Atmospheric but not core
 
 The enhancements focus on amplifying what already works: public drama, permanent consequences, and emergent narrative. Each addition creates more opportunities for memorable moments that become part of the group's shared mythology.
 

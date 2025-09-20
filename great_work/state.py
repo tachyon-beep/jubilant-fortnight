@@ -239,6 +239,26 @@ CREATE TABLE IF NOT EXISTS faction_projects (
 );
 CREATE INDEX IF NOT EXISTS idx_faction_projects_status
     ON faction_projects (status, faction);
+CREATE TABLE IF NOT EXISTS faction_investments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    program TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_faction_investments_player
+    ON faction_investments (player_id, faction);
+CREATE TABLE IF NOT EXISTS archive_endowments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    program TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_archive_endowments_player
+    ON archive_endowments (player_id);
 """
 
 
@@ -2277,6 +2297,29 @@ class GameState:
             )
         return commitments
 
+    def get_seasonal_commitment(self, commitment_id: int) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, player_id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at
+                       FROM seasonal_commitments
+                       WHERE id = ?""",
+                (commitment_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": int(row[0]),
+            "player_id": row[1],
+            "faction": row[2],
+            "tier": row[3],
+            "base_cost": int(row[4]),
+            "start_at": datetime.fromisoformat(row[5]),
+            "end_at": datetime.fromisoformat(row[6]),
+            "status": row[7],
+            "last_processed_at": datetime.fromisoformat(row[8]) if row[8] else None,
+            "updated_at": datetime.fromisoformat(row[9]) if row[9] else None,
+        }
+
     def mark_seasonal_commitment_processed(
         self,
         commitment_id: int,
@@ -2378,6 +2421,28 @@ class GameState:
             )
         return projects
 
+    def get_faction_project(self, project_id: int) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, name, faction, target_progress, progress, status, created_at, updated_at, metadata
+                       FROM faction_projects
+                       WHERE id = ?""",
+                (project_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": int(row[0]),
+            "name": row[1],
+            "faction": row[2],
+            "target_progress": float(row[3]),
+            "progress": float(row[4]),
+            "status": row[5],
+            "created_at": datetime.fromisoformat(row[6]),
+            "updated_at": datetime.fromisoformat(row[7]),
+            "metadata": json.loads(row[8]) if row[8] else {},
+        }
+
     def update_faction_project_progress(
         self,
         project_id: int,
@@ -2402,6 +2467,153 @@ class GameState:
                 (completed_at.isoformat(), project_id),
             )
             conn.commit()
+
+    def set_faction_project_status(
+        self,
+        project_id: int,
+        status: str,
+        updated_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE faction_projects SET status = ?, updated_at = ? WHERE id = ?",
+                (status, updated_at.isoformat(), project_id),
+            )
+            conn.commit()
+
+    # Faction investments ----------------------------------------------
+    def record_faction_investment(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        program: Optional[str],
+        created_at: datetime,
+    ) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO faction_investments
+                       (player_id, faction, amount, program, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                (
+                    player_id,
+                    faction,
+                    amount,
+                    program,
+                    created_at.isoformat(),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def list_faction_investments(
+        self,
+        player_id: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        query = (
+            "SELECT id, player_id, faction, amount, program, created_at "
+            "FROM faction_investments"
+        )
+        params: Tuple[object, ...] = ()
+        if player_id:
+            query += " WHERE player_id = ?"
+            params = (player_id,)
+        query += " ORDER BY created_at DESC"
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query, params).fetchall()
+        investments: List[Dict[str, object]] = []
+        for row in rows:
+            created_at = datetime.fromisoformat(row[5]) if row[5] else None
+            investments.append(
+                {
+                    "id": int(row[0]),
+                    "player_id": row[1],
+                    "faction": row[2],
+                    "amount": int(row[3]),
+                    "program": row[4],
+                    "created_at": created_at,
+                }
+            )
+        return investments
+
+    def total_faction_investment(
+        self,
+        player_id: str,
+        faction: Optional[str] = None,
+    ) -> int:
+        query = "SELECT SUM(amount) FROM faction_investments WHERE player_id = ?"
+        params: Tuple[object, ...] = (player_id,)
+        if faction:
+            query += " AND faction = ?"
+            params = (player_id, faction)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(query, params).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    # Archive endowments -----------------------------------------------
+    def record_archive_endowment(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        program: Optional[str],
+        created_at: datetime,
+    ) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO archive_endowments
+                       (player_id, faction, amount, program, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                (
+                    player_id,
+                    faction,
+                    amount,
+                    program,
+                    created_at.isoformat(),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def list_archive_endowments(
+        self,
+        player_id: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        query = (
+            "SELECT id, player_id, faction, amount, program, created_at "
+            "FROM archive_endowments"
+        )
+        params: Tuple[object, ...] = ()
+        if player_id:
+            query += " WHERE player_id = ?"
+            params = (player_id,)
+        query += " ORDER BY created_at DESC"
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query, params).fetchall()
+        endowments: List[Dict[str, object]] = []
+        for row in rows:
+            created_at = datetime.fromisoformat(row[5]) if row[5] else None
+            endowments.append(
+                {
+                    "id": int(row[0]),
+                    "player_id": row[1],
+                    "faction": row[2],
+                    "amount": int(row[3]),
+                    "program": row[4],
+                    "created_at": created_at,
+                }
+            )
+        return endowments
+
+    def total_archive_endowment(self, player_id: str) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT SUM(amount) FROM archive_endowments WHERE player_id = ?",
+                (player_id,),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
 
 
 __all__ = ["GameState"]

@@ -52,7 +52,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Notes:** Five-dimensional influence vectors persist per player, clamp to reputation-derived caps, and adjust through expeditions, recruitment, symposium pledges, and contract upkeep with debt/repraisal tracking surfaced in `/status` and telemetry.【F:great_work/service.py†L677-L1110】【F:great_work/state.py†L18-L520】
+**Notes:** Five-dimensional influence vectors persist per player, clamp to reputation-derived caps, and adjust through expeditions, recruitment, symposium pledges, contract upkeep, seasonal commitments, faction projects, and the new long-tail sinks (`/invest`, `/endow_archive`), all surfaced in `/status` and telemetry.【F:great_work/service.py†L677-L4490】【F:great_work/state.py†L18-L2440】【F:great_work/discord_bot.py†L883-L1607】
 
 ### Press Artefacts and Gazette Cadence (6 requirements)
 
@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Mentorship activations/progression/completions now log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, and recruitment odds incorporate the relationship modifier. Remaining work targets propagating those deltas into other mechanical gates (poach loyalty, faction commitments) plus automated tone/safety guardrails beyond the writer-facing guide.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4663】【F:great_work/telemetry.py†L788-L1110】【F:great_work/discord_bot.py†L317-L1475】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L120】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, archive, admin, and new long-tail economy artefacts (faction investments/endowments) layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Mentorship activations/progression/completions now log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, recruitment odds incorporate the relationship modifier, and seasonal commitments/faction projects/investments/endowments use the same signals for costs, progress, or reputation rewards with admin overrides. Remaining work targets propagating those deltas into poach loyalty plus automated tone/safety guardrails beyond the writer-facing guide.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4490】【F:great_work/telemetry.py†L788-L1110】【F:great_work/discord_bot.py†L317-L1607】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L160】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -155,6 +155,6 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 
 ## Key Follow-ups
 
-1. Tune seasonal commitment/faction project rewards and document operator workflows so relationship-driven loops remain sustainable.
+1. Capture telemetry/alert thresholds for the tuned seasonal commitment and faction project loops, fold the new `/gw_admin` workflows into operator docs, and schedule a balance review post-playtest.
 2. Design and document additional influence sinks (faction investments, archive programs) that pair with symposium debt escalation.
 3. Ship external alert routing plus dispatcher backlog exports/dashboards, and document external archive hosting for production.

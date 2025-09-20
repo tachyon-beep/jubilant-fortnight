@@ -24,6 +24,8 @@ ship consistent, mechanically aware copy across every surface.
 | Sideways vignettes | `great_work/data/sideways_vignettes.yaml` | `queue_order:followup:sideways_vignette` | Gazette vignette + gossip |
 | Tone packs | `great_work/data/press_tone_packs.yaml` | `press_tone.get_tone_seed` | Headline/blurbs/callouts |
 | Seasonal commitments | Procedural (service) | `seasonal_commitment_update` / `_complete` | Cost + loyalty status briefs |
+| Faction investments | Procedural (service) | `faction_investment` | Infrastructure upgrades, faction goodwill tone |
+| Archive endowments | Procedural (service) | `archive_endowment` | Donation acknowledgement, archive mission focus |
 | Faction projects | Procedural (service) | `faction_project_update` / `_complete` | Progress bulletins |
 
 ## 3. Voice & Tone Foundations

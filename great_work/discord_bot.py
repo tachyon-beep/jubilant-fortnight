@@ -953,7 +953,105 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         end=end_text,
                     )
                 )
+        investments = data.get("investments") or []
+        if investments:
+            lines.append("")
+            lines.append("Faction Investments:")
+            for entry in investments:
+                faction = (entry.get("faction") or "Unaligned").capitalize()
+                latest = entry.get("latest") or "—"
+                lines.append(
+                    " - {faction}: total {total} influence across {count} contribution(s); latest {latest}".format(
+                        faction=faction,
+                        total=entry.get("total", 0),
+                        count=entry.get("count", 0),
+                        latest=latest,
+                    )
+                )
+                programs = entry.get("programs") or []
+                if programs:
+                    lines.append("   Programs: " + ", ".join(programs))
+        endowments = data.get("endowments") or []
+        if endowments:
+            lines.append("")
+            lines.append("Archive Endowments:")
+            for entry in endowments:
+                faction = (entry.get("faction") or "Unaligned").capitalize()
+                latest = entry.get("latest") or "—"
+                lines.append(
+                    " - {faction}: total {total} donated across {count} gift(s); latest {latest}".format(
+                        faction=faction,
+                        total=entry.get("total", 0),
+                        count=entry.get("count", 0),
+                        latest=latest,
+                    )
+                )
+                programs = entry.get("programs") or []
+                if programs:
+                    lines.append("   Initiatives: " + ", ".join(programs))
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="invest", description="Invest influence into faction infrastructure")
+    @track_command
+    @app_commands.describe(
+        faction="Faction receiving the investment",
+        amount="Influence to invest",
+        program="Optional program label for record keeping",
+    )
+    async def invest(
+        interaction: discord.Interaction,
+        faction: str,
+        amount: int,
+        program: Optional[str] = None,
+    ) -> None:
+        player_id = str(interaction.user.display_name)
+        service.ensure_player(player_id, interaction.user.display_name)
+        try:
+            press = service.invest_in_faction(
+                player_id=player_id,
+                faction=faction.lower(),
+                amount=amount,
+                program=program,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.gazette, message, purpose="investment")
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="endow_archive", description="Donate influence to the public archive")
+    @track_command
+    @app_commands.describe(
+        amount="Influence to donate",
+        faction="Faction pool to draw from (defaults to academia)",
+        program="Optional endowment name",
+    )
+    async def endow_archive(
+        interaction: discord.Interaction,
+        amount: int,
+        faction: Optional[str] = None,
+        program: Optional[str] = None,
+    ) -> None:
+        player_id = str(interaction.user.display_name)
+        service.ensure_player(player_id, interaction.user.display_name)
+        try:
+            press = service.endow_archive(
+                player_id=player_id,
+                amount=amount,
+                faction=faction.lower() if faction else None,
+                program=program,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.gazette, message, purpose="endowment")
+        await _flush_admin_notifications()
 
     @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
     @track_command
@@ -1444,6 +1542,160 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 reason=reason,
             )
             message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message)
+        await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+    except ValueError as exc:
+        await interaction.response.send_message(str(exc), ephemeral=True)
+        await _flush_admin_notifications()
+        return
+    await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="create_seasonal_commitment",
+        description="Create a seasonal commitment for a player",
+    )
+    @track_command
+    @app_commands.describe(
+        player_id="Player identifier",
+        faction="Faction name",
+        tier="Optional tier label",
+        base_cost="Optional base cost override",
+        duration_days="Optional duration override",
+        reason="Optional note for the change",
+    )
+    async def admin_create_commitment(
+        interaction: discord.Interaction,
+        player_id: str,
+        faction: str,
+        tier: Optional[str] = None,
+        base_cost: Optional[int] = None,
+        duration_days: Optional[int] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_create_seasonal_commitment(
+                admin_id=admin_id,
+                player_id=player_id,
+                faction=faction,
+                tier=tier,
+                base_cost=base_cost,
+                duration_days=duration_days,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="update_seasonal_commitment",
+        description="Cancel or complete a seasonal commitment",
+    )
+    @track_command
+    @app_commands.describe(
+        commitment_id="Commitment identifier",
+        reason="Optional note for the update",
+    )
+    @app_commands.choices(
+        status=[
+            app_commands.Choice(name="Completed", value="completed"),
+            app_commands.Choice(name="Cancelled", value="cancelled"),
+        ]
+    )
+    async def admin_update_commitment(
+        interaction: discord.Interaction,
+        commitment_id: int,
+        status: app_commands.Choice[str],
+        reason: Optional[str] = None,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_update_seasonal_commitment(
+                admin_id=admin_id,
+                commitment_id=commitment_id,
+                status=status.value,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="create_faction_project",
+        description="Create a faction project",
+    )
+    @track_command
+    @app_commands.describe(
+        name="Project name",
+        faction="Faction name",
+        target_progress="Target progress value",
+        reason="Optional note for the change",
+    )
+    async def admin_create_project(
+        interaction: discord.Interaction,
+        name: str,
+        faction: str,
+        target_progress: float,
+        reason: Optional[str] = None,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_create_faction_project(
+                admin_id=admin_id,
+                name=name,
+                faction=faction,
+                target_progress=target_progress,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="update_faction_project",
+        description="Cancel or complete a faction project",
+    )
+    @track_command
+    @app_commands.describe(
+        project_id="Project identifier",
+        reason="Optional note for the update",
+    )
+    @app_commands.choices(
+        status=[
+            app_commands.Choice(name="Completed", value="completed"),
+            app_commands.Choice(name="Cancelled", value="cancelled"),
+        ]
+    )
+    async def admin_update_project(
+        interaction: discord.Interaction,
+        project_id: int,
+        status: app_commands.Choice[str],
+        reason: Optional[str] = None,
+    ) -> None:
+        admin_id = str(interaction.user.display_name)
+        try:
+            press = service.admin_update_faction_project(
+                admin_id=admin_id,
+                project_id=project_id,
+                status=status.value,
+                reason=reason,
+            )
+            message = f"{press.headline}\n{press.body}"
             await interaction.response.send_message(message)
             await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         except ValueError as exc:
@@ -1660,6 +1912,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(symposium_backlog)
     bot.tree.add_command(symposium_status)
     bot.tree.add_command(status)
+    bot.tree.add_command(invest)
+    bot.tree.add_command(endow_archive)
     bot.tree.add_command(wager)
     bot.tree.add_command(seasonal_commitments)
     bot.tree.add_command(faction_projects)

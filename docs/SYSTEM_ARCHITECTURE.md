@@ -1,6 +1,7 @@
 # System Architecture: The Great Work
 
 ## Table of Contents
+
 1. [Current Architecture Analysis](#current-architecture-analysis)
 2. [Detailed Component Breakdown](#detailed-component-breakdown)
 3. [Data Architecture](#data-architecture)
@@ -25,24 +26,28 @@
 The Great Work follows a **layered architecture** with clear separation of concerns:
 
 #### **Presentation Layer** (Discord Interface)
+
 - **discord_bot.py**: Discord bot entry point with slash commands
 - **ChannelRouter**: Multi-channel message routing (orders, gazette, table_talk, admin)
 - **Command handlers**: Map Discord commands to service layer operations
 - **Async event loop**: Discord.py async/await for non-blocking I/O
 
 #### **Service Layer** (Game Logic)
+
 - **GameService**: Central orchestrator for all game operations
 - **GazetteScheduler**: APScheduler-based cron for automated events
 - **MultiPressGenerator**: Multi-layer narrative generation system
 - **LLM Client**: AI integration for enhanced narrative generation
 
 #### **Domain Layer** (Business Logic)
+
 - **Models**: Core domain objects (Scholar, Player, Theory, Expedition)
 - **ScholarRepository**: Scholar generation and management
 - **ExpeditionResolver**: D100-based expedition resolution
 - **Press Templates**: Narrative generation templates
 
 #### **Data Layer** (Persistence)
+
 - **GameState**: SQLite persistence with JSON serialization
 - **Event Sourcing**: Append-only event log for full replay capability
 - **Web Archive**: Static HTML generation for historical records
@@ -95,6 +100,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### GameService (service.py)
 
 **Responsibilities:**
+
 - Orchestrate game commands (theory submission, expeditions, recruitment)
 - Manage game pause/resume states
 - Generate and queue press releases
@@ -103,17 +109,20 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - Process sideways effects from failures
 
 **Internal Structure:**
+
 - `_pending_expeditions`: Queue for expedition orders
 - `_multi_press`: Multi-layer press generation
 - `_llm_lock`: Thread-safe LLM access
 - `_admin_notifications`: Admin message queue
 
 **Patterns:**
+
 - Command Pattern for player actions
 - Observer Pattern for press generation
 - Strategy Pattern for different expedition types
 
 **Dependencies:**
+
 - GameState, ScholarRepository, ExpeditionResolver
 - MultiPressGenerator, LLM Client
 - Settings, Telemetry
@@ -121,6 +130,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### GameState (state.py)
 
 **Responsibilities:**
+
 - Database connection management
 - CRUD operations for all entities
 - Transaction management
@@ -128,17 +138,20 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - Timeline advancement
 
 **Internal Structure:**
+
 - SQLite connection pool
 - Schema versioning
 - JSON serialization/deserialization
 - Prepared statements for performance
 
 **Data Models:**
+
 - 15+ tables (players, scholars, events, theories, expeditions, etc.)
 - Relationship tracking (mentorships, offers, followups)
 - Timeline management (year progression)
 
 **Transaction Patterns:**
+
 - Atomic state changes
 - Rollback on failure
 - Event sourcing for audit
@@ -146,6 +159,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### ScholarRepository (scholars.py)
 
 **Responsibilities:**
+
 - Procedural scholar generation
 - Deterministic personality creation
 - Memory and relationship management
@@ -153,12 +167,14 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - Career progression logic
 
 **Internal Structure:**
+
 - `DeterministicRNG`: Seeded random generation
 - Template-based generation from YAML
 - Personality trait combinations
 - Memory decay algorithms
 
 **Key Algorithms:**
+
 - Defection probability (logistic function)
 - Memory decay (exponential with scars)
 - Relationship dynamics
@@ -167,18 +183,21 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### ExpeditionResolver (expeditions.py)
 
 **Responsibilities:**
+
 - D100-based resolution system
 - Failure table lookups
 - Sideways discovery generation
 - Preparation bonus calculations
 
 **Internal Structure:**
+
 - Threshold calculations
 - Failure table management
 - Sideways effect generation
 - Outcome determination
 
 **Resolution Flow:**
+
 1. Roll D100
 2. Add preparation bonuses
 3. Apply friction penalties
@@ -188,18 +207,21 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### Press System (press.py, multi_press.py)
 
 **Responsibilities:**
+
 - Template-based narrative generation
 - Multi-layer press for complex events
 - Tone and style consistency
 - LLM enhancement integration
 
 **Internal Structure:**
+
 - Template registry
 - Context builders
 - Tone settings (canonical, pulp, etc.)
 - Enhancement pipeline
 
 **Press Types:**
+
 - Academic Bulletins
 - Research Manifestos
 - Discovery Reports
@@ -210,6 +232,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### Discord Bot (discord_bot.py)
 
 **Responsibilities:**
+
 - Command registration and handling
 - Channel routing
 - Async message posting
@@ -217,6 +240,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - Admin notifications
 
 **Commands:**
+
 - `/submit_theory`: Theory submission
 - `/recruit`: Scholar recruitment
 - `/launch_expedition`: Start expedition
@@ -224,6 +248,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - `/admin_*`: Administrative controls
 
 **Channel Architecture:**
+
 - Orders: Player commands
 - Gazette: Automated digests
 - Table Talk: Flavor commentary
@@ -233,6 +258,7 @@ The Great Work follows a **layered architecture** with clear separation of conce
 ### Scheduler (scheduler.py)
 
 **Responsibilities:**
+
 - Cron-like scheduling
 - Gazette generation
 - Symposium events
@@ -240,12 +266,14 @@ The Great Work follows a **layered architecture** with clear separation of conce
 - Followup resolution
 
 **Internal Structure:**
+
 - APScheduler backend
 - Job persistence
 - Error recovery
 - Timezone handling
 
 **Scheduled Jobs:**
+
 - Daily digests (2x per day)
 - Weekly symposium
 - Timeline advancement
@@ -276,6 +304,7 @@ Players (1) ──── (N) Theories
 ### Event Sourcing Implementation
 
 **Event Structure:**
+
 ```json
 {
   "timestamp": "2024-01-15T13:00:00Z",
@@ -290,6 +319,7 @@ Players (1) ──── (N) Theories
 ```
 
 **Event Types:**
+
 - Player actions (theories, expeditions, recruitment)
 - Scholar actions (defection, support, opposition)
 - System events (timeline advance, symposium)
@@ -333,12 +363,14 @@ Players (1) ──── (N) Theories
 **Architecture Pattern**: Event-driven async messaging
 
 **Components:**
+
 - Command Tree: Slash command registry
 - Event Handlers: on_ready, on_message
 - Channel Manager: Multi-channel routing
 - Threading: Async coroutines for non-blocking
 
 **Message Flow:**
+
 1. User invokes slash command
 2. Bot validates permissions
 3. Service processes command
@@ -350,12 +382,14 @@ Players (1) ──── (N) Theories
 **Architecture Pattern**: Optional enhancement pipeline
 
 **Components:**
+
 - LLM Client: Async HTTP client
 - Prompt Templates: System and user prompts
 - Token Management: Rate limiting
 - Fallback System: Graceful degradation
 
 **Enhancement Flow:**
+
 1. Base press release generated
 2. LLM enhancement requested
 3. Timeout/error handling
@@ -367,12 +401,14 @@ Players (1) ──── (N) Theories
 **Architecture Pattern**: Cron-based batch processing
 
 **Components:**
+
 - Job Registry: Scheduled task definitions
 - Executor: Thread pool for job execution
 - State Manager: Job state persistence
 - Error Handler: Retry and notification
 
 **Time-based Events:**
+
 - Daily digests (13:00, 21:00)
 - Weekly symposium
 - Timeline advancement
@@ -381,12 +417,14 @@ Players (1) ──── (N) Theories
 ### External Service Boundaries
 
 **Qdrant Vector Database:**
+
 - MCP protocol integration
 - Semantic search API
 - Knowledge graph storage
 - Press archive indexing
 
 **Web Archive:**
+
 - Static site generation
 - GitHub Pages deployment
 - Historical record preservation
@@ -394,16 +432,19 @@ Players (1) ──── (N) Theories
 ### Message Flow and Choreography
 
 **Synchronous Flow:**
+
 ```
 Discord → Bot → Service → State → Response
 ```
 
 **Asynchronous Flow:**
+
 ```
 Scheduler → Service → Batch Process → Multi-Channel Post
 ```
 
 **Event-Driven Flow:**
+
 ```
 Event → Press Generation → Enhancement → Publication → Archive
 ```
@@ -415,23 +456,27 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 1. Scholar Romance and Affairs System
 
 **Architecture Changes:**
+
 - **New Models**: Relationship states (romance, affair, breakup)
 - **Extended Memory**: Romance-specific facts and feelings
 - **New Events**: Romance progression events
 - **Press Templates**: Romance-themed gossip templates
 
 **Component Modifications:**
+
 - `Scholar` model: Add relationship_status field
 - `GameService`: Romance progression logic
 - `Press`: Romance gossip generation
 - `Scheduler`: Relationship update job
 
 **Integration Points:**
+
 - Hook into daily digest for relationship updates
 - Loyalty modifiers based on romantic entanglements
 - Expedition efficiency affected by team romances
 
 **Migration Strategy:**
+
 1. Add relationship tables
 2. Initialize all scholars as single
 3. Gradually introduce romance events
@@ -440,24 +485,28 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 2. Academic Dynasties
 
 **Architecture Changes:**
+
 - **New Models**: Family trees, inheritance rules
 - **Extended Scholar**: Parent/child relationships, age tracking
 - **New Events**: Birth, retirement, succession
 - **Generational Memory**: Inherited facts and scars
 
 **Component Modifications:**
+
 - `ScholarRepository`: Dynasty generation logic
 - `GameState`: Family tree persistence
 - `GameService`: Retirement and succession handlers
 - `Press`: Dynasty announcement templates
 
 **Integration Points:**
+
 - Timeline advancement triggers aging
 - Career progression affects retirement
 - Memory inheritance on succession
 - Marriage proposals through player commands
 
 **Migration Strategy:**
+
 1. Add age to existing scholars
 2. Create family relationship tables
 3. Implement gradual aging system
@@ -466,24 +515,28 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 3. Catastrophic Cascade System
 
 **Architecture Changes:**
+
 - **New Models**: Cascade chains, rescue missions
 - **Extended Expeditions**: Cascade triggers and escalation
 - **New Events**: Disaster progression events
 - **State Machines**: Cascade state tracking
 
 **Component Modifications:**
+
 - `ExpeditionResolver`: Cascade trigger logic
 - `GameService`: Cascade management and escalation
 - `Press`: Multi-part disaster coverage
 - `Scheduler`: Cascade resolution timing
 
 **Integration Points:**
+
 - Failure tables extended with cascade triggers
 - New expedition type: rescue missions
 - Scholar states: trapped, injured, traumatized
 - Press escalation for ongoing disasters
 
 **Migration Strategy:**
+
 1. Add cascade tables and states
 2. Update failure tables with triggers
 3. Implement basic cascade logic
@@ -492,24 +545,28 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 4. Secret Society Networks
 
 **Architecture Changes:**
+
 - **Hidden Attributes**: Secret society memberships
 - **Clue System**: Evidence collection mechanics
 - **Conspiracy Generator**: Procedural plot creation
 - **Revelation Mechanics**: Evidence presentation system
 
 **Component Modifications:**
+
 - `Scholar`: Hidden society affiliations
 - `GameService`: Clue discovery and tracking
 - `ExpeditionResolver`: Clue generation in discoveries
 - `Press`: Coded messages and revelations
 
 **Integration Points:**
+
 - Expedition discoveries reveal clues
 - Scholar behavior hints at affiliations
 - New command: /present_conspiracy
 - Reputation rewards for successful reveals
 
 **Migration Strategy:**
+
 1. Add hidden attributes to scholars
 2. Generate initial conspiracies
 3. Seed clues in existing content
@@ -518,24 +575,28 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 5. Betting Market Exchange
 
 **Architecture Changes:**
+
 - **New Models**: Market state, positions, trades
 - **Market Engine**: Pricing algorithms, settlement
 - **Trading System**: Bet placement and resolution
 - **Scandal Generator**: Insider trading detection
 
 **Component Modifications:**
+
 - `GameService`: Market operations
 - `GameState`: Market persistence
 - `Press`: Market reports and scandals
 - `Scheduler`: Market settlement job
 
 **Integration Points:**
+
 - Theory submission opens betting
 - Expedition results trigger settlement
 - Influence as betting currency
 - Scholar participation in markets
 
 **Migration Strategy:**
+
 1. Create market infrastructure
 2. Add basic betting commands
 3. Implement pricing algorithms
@@ -544,24 +605,28 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### 6. Scholar Transformation Arcs
 
 **Architecture Changes:**
+
 - **Transformation Rules**: Trigger conditions
 - **Personality Mutations**: Archetype changes
 - **New States**: Pre-transformation, transforming, transformed
 - **Dramatic Events**: Transformation scenes
 
 **Component Modifications:**
+
 - `Scholar`: Transformation history
 - `ScholarRepository`: Transformation logic
 - `GameService`: Transformation triggers
 - `Press`: Transformation narratives
 
 **Integration Points:**
+
 - Repeated failures trigger cynicism
 - Near-death creates religious conversion
 - Vindication breeds arrogance
 - Press releases for transformations
 
 **Migration Strategy:**
+
 1. Add transformation tracking
 2. Define transformation rules
 3. Implement gradual changes
@@ -574,31 +639,37 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Design Patterns Used
 
 #### **Repository Pattern**
+
 - `ScholarRepository`: Encapsulates scholar data access
 - `GameState`: Abstract database operations
 - Benefits: Testability, separation of concerns
 
 #### **Command Pattern**
+
 - Player actions as command objects
 - Queued execution and undo capability
 - Benefits: Decoupling, audit trail
 
 #### **Observer Pattern**
+
 - Press generation observes events
 - Telemetry observes all actions
 - Benefits: Loose coupling, extensibility
 
 #### **Strategy Pattern**
+
 - Different expedition types
 - Various press tone settings
 - Benefits: Runtime behavior selection
 
 #### **Factory Pattern**
+
 - Scholar generation factory
 - Press release factory
 - Benefits: Consistent object creation
 
 #### **Event Sourcing**
+
 - Append-only event log
 - State derived from events
 - Benefits: Audit trail, replay capability
@@ -606,26 +677,31 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### SOLID Principles Application
 
 #### **Single Responsibility**
+
 - Each class has one reason to change
 - Clear separation between layers
 - Focused component responsibilities
 
 #### **Open/Closed**
+
 - Extension through new press templates
 - New expedition types without core changes
 - Plugin-style enhancement system
 
 #### **Liskov Substitution**
+
 - Expedition types interchangeable
 - Press releases follow common interface
 - Scholar types share base behavior
 
 #### **Interface Segregation**
+
 - Minimal interfaces between layers
 - Optional LLM enhancement
 - Pluggable storage backends
 
 #### **Dependency Inversion**
+
 - Service depends on abstractions
 - Repository pattern for data access
 - Configuration injection
@@ -633,6 +709,7 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Domain-Driven Design Boundaries
 
 #### **Bounded Contexts:**
+
 1. **Game Core**: Players, scholars, theories
 2. **Narrative**: Press generation, templates
 3. **Social**: Relationships, defections
@@ -640,6 +717,7 @@ Event → Press Generation → Enhancement → Publication → Archive
 5. **Temporal**: Timeline, scheduling
 
 #### **Aggregates:**
+
 - Player (root): Reputation, influence, cooldowns
 - Scholar (root): Memory, relationships, career
 - Expedition (root): Preparation, team, outcome
@@ -657,6 +735,7 @@ Event → Press Generation → Enhancement → Publication → Archive
 **Current State**: Unified read/write model
 
 **Future Optimization:**
+
 - Separate read models for queries
 - Optimized projections for UI
 - Event store for writes
@@ -677,12 +756,14 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Bottleneck Identification
 
 #### **Current Bottlenecks:**
+
 1. **SQLite Write Lock**: Single writer limitation
 2. **LLM API Calls**: Network latency and rate limits
 3. **Scholar Generation**: CPU-intensive procedural generation
 4. **Event Replay**: Full replay for state reconstruction
 
 #### **Mitigation Strategies:**
+
 1. **Write Batching**: Group database writes
 2. **LLM Caching**: 15-minute response cache
 3. **Scholar Pre-generation**: Background generation
@@ -691,18 +772,21 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Caching Layers
 
 #### **L1 Cache (In-Memory):**
+
 - Active scholars
 - Recent press releases
 - Player statistics
 - Relationship matrices
 
 #### **L2 Cache (Database):**
+
 - Press archive
 - Event log
 - Scholar history
 - Game snapshots
 
 #### **L3 Cache (File System):**
+
 - Web archive
 - Export files
 - Backup data
@@ -710,12 +794,14 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Database Optimization
 
 #### **Current Optimizations:**
+
 - Prepared statements
 - Transaction batching
 - Index optimization
 - JSON compression
 
 #### **Future Optimizations:**
+
 - Partitioned tables
 - Read replicas
 - Write-ahead logging
@@ -732,11 +818,13 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Rate Limiting Architecture
 
 #### **Discord Rate Limits:**
+
 - Message posting: 5/5s per channel
 - Bulk operations: Batched
 - Slash commands: Per-user limiting
 
 #### **LLM Rate Limits:**
+
 - Token bucket algorithm
 - Graceful degradation
 - Fallback to templates
@@ -756,12 +844,14 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Authentication/Authorization Boundaries
 
 #### **Discord Layer:**
+
 - OAuth2 bot authentication
 - User permission checking
 - Role-based access control
 - Channel permissions
 
 #### **Application Layer:**
+
 - Player identity verification
 - Admin command authorization
 - Rate limiting per player
@@ -783,12 +873,14 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Audit Trail Implementation
 
 #### **Event Log:**
+
 - Immutable append-only log
 - Timestamp and actor tracking
 - Full command history
 - State change recording
 
 #### **Telemetry System:**
+
 - Anonymous usage analytics
 - Performance metrics
 - Error tracking
@@ -797,12 +889,14 @@ Event → Press Generation → Enhancement → Publication → Archive
 ### Secret Management
 
 #### **Environment Variables:**
+
 - Discord tokens
 - API keys
 - Database paths
 - Feature flags
 
 #### **Security Practices:**
+
 - No secrets in code
 - .env file exclusion
 - Token rotation capability
@@ -853,6 +947,7 @@ Optional Services:
 ### Environment Configuration
 
 #### **Development:**
+
 ```bash
 DATABASE_PATH=./game_dev.db
 LOG_LEVEL=DEBUG
@@ -861,6 +956,7 @@ TELEMETRY_ENABLED=true
 ```
 
 #### **Staging:**
+
 ```bash
 DATABASE_PATH=/data/game_staging.db
 LOG_LEVEL=INFO
@@ -869,6 +965,7 @@ TELEMETRY_ENABLED=true
 ```
 
 #### **Production:**
+
 ```bash
 DATABASE_PATH=/data/game_prod.db
 LOG_LEVEL=WARNING
@@ -887,12 +984,14 @@ BACKUP_ENABLED=true
 ### Backup Strategies
 
 #### **Automated Backups:**
+
 - Hourly database snapshots
 - Daily full backups
 - Weekly archive exports
 - Monthly offsite copies
 
 #### **Recovery Procedures:**
+
 1. Stop bot process
 2. Restore database file
 3. Replay recent events
@@ -914,6 +1013,7 @@ BACKUP_ENABLED=true
 ### Plugin Architecture Possibilities
 
 #### **Enhancement Plugins:**
+
 ```python
 class EnhancementPlugin:
     def on_theory_submitted(self, theory, player):
@@ -925,6 +1025,7 @@ class EnhancementPlugin:
 ```
 
 #### **Press Template Plugins:**
+
 - Custom press templates
 - Tone variations
 - Language translations
@@ -959,12 +1060,14 @@ def handle_transformation(event):
 ### Theme/Variant Support
 
 #### **Setting Variations:**
+
 - Medieval fantasy
 - Space exploration
 - Corporate research
 - Culinary history
 
 #### **Customization Points:**
+
 - Scholar name pools
 - Discipline lists
 - Failure tables
@@ -1011,18 +1114,21 @@ def handle_transformation(event):
 ### Refactoring Priorities
 
 #### **High Priority:**
+
 1. **Split GameService**: Extract command handlers
 2. **Async LLM Pipeline**: Non-blocking enhancement
 3. **Cache Management**: Implement eviction policies
 4. **Error Recovery**: Better failure handling
 
 #### **Medium Priority:**
+
 5. **Abstract Discord**: Platform-agnostic interface
 6. **Optimize Queries**: Reduce N+1 problems
 7. **Standardize Events**: Common event interface
 8. **Extract Validators**: Centralize validation
 
 #### **Low Priority:**
+
 9. **Type Coverage**: Add more type hints
 10. **Documentation**: Inline code documentation
 11. **Performance Profiling**: Identify slow paths
@@ -1031,6 +1137,7 @@ def handle_transformation(event):
 ### Migration Paths
 
 #### **Database Migration:**
+
 ```
 SQLite → PostgreSQL
 1. Add abstraction layer
@@ -1041,6 +1148,7 @@ SQLite → PostgreSQL
 ```
 
 #### **Platform Migration:**
+
 ```
 Discord → Multi-Platform
 1. Extract interface
@@ -1249,6 +1357,7 @@ Current System
    - Document all APIs
 
 **Deliverables:**
+
 - Refactored service layer
 - Performance benchmarks
 - API documentation
@@ -1271,6 +1380,7 @@ Current System
    - Add market infrastructure
 
 **Deliverables:**
+
 - Plugin architecture
 - State machines
 - Event bus
@@ -1293,6 +1403,7 @@ Current System
    - Disaster recovery mechanics
 
 **Deliverables:**
+
 - Romance system
 - Cascade system
 - New press templates
@@ -1315,6 +1426,7 @@ Current System
    - Scandal generation
 
 **Deliverables:**
+
 - Conspiracy system
 - Market system
 - Advanced press
@@ -1337,6 +1449,7 @@ Current System
    - Monitoring setup
 
 **Deliverables:**
+
 - Production system
 - Launch documentation
 - Monitoring dashboard
@@ -1485,18 +1598,21 @@ The Great Work's architecture successfully balances **simplicity with extensibil
 - **Emergent Narrative**: Complex stories from simple rules
 
 The proposed enhancements can be integrated through:
+
 1. **Modular additions** to existing components
 2. **New subsystems** that observe existing events
 3. **Extended models** that preserve backward compatibility
 4. **Progressive enhancement** with feature flags
 
 The architecture's strengths lie in its:
+
 - **Clear separation of concerns** between layers
 - **Event-driven design** enabling loose coupling
 - **Deterministic generation** ensuring reproducibility
 - **Public-first philosophy** driving engagement
 
 Key architectural decisions that enable growth:
+
 - **Event sourcing** provides audit trails and replay
 - **Repository pattern** abstracts data access
 - **Template-based press** allows narrative variety

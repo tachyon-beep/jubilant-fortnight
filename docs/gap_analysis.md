@@ -6,7 +6,7 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 
 - **Design intent:** Maintain a roster of 20–30 memorable scholars blending handcrafted legends with procedurally generated additions, spawn sidecast scholars from expeditions, nurture mentorship-driven career growth, and track defections with scars and public fallout.【F:docs/HLD.md†L24-L177】
 - **Implementation status:** `GameService` enforces the roster window, seeds new procedurally generated scholars, activates mentorships, progresses mentored careers, and resolves multi-stage defection negotiations with layered press. Multi-press orchestration now pulls from the sidecast arc catalogue, defection epilogues, recruitment/table-talk follow-ups, and sideways vignette payloads so sidecasts advance through debut/integration/spotlight beats while defections apply relationship adjustments alongside archived outcomes.【F:great_work/service.py†L89-L760】【F:great_work/service.py†L1024-L1995】【F:great_work/service.py†L4460-L4668】【F:great_work/multi_press.py†L350-L520】【F:great_work/multi_press.py†L900-L1120】【F:great_work/data/sidecast_arcs.yaml†L1-L90】【F:great_work/data/defection_epilogues.yaml†L1-L48】
-- **Gap:** Mentorship activations/progression/completion now adjust scholar feelings and log history, sidecast phases persist sponsor ties, `/status` surfaces the summary, recruitment/defection flows pull in the modifier, and the new seasonal commitments and faction projects consume the same history. Remaining work is tuning rewards/escalations and exposing operator controls for these loops.【F:great_work/service.py†L4242-L4770】【F:great_work/discord_bot.py†L872-L940】【F:great_work/state.py†L200-L2440】
+- **Gap:** Mentorship activations/progression/completion now adjust scholar feelings and log history, sidecast phases persist sponsor ties, `/status` surfaces the summary, recruitment/defection flows pull in the modifier, and the new seasonal commitments and faction projects consume the same history. Fresh defaults (28-day pledges, relationship-weighted costs, seasonal debt reprisal knobs) and `/gw_admin create/update` controls give operators levers to tune the loops in real time. Remaining work is data-driven balancing and telemetry hooks that flag overdue commitments before reprisal cascades.【F:great_work/service.py†L3717-L3912】【F:great_work/service.py†L4205-L4376】【F:great_work/discord_bot.py†L1582-L1669】【F:great_work/state.py†L2188-L2416】
 
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
 
@@ -29,8 +29,8 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 ## 4. Influence Economy and Faction Mechanics
 
 - **Design intent:** Influence should operate as a five-dimensional economy with soft caps tied to reputation and faction requirements across key actions, supported by additional sinks such as symposium commitments and contracts.【F:docs/HLD.md†L90-L213】
-- **Implementation status:** Influence is stored per faction, clamps to reputation-derived caps, and is spent/earned by expeditions, recruitment, poach/counter offers, symposium pledges, and contract upkeep; `/status` now lists ongoing contract costs alongside caps and thresholds.【F:great_work/state.py†L18-L520】【F:great_work/service.py†L677-L1110】【F:great_work/service.py†L3200-L3470】【F:great_work/discord_bot.py†L780-L820】
-- **Gap:** Seasonal commitments and other long-tail sinks (e.g., faction projects) still need to be wired up so players make broader economic trade-offs beyond scholar contracts.【F:docs/HLD.md†L126-L213】
+- **Implementation status:** Influence is stored per faction, clamps to reputation-derived caps, and is spent/earned by expeditions, recruitment, poach/counter offers, symposium pledges, contract upkeep, seasonal commitments, faction projects, and the new `/invest` and `/endow_archive` sinks; `/status` now lists ongoing costs, commitments, investments, and endowments for quick review.【F:great_work/state.py†L18-L2440】【F:great_work/service.py†L677-L4490】【F:great_work/discord_bot.py†L883-L1607】
+- **Gap:** With long-tail sinks online, focus shifts to tuning telemetry/alerts and late-game scarcity so high-influence players continue making strategic trade-offs before 1.0.【F:great_work/telemetry.py†L72-L890】【F:docs/implementation_plan.md†L168-L184】
 
 ## 5. Press Artefacts and Public Record
 
@@ -82,8 +82,8 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 
 ## Summary of Major Gaps
 
-1. Mentorship/sidecast history now surfaces in `/status`, recruitment odds, defection negotiations, seasonal commitments, and faction projects; next tune rewards/escalations and add operator tooling so social history consistently affects every long-term decision.
-2. Symposium pledges and contract upkeep drain influence, yet seasonal projects/faction investments are still missing to maintain long-term economic pressure.
+1. Seasonal commitments, faction projects, faction investments, and archive endowments now anchor long-tail pressure; next quantify balance via telemetry (alert thresholds, dashboards) and decide how relationship deltas unlock additional late-game content.
+2. Symposium pledges and contract upkeep drain influence, yet broader faction investments/endowments are still needed to keep late-game economies taut once seasonal commitments conclude.
 3. Symposium backlog scoring remains heuristic-only; add transparent weighting reports and debt escalation rules that mirror the design’s punitive loop.
 4. Telemetry captures dispatcher snapshots and queue depth, but we still need external alert routing and richer moderator dashboards (filters/search, CSV export) before live pilots.
 5. Static archives auto-export and prune snapshots, but the GitHub Pages publishing workflow and production monitoring guidance for the nginx container remain outstanding.

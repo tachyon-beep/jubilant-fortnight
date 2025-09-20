@@ -331,6 +331,55 @@ def faction_project_complete(ctx: FactionProjectUpdateContext) -> PressRelease:
     return PressRelease(type="faction_project_complete", headline=headline, body=body)
 
 
+@dataclass
+class FactionInvestmentContext:
+    player: str
+    faction: str
+    amount: int
+    total: int
+    program: Optional[str]
+    relationship_bonus: float
+
+
+def faction_investment(ctx: FactionInvestmentContext) -> PressRelease:
+    headline = f"Faction Investment — {ctx.player}"
+    body_parts = [
+        f"{ctx.player} invests {ctx.amount} influence with {ctx.faction}.",
+        f"Lifetime contributions now total {ctx.total} influence."
+    ]
+    if ctx.program:
+        body_parts.append(f"Program focus: {ctx.program}.")
+    if ctx.relationship_bonus:
+        body_parts.append(f"Scholarly goodwill improves by {ctx.relationship_bonus:+.1f}.")
+    body = " ".join(body_parts)
+    return PressRelease(type="faction_investment", headline=headline, body=body)
+
+
+@dataclass
+class ArchiveEndowmentContext:
+    player: str
+    faction: str
+    amount: int
+    program: Optional[str]
+    paid_debt: int
+    reputation_delta: int
+
+
+def archive_endowment(ctx: ArchiveEndowmentContext) -> PressRelease:
+    headline = f"Archive Endowment — {ctx.player}"
+    body_parts = [
+        f"{ctx.player} donates {ctx.amount} influence from {ctx.faction} reserves to the Archive.",
+    ]
+    if ctx.program:
+        body_parts.append(f"Attributed to the {ctx.program} initiative.")
+    if ctx.paid_debt:
+        body_parts.append(f"Symposium debts reduced by {ctx.paid_debt} influence.")
+    if ctx.reputation_delta:
+        body_parts.append(f"Reputation shifts by {ctx.reputation_delta:+d} in recognition.")
+    body = " ".join(body_parts)
+    return PressRelease(type="archive_endowment", headline=headline, body=body)
+
+
 __all__ = [
     "academic_bulletin",
     "academic_bulletin_async",
@@ -350,8 +399,12 @@ __all__ = [
     "DefectionContext",
     "SeasonalCommitmentContext",
     "FactionProjectUpdateContext",
+    "FactionInvestmentContext",
+    "ArchiveEndowmentContext",
     "seasonal_commitment_update",
     "seasonal_commitment_complete",
     "faction_project_update",
     "faction_project_complete",
+    "faction_investment",
+    "archive_endowment",
 ]

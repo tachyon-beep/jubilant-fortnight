@@ -38,6 +38,8 @@ from .press import (
     DefectionContext,
     SeasonalCommitmentContext,
     FactionProjectUpdateContext,
+    FactionInvestmentContext,
+    ArchiveEndowmentContext,
     academic_bulletin,
     academic_gossip,
     defection_notice,
@@ -49,6 +51,8 @@ from .press import (
     seasonal_commitment_complete,
     faction_project_update,
     faction_project_complete,
+    faction_investment,
+    archive_endowment,
 )
 from .multi_press import MultiPressGenerator
 from .rng import DeterministicRNG
@@ -1165,8 +1169,21 @@ class GameService:
         tier: Optional[str] = None,
         base_cost: Optional[int] = None,
         duration_days: Optional[int] = None,
+        allow_override: bool = False,
     ) -> int:
         now = datetime.now(timezone.utc)
+        player = self.state.get_player(player_id)
+        if player is None:
+            raise ValueError(f"Unknown player {player_id}")
+        relationship = self._player_faction_relationship(
+            player,
+            faction,
+            weight=self.settings.seasonal_commitment_relationship_weight,
+        )
+        if not allow_override and relationship < self.settings.seasonal_commitment_min_relationship:
+            raise ValueError(
+                "Seasonal commitments require a neutral or better relationship with the faction"
+            )
         base = base_cost if base_cost is not None else self.settings.seasonal_commitment_base_cost
         duration = duration_days if duration_days is not None else self.settings.seasonal_commitment_duration_days
         end_at = now + timedelta(days=duration)
@@ -1199,6 +1216,238 @@ class GameService:
 
     def list_faction_projects(self, *, include_completed: bool = False) -> List[Dict[str, object]]:
         return self.state.list_faction_projects(include_completed=include_completed)
+
+    def invest_in_faction(
+        self,
+        player_id: str,
+        faction: str,
+        amount: int,
+        *,
+        program: Optional[str] = None,
+    ) -> PressRelease:
+        self._ensure_not_paused()
+        if faction not in self._FACTIONS:
+            raise ValueError(f"Invalid faction: {faction}")
+        if amount < self.settings.faction_investment_min_amount:
+            raise ValueError(
+                f"Minimum investment is {self.settings.faction_investment_min_amount} influence"
+            )
+
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+
+        self._ensure_influence_structure(player)
+        available = player.influence.get(faction, 0)
+        if available < amount:
+            raise ValueError(f"Not enough {faction} influence (have {available}, need {amount})")
+
+        now = datetime.now(timezone.utc)
+        self._apply_influence_change(player, faction, -amount)
+        self.state.upsert_player(player)
+
+        investment_id = self.state.record_faction_investment(
+            player_id=player.id,
+            faction=faction,
+            amount=amount,
+            program=program,
+            created_at=now,
+        )
+
+        step = max(1, self.settings.faction_investment_feeling_step)
+        increments = amount // step
+        relationship_bonus = increments * self.settings.faction_investment_feeling_bonus
+        if relationship_bonus:
+            for scholar in self.state.all_scholars():
+                if scholar.contract.get("employer") != player.id:
+                    continue
+                if faction and scholar.contract.get("faction") != faction:
+                    continue
+                scholar.memory.adjust_feeling(player.id, relationship_bonus)
+                self.state.save_scholar(scholar)
+
+        total_contribution = self.state.total_faction_investment(player.id, faction)
+
+        ctx = FactionInvestmentContext(
+            player=player.display_name,
+            faction=faction.title(),
+            amount=amount,
+            total=total_contribution,
+            program=program,
+            relationship_bonus=relationship_bonus,
+        )
+        press = faction_investment(ctx)
+        press.metadata.update(
+            {
+                "investment_id": investment_id,
+                "player_id": player.id,
+                "faction": faction,
+                "amount": amount,
+                "program": program,
+                "relationship_bonus": relationship_bonus,
+                "total": total_contribution,
+            }
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="faction_investment",
+                payload={
+                    "player": player.id,
+                    "faction": faction,
+                    "amount": amount,
+                    "program": program,
+                    "total": total_contribution,
+                },
+            )
+        )
+
+        try:
+            self._telemetry.track_game_progression(
+                "faction_investment",
+                float(amount),
+                player_id=player.id,
+                details={
+                    "faction": faction,
+                    "program": program,
+                    "relationship_bonus": relationship_bonus,
+                    "total": total_contribution,
+                },
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("Failed to record faction investment telemetry", exc_info=True)
+
+        return press
+
+    def list_faction_investments(self, player_id: str) -> List[Dict[str, object]]:
+        return self.state.list_faction_investments(player_id)
+
+    def endow_archive(
+        self,
+        player_id: str,
+        amount: int,
+        *,
+        faction: Optional[str] = None,
+        program: Optional[str] = None,
+    ) -> PressRelease:
+        self._ensure_not_paused()
+        funding_faction = faction or "academia"
+        if funding_faction not in self._FACTIONS:
+            raise ValueError(f"Invalid faction: {funding_faction}")
+        if amount < self.settings.archive_endowment_min_amount:
+            raise ValueError(
+                f"Minimum endowment is {self.settings.archive_endowment_min_amount} influence"
+            )
+
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+
+        self._ensure_influence_structure(player)
+        available = player.influence.get(funding_faction, 0)
+        if available < amount:
+            raise ValueError(
+                f"Not enough {funding_faction} influence (have {available}, need {amount})"
+            )
+
+        now = datetime.now(timezone.utc)
+        self._apply_influence_change(player, funding_faction, -amount)
+
+        reputation_gain = 0
+        threshold = self.settings.archive_endowment_reputation_threshold
+        if threshold > 0:
+            reputation_gain = (amount // threshold) * self.settings.archive_endowment_reputation_bonus
+        if reputation_gain:
+            player.adjust_reputation(
+                reputation_gain,
+                self.settings.reputation_bounds["min"],
+                self.settings.reputation_bounds["max"],
+            )
+        self.state.upsert_player(player)
+
+        endowment_id = self.state.record_archive_endowment(
+            player_id=player.id,
+            faction=funding_faction,
+            amount=amount,
+            program=program,
+            created_at=now,
+        )
+
+        paid_debt = self.state.apply_influence_debt_payment(
+            player_id=player.id,
+            faction=funding_faction,
+            amount=amount,
+            now=now,
+            source="symposium",
+        )
+        remaining = amount - paid_debt
+        if remaining > 0:
+            paid_debt += self.state.apply_influence_debt_payment(
+                player_id=player.id,
+                faction=funding_faction,
+                amount=remaining,
+                now=now,
+                source="seasonal",
+            )
+
+        ctx = ArchiveEndowmentContext(
+            player=player.display_name,
+            faction=funding_faction.title(),
+            amount=amount,
+            program=program,
+            paid_debt=paid_debt,
+            reputation_delta=reputation_gain,
+        )
+        press = archive_endowment(ctx)
+        press.metadata.update(
+            {
+                "endowment_id": endowment_id,
+                "player_id": player.id,
+                "faction": funding_faction,
+                "amount": amount,
+                "program": program,
+                "paid_debt": paid_debt,
+                "reputation_gain": reputation_gain,
+            }
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="archive_endowment",
+                payload={
+                    "player": player.id,
+                    "faction": funding_faction,
+                    "amount": amount,
+                    "program": program,
+                    "paid_debt": paid_debt,
+                    "reputation_gain": reputation_gain,
+                },
+            )
+        )
+
+        try:
+            self._telemetry.track_game_progression(
+                "archive_endowment",
+                float(amount),
+                player_id=player.id,
+                details={
+                    "faction": funding_faction,
+                    "program": program,
+                    "paid_debt": paid_debt,
+                    "reputation_gain": reputation_gain,
+                },
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("Failed to record archive endowment telemetry", exc_info=True)
+
+        return press
+
+    def list_archive_endowments(self, player_id: str) -> List[Dict[str, object]]:
+        return self.state.list_archive_endowments(player_id)
 
     def recruitment_odds(
         self,
@@ -1938,6 +2187,8 @@ class GameService:
         contracts = self._contract_summary_for_player(player)
         relationships = self._player_relationship_summary(player)
         commitments = self._player_commitment_summary(player)
+        investments = self._player_investment_summary(player)
+        endowments = self._player_endowment_summary(player)
         return {
             "id": player.id,
             "display_name": player.display_name,
@@ -1950,6 +2201,8 @@ class GameService:
             "contracts": contracts,
             "relationships": relationships,
             "commitments": commitments,
+            "investments": investments,
+            "endowments": endowments,
         }
 
     def roster_status(self) -> List[Dict[str, object]]:
@@ -3754,12 +4007,19 @@ class GameService:
                     now=now,
                     source="seasonal",
                 )
+
+            debt_record = self.state.get_influence_debt_record(
+                player_id=player.id,
+                faction=faction,
+                source="seasonal",
+            )
+            if debt_record and debt_record.get("amount", 0) > 0:
                 debt_details.append(
                     {
                         "faction": faction,
-                        "remaining": debt,
-                        "reprisal_level": 0,
-                        "last_reprisal_at": None,
+                        "remaining": int(debt_record.get("amount", 0)),
+                        "reprisal_level": int(debt_record.get("reprisal_level", 0)),
+                        "last_reprisal_at": debt_record.get("last_reprisal_at"),
                     }
                 )
             self.state.upsert_player(player)
@@ -3770,9 +4030,9 @@ class GameService:
                     debt_details=debt_details,
                     now=now,
                     source="seasonal",
-                    threshold=self.settings.contract_debt_reprisal_threshold,
-                    penalty=self.settings.contract_debt_reprisal_penalty,
-                    cooldown_days=self.settings.contract_debt_reprisal_cooldown_days,
+                    threshold=self.settings.seasonal_commitment_reprisal_threshold,
+                    penalty=self.settings.seasonal_commitment_reprisal_penalty,
+                    cooldown_days=self.settings.seasonal_commitment_reprisal_cooldown_days,
                     telemetry_event="seasonal_commitment_reprisal",
                 )
 
@@ -3794,7 +4054,7 @@ class GameService:
                     "base_cost": base_cost,
                     "relationship_modifier": relationship,
                     "paid": paid,
-                    "debt": debt,
+                    "debt": int(debt_record.get("amount", 0)) if debt_record else debt,
                 }
             )
             self._archive_press(release, now)
@@ -4161,6 +4421,305 @@ class GameService:
             )
         )
 
+        return press
+
+    def admin_create_seasonal_commitment(
+        self,
+        admin_id: str,
+        player_id: str,
+        faction: str,
+        *,
+        tier: Optional[str] = None,
+        base_cost: Optional[int] = None,
+        duration_days: Optional[int] = None,
+        reason: Optional[str] = None,
+    ) -> PressRelease:
+        """Create a seasonal commitment on behalf of a player."""
+        self._ensure_not_paused()
+        player = self.state.get_player(player_id)
+        if not player:
+            raise ValueError(f"Player {player_id} not found")
+        if faction not in self._FACTIONS:
+            raise ValueError(f"Invalid faction: {faction}")
+
+        commitment_id = self.start_seasonal_commitment(
+            player_id=player_id,
+            faction=faction,
+            tier=tier,
+            base_cost=base_cost,
+            duration_days=duration_days,
+            allow_override=True,
+        )
+
+        record = self.state.get_seasonal_commitment(commitment_id)
+        if record is None:
+            raise ValueError("Failed to persist seasonal commitment")
+
+        duration = max(1, (record["end_at"] - record["start_at"]).days)
+        summary_reason = f"\nReason: {reason}" if reason else ""
+        press = PressRelease(
+            type="admin_action",
+            headline="Seasonal Commitment Established",
+            body=(
+                f"Admin {admin_id} registered a seasonal pledge for {player.display_name}.\n"
+                f"Faction: {faction.title()}  Tier: {record.get('tier') or 'Unspecified'}\n"
+                f"Base cost: {record.get('base_cost')}  Duration: {duration} days{summary_reason}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "player": player_id,
+                "faction": faction,
+                "tier": record.get("tier"),
+                "commitment_id": commitment_id,
+                "reason": reason,
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_create_seasonal_commitment",
+                "player": player.display_name,
+                "faction": faction,
+                "commitment": commitment_id,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_create_seasonal_commitment",
+                payload={
+                    "admin": admin_id,
+                    "player": player_id,
+                    "faction": faction,
+                    "tier": record.get("tier"),
+                    "commitment_id": commitment_id,
+                    "reason": reason,
+                },
+            )
+        )
+
+        self._queue_admin_notification(
+            f"📝 {admin_id} created seasonal commitment #{commitment_id} for {player.display_name}"
+        )
+        return press
+
+    def admin_update_seasonal_commitment(
+        self,
+        admin_id: str,
+        commitment_id: int,
+        *,
+        status: str,
+        reason: Optional[str] = None,
+    ) -> PressRelease:
+        """Cancel or complete an existing seasonal commitment."""
+        self._ensure_not_paused()
+        record = self.state.get_seasonal_commitment(commitment_id)
+        if record is None:
+            raise ValueError(f"Commitment {commitment_id} not found")
+
+        if status not in {"completed", "cancelled"}:
+            raise ValueError("Status must be 'completed' or 'cancelled'")
+
+        now = datetime.now(timezone.utc)
+        self.state.set_seasonal_commitment_status(commitment_id, status, now)
+
+        player = self.state.get_player(record["player_id"])
+        player_name = player.display_name if player else record["player_id"]
+        summary_reason = f"\nReason: {reason}" if reason else ""
+        press = PressRelease(
+            type="admin_action",
+            headline=f"Seasonal Commitment {status.title()}",
+            body=(
+                f"Admin {admin_id} marked seasonal commitment #{commitment_id} as {status}.\n"
+                f"Player: {player_name}  Faction: {record.get('faction') or 'Unaligned'}{summary_reason}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "commitment_id": commitment_id,
+                "status": status,
+                "reason": reason,
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_update_seasonal_commitment",
+                "commitment": commitment_id,
+                "status": status,
+            },
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_update_seasonal_commitment",
+                payload={
+                    "admin": admin_id,
+                    "commitment_id": commitment_id,
+                    "status": status,
+                    "reason": reason,
+                },
+            )
+        )
+
+        self._queue_admin_notification(
+            f"⚙️ {admin_id} marked seasonal commitment #{commitment_id} as {status}"
+        )
+        return press
+
+    def admin_create_faction_project(
+        self,
+        admin_id: str,
+        name: str,
+        faction: str,
+        *,
+        target_progress: float,
+        metadata: Optional[Dict[str, object]] = None,
+        reason: Optional[str] = None,
+    ) -> PressRelease:
+        """Create a faction project via admin tooling."""
+        self._ensure_not_paused()
+        if faction not in self._FACTIONS:
+            raise ValueError(f"Invalid faction: {faction}")
+
+        project_id = self.start_faction_project(
+            name=name,
+            faction=faction,
+            target_progress=target_progress,
+            metadata=metadata,
+        )
+        record = self.state.get_faction_project(project_id)
+        if record is None:
+            raise ValueError("Failed to persist faction project")
+
+        summary_reason = f"\nReason: {reason}" if reason else ""
+        press = PressRelease(
+            type="admin_action",
+            headline="Faction Project Initiated",
+            body=(
+                f"Admin {admin_id} initiated project '{name}' for {faction.title()}.\n"
+                f"Target progress: {target_progress}{summary_reason}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "project_id": project_id,
+                "name": name,
+                "faction": faction,
+                "target_progress": target_progress,
+                "reason": reason,
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_create_faction_project",
+                "project": project_id,
+                "faction": faction,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_create_faction_project",
+                payload={
+                    "admin": admin_id,
+                    "project_id": project_id,
+                    "name": name,
+                    "faction": faction,
+                    "target_progress": target_progress,
+                    "reason": reason,
+                },
+            )
+        )
+
+        self._queue_admin_notification(
+            f"🏗️ {admin_id} created faction project #{project_id} ({name})"
+        )
+        return press
+
+    def admin_update_faction_project(
+        self,
+        admin_id: str,
+        project_id: int,
+        *,
+        status: str,
+        reason: Optional[str] = None,
+    ) -> PressRelease:
+        """Cancel or complete a faction project via admin tooling."""
+        self._ensure_not_paused()
+        record = self.state.get_faction_project(project_id)
+        if record is None:
+            raise ValueError(f"Faction project {project_id} not found")
+
+        if status not in {"completed", "cancelled"}:
+            raise ValueError("Status must be 'completed' or 'cancelled'")
+
+        now = datetime.now(timezone.utc)
+        if status == "completed":
+            self.state.complete_faction_project(project_id, now)
+        else:
+            self.state.set_faction_project_status(project_id, status, now)
+
+        summary_reason = f"\nReason: {reason}" if reason else ""
+        press = PressRelease(
+            type="admin_action",
+            headline=f"Faction Project {status.title()}",
+            body=(
+                f"Admin {admin_id} marked faction project #{project_id} ({record['name']}) as {status}."
+                f"\nFaction: {record.get('faction') or 'Unaligned'}{summary_reason}"
+            ),
+            metadata={
+                "admin": admin_id,
+                "project_id": project_id,
+                "status": status,
+                "reason": reason,
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_update_faction_project",
+                "project": project_id,
+                "status": status,
+            },
+        )
+
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_update_faction_project",
+                payload={
+                    "admin": admin_id,
+                    "project_id": project_id,
+                    "status": status,
+                    "reason": reason,
+                },
+            )
+        )
+
+        self._queue_admin_notification(
+            f"📦 {admin_id} marked faction project #{project_id} as {status}"
+        )
         return press
 
     def admin_list_orders(
@@ -5816,6 +6375,84 @@ class GameService:
         if limit > 0:
             summary = summary[:limit]
         return summary
+
+    def _player_investment_summary(self, player: Player) -> List[Dict[str, object]]:
+        records = self.state.list_faction_investments(player.id)
+        summary: Dict[str, Dict[str, object]] = {}
+        for record in records:
+            faction = record.get("faction") or "unaligned"
+            entry = summary.setdefault(
+                faction,
+                {
+                    "faction": faction,
+                    "total": 0,
+                    "count": 0,
+                    "latest": None,
+                    "programs": set(),
+                },
+            )
+            entry["total"] += int(record.get("amount", 0))
+            entry["count"] += 1
+            created_at = record.get("created_at")
+            if created_at and (
+                entry["latest"] is None or created_at > entry["latest"]
+            ):
+                entry["latest"] = created_at
+            program = record.get("program")
+            if program:
+                entry["programs"].add(program)
+        output: List[Dict[str, object]] = []
+        for faction, data in summary.items():
+            output.append(
+                {
+                    "faction": faction,
+                    "total": data["total"],
+                    "count": data["count"],
+                    "latest": data["latest"].isoformat() if isinstance(data["latest"], datetime) else None,
+                    "programs": sorted(data["programs"]),
+                }
+            )
+        output.sort(key=lambda item: item["total"], reverse=True)
+        return output
+
+    def _player_endowment_summary(self, player: Player) -> List[Dict[str, object]]:
+        records = self.state.list_archive_endowments(player.id)
+        summary: Dict[str, Dict[str, object]] = {}
+        for record in records:
+            faction = record.get("faction") or "unaligned"
+            entry = summary.setdefault(
+                faction,
+                {
+                    "faction": faction,
+                    "total": 0,
+                    "count": 0,
+                    "latest": None,
+                    "programs": set(),
+                },
+            )
+            entry["total"] += int(record.get("amount", 0))
+            entry["count"] += 1
+            created_at = record.get("created_at")
+            if created_at and (
+                entry["latest"] is None or created_at > entry["latest"]
+            ):
+                entry["latest"] = created_at
+            program = record.get("program")
+            if program:
+                entry["programs"].add(program)
+        output: List[Dict[str, object]] = []
+        for faction, data in summary.items():
+            output.append(
+                {
+                    "faction": faction,
+                    "total": data["total"],
+                    "count": data["count"],
+                    "latest": data["latest"].isoformat() if isinstance(data["latest"], datetime) else None,
+                    "programs": sorted(data["programs"]),
+                }
+            )
+        output.sort(key=lambda item: item["total"], reverse=True)
+        return output
 
     def _advance_faction_projects(self, now: datetime) -> List[PressRelease]:
         releases: List[PressRelease] = []
