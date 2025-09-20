@@ -22,6 +22,55 @@ _SIDEWAYS_EFFECT_ENTRIES: Optional[List[Dict[str, Any]]] = None
 _SIDEWAYS_VIGNETTES: Optional[Dict[str, Dict[str, List[Dict[str, Any]]]]] = None
 
 
+_TAG_FALLBACKS: Dict[str, Dict[str, Any]] = {
+    "archives": {
+        "type": SidewaysEffectType.SPAWN_THEORY,
+        "confidence": "suspect",
+        "description": "Archive discoveries inspire a speculative thesis",
+    },
+    "diplomacy": {
+        "type": SidewaysEffectType.FACTION_SHIFT,
+        "faction": "Foreign",
+        "amount": 2,
+        "description": "Diplomatic ripples reach Foreign envoys",
+    },
+    "industry": {
+        "type": SidewaysEffectType.UNLOCK_OPPORTUNITY,
+        "opportunity": "industrial_contract",
+        "details": {"expires_in_days": 4, "influence_gain": 2},
+        "description": "Industrial partners float a lucrative contract",
+    },
+    "logistics": {
+        "type": SidewaysEffectType.UNLOCK_OPPORTUNITY,
+        "opportunity": "logistics_resupply",
+        "details": {"expires_in_days": 3, "influence_gain": 1},
+        "description": "Logistics teams open a resupply window",
+    },
+    "mentorship": {
+        "type": SidewaysEffectType.UNLOCK_OPPORTUNITY,
+        "opportunity": "mentorship_roundtable",
+        "details": {"expires_in_days": 5, "reputation_bonus": 1},
+        "description": "Mentorship council invites the expedition to a follow-up roundtable",
+    },
+    "culture": {
+        "type": SidewaysEffectType.REPUTATION_CHANGE,
+        "amount": 1,
+        "description": "Cultural goodwill boosts academic standing",
+    },
+    "community": {
+        "type": SidewaysEffectType.REPUTATION_CHANGE,
+        "amount": 1,
+        "description": "Community outreach improves reputation",
+    },
+    "environment": {
+        "type": SidewaysEffectType.FACTION_SHIFT,
+        "faction": "Religious",
+        "amount": 1,
+        "description": "Environmental stewards rally religious supporters",
+    },
+}
+
+
 def _load_yaml_resource(filename: str) -> Dict[str, Any]:
     path = _DATA_PATH / filename
     if not path.exists():
@@ -230,6 +279,16 @@ class ExpeditionResolver:
 
         vignette = self._select_sideways_vignette(rng, expedition_type, prep_depth)
         if vignette:
+            tags = vignette.get("tags", [])
+            tag_effects = self._effects_from_tags(
+                rng=rng,
+                tags=tags,
+                expedition_type=expedition_type,
+                discovery_text=discovery_text,
+            )
+            for tag_effect in tag_effects:
+                tag_effect.payload.setdefault("tags", tags)
+            effects.extend(tag_effects)
             effects.append(
                 SidewaysEffect.queue_order(
                     order_type="followup:sideways_vignette",
@@ -237,7 +296,7 @@ class ExpeditionResolver:
                         "headline": vignette.get("headline"),
                         "body": vignette.get("body"),
                         "gossip": vignette.get("gossip", []),
-                        "tags": vignette.get("tags", []),
+                        "tags": tags,
                         "discovery": discovery_text,
                     },
                     description="Sideways vignette scheduled",
@@ -409,6 +468,90 @@ class ExpeditionResolver:
         if not depth_entries:
             return None
         return rng.choice(depth_entries)
+
+    def _effects_from_tags(
+        self,
+        *,
+        rng: DeterministicRNG,
+        tags: List[str],
+        expedition_type: str,
+        discovery_text: Optional[str],
+    ) -> List[SidewaysEffect]:
+        effects: List[SidewaysEffect] = []
+        if not tags:
+            return effects
+        seen = set()
+        for tag in tags:
+            key = tag.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            spec = _TAG_FALLBACKS.get(key)
+            if not spec:
+                continue
+            effect_type = spec["type"]
+            description = spec.get("description", f"{tag.title()} ripple from expedition")
+            if effect_type == SidewaysEffectType.SPAWN_THEORY:
+                theory_text = discovery_text or f"{tag.title()} implications for {expedition_type}"
+                confidence = spec.get("confidence", "suspect")
+                effects.append(
+                    SidewaysEffect.spawn_theory(
+                        theory_text=theory_text,
+                        confidence=confidence,
+                        description=description,
+                    )
+                )
+            elif effect_type == SidewaysEffectType.FACTION_SHIFT:
+                faction = spec.get("faction") or rng.choice([
+                    "Academic",
+                    "Government",
+                    "Industry",
+                    "Religious",
+                    "Foreign",
+                ])
+                amount = int(spec.get("amount", 1))
+                effects.append(
+                    SidewaysEffect.faction_shift(
+                        faction=faction,
+                        amount=amount,
+                        description=description,
+                    )
+                )
+            elif effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY:
+                opportunity_type = spec.get("opportunity", f"{key}_opportunity")
+                details = dict(spec.get("details", {}))
+                if "expires_in_days" not in details:
+                    details["expires_in_days"] = 3
+                effects.append(
+                    SidewaysEffect.unlock_opportunity(
+                        opportunity_type=opportunity_type,
+                        details=details,
+                        description=description,
+                    )
+                )
+            elif effect_type == SidewaysEffectType.REPUTATION_CHANGE:
+                amount = int(spec.get("amount", 1))
+                effects.append(
+                    SidewaysEffect.reputation_change(
+                        amount=amount,
+                        description=description,
+                    )
+                )
+            elif effect_type == SidewaysEffectType.QUEUE_ORDER:
+                order_type = spec.get("order_type", f"followup:{key}")
+                payload = {
+                    "tags": tags,
+                    "discovery": discovery_text,
+                    "scope": expedition_type,
+                }
+                effects.append(
+                    SidewaysEffect.queue_order(
+                        order_type=order_type,
+                        order_data=payload,
+                        description=description,
+                    )
+                )
+        return effects
 
 
 __all__ = ["ExpeditionResolver", "FailureTables", "FailureResult"]
