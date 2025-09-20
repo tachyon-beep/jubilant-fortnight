@@ -60,6 +60,7 @@ from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
 from .telemetry import get_telemetry
 from .llm_client import enhance_press_release_sync, LLMGenerationError, LLMNotEnabledError
+from .moderation import GuardianModerator, ModerationDecision
 from .press_tone import get_tone_seed
 
 
@@ -122,6 +123,9 @@ class GameService:
     class GamePausedError(RuntimeError):
         """Raised when the game is paused and actions are disallowed."""
 
+    class ModerationRejectedError(RuntimeError):
+        """Raised when player content fails moderation."""
+
     _MIN_SCHOLAR_ROSTER = 20
     _MAX_SCHOLAR_ROSTER = 30
     _EXPEDITION_COSTS: Dict[str, Dict[str, int]] = {
@@ -178,6 +182,7 @@ class GameService:
         self._admin_notifications: deque[str] = deque()
         self._telemetry = get_telemetry()
         self._latest_symposium_scoring: List[Dict[str, object]] = []
+        self._moderator = GuardianModerator()
         if not any(True for _ in self.state.all_scholars()):
             self.state.seed_base_scholars()
         self._ensure_roster()
@@ -199,6 +204,89 @@ class GameService:
     def _queue_admin_notification(self, message: str) -> None:
         logger.warning(message)
         self._admin_notifications.append(message)
+
+    def _handle_blocked_content(
+        self,
+        *,
+        surface: str,
+        actor: Optional[str],
+        decision: ModerationDecision,
+        telemetry_event: str,
+    ) -> None:
+        detail = decision.reason or "Content blocked by moderation"
+        actor_label = actor or "unknown actor"
+        note = f"🛡️ Moderation blocked {surface} from {actor_label}: {detail}"
+        self._queue_admin_notification(note)
+        try:
+            self._telemetry.track_system_event(
+                telemetry_event,
+                source=surface,
+                reason=detail,
+            )
+        except Exception:  # pragma: no cover - telemetry should not fail moderation flow
+            logger.debug("Telemetry tracking for moderation block failed", exc_info=True)
+
+    def _moderate_player_text(
+        self,
+        *,
+        surface: str,
+        text: str,
+        actor: str,
+    ) -> None:
+        if not text.strip():
+            return
+        decision = self._moderator.review(
+            text,
+            surface=surface,
+            actor=actor,
+            stage="player_input",
+        )
+        if not decision.allowed:
+            self._handle_blocked_content(
+                surface=surface,
+                actor=actor,
+                decision=decision,
+                telemetry_event="alert_moderation_player_blocked",
+            )
+            raise GameService.ModerationRejectedError(decision.reason or "Content blocked")
+        if decision.severity == "warn":
+            logger.info(
+                "Moderation warning for %s by %s: %s",
+                surface,
+                actor,
+                decision.metadata,
+            )
+
+    def _moderate_generated_text(
+        self,
+        *,
+        surface: str,
+        actor: Optional[str],
+        generated: str,
+        fallback: str,
+    ) -> tuple[str, Optional[ModerationDecision]]:
+        decision = self._moderator.review(
+            generated,
+            surface=surface,
+            actor=actor,
+            stage="llm_output",
+        )
+        if decision.allowed:
+            if decision.severity == "warn":
+                logger.info(
+                    "Moderation warning for generated %s: %s",
+                    surface,
+                    decision.metadata,
+                )
+            return generated, decision
+
+        self._handle_blocked_content(
+            surface=surface,
+            actor=actor,
+            decision=decision,
+            telemetry_event="alert_moderation_llm_blocked",
+        )
+        return fallback, decision
 
     def release_scheduled_press(self, now: Optional[datetime] = None) -> List[PressRelease]:
         """Release any scheduled press items that are due as of ``now``."""
@@ -609,7 +697,13 @@ class GameService:
                 self._pause_for_llm(str(exc))
             return release
 
-        release.body = enhanced_body
+        moderated_body, moderation_decision = self._moderate_generated_text(
+            surface=release.type,
+            actor=persona_name,
+            generated=enhanced_body,
+            fallback=base_body,
+        )
+        release.body = moderated_body
         metadata = dict(release.metadata)
         metadata.setdefault("llm", {})
         metadata["llm"].update(
@@ -618,6 +712,19 @@ class GameService:
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
         )
+        if moderation_decision is not None and moderation_decision.metadata:
+            moderation_meta = metadata.setdefault("moderation", {})
+            moderation_meta.update(
+                {
+                    "severity": moderation_decision.severity,
+                    "reason": moderation_decision.reason,
+                    "source": moderation_decision.metadata.get("source"),
+                    "categories": moderation_decision.metadata.get("violations"),
+                }
+            )
+            if not moderation_decision.allowed:
+                moderation_meta["blocked"] = True
+                moderation_meta["fallback_to_base"] = True
         release.metadata = metadata
         return release
 
@@ -650,6 +757,11 @@ class GameService:
         self.ensure_player(player_id)
         player = self.state.get_player(player_id)
         assert player is not None
+        self._moderate_player_text(
+            surface="submit_theory",
+            text=theory,
+            actor=player.display_name,
+        )
         ctx = BulletinContext(
             bulletin_number=len(self.state.export_events()) + 1,
             player=player_id,
@@ -728,6 +840,11 @@ class GameService:
         self.ensure_player(player_id, display_name)
         player = self.state.get_player(player_id)
         assert player is not None
+        self._moderate_player_text(
+            surface="table_talk",
+            text=message,
+            actor=player.display_name,
+        )
 
         now = datetime.now(timezone.utc)
         headline = f"Table Talk — {player.display_name}"
@@ -799,6 +916,11 @@ class GameService:
         player = self.state.get_player(player_id)
         assert player is not None
         self._require_reputation(player, f"expedition_{expedition_type}")
+        self._moderate_player_text(
+            surface="expedition_objective",
+            text=objective,
+            actor=player.display_name,
+        )
         self._apply_expedition_costs(player, expedition_type, funding)
         self.state.upsert_player(player)
         order = ExpeditionOrder(
@@ -2666,6 +2788,16 @@ class GameService:
 
         player = self.state.get_player(player_id)
         display_name = player.display_name if player else player_id
+        self._moderate_player_text(
+            surface="symposium_topic",
+            text=topic,
+            actor=display_name,
+        )
+        self._moderate_player_text(
+            surface="symposium_description",
+            text=description,
+            actor=display_name,
+        )
         press = PressRelease(
             type="symposium_proposal",
             headline=f"Symposium Proposal Submitted — {topic.strip()}",

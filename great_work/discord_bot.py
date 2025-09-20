@@ -220,13 +220,21 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _flush_admin_notifications()
             return
         supporter_list = [s.strip() for s in supporters.split(",") if s.strip()]
-        press = service.submit_theory(
-            player_id=str(interaction.user.display_name),
-            theory=theory,
-            confidence=level,
-            supporters=supporter_list,
-            deadline=deadline,
-        )
+        try:
+            press = service.submit_theory(
+                player_id=str(interaction.user.display_name),
+                theory=theory,
+                confidence=level,
+                supporters=supporter_list,
+                deadline=deadline,
+            )
+        except GameService.ModerationRejectedError as exc:
+            await interaction.response.send_message(
+                f"Moderation blocked that submission: {exc}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
         message = _format_press(press)
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
@@ -275,17 +283,25 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         )
         team_list = [s.strip() for s in team.split(",") if s.strip()]
         funding_list = [s.strip() for s in funding.split(",") if s.strip()]
-        press = service.queue_expedition(
-            code=code,
-            player_id=str(interaction.user.display_name),
-            expedition_type=expedition_type,
-            objective=objective,
-            team=team_list,
-            funding=funding_list,
-            preparation=preparation,
-            prep_depth=prep_depth,
-            confidence=level,
-        )
+        try:
+            press = service.queue_expedition(
+                code=code,
+                player_id=str(interaction.user.display_name),
+                expedition_type=expedition_type,
+                objective=objective,
+                team=team_list,
+                funding=funding_list,
+                preparation=preparation,
+                prep_depth=prep_depth,
+                confidence=level,
+            )
+        except GameService.ModerationRejectedError as exc:
+            await interaction.response.send_message(
+                f"Moderation blocked that expedition objective: {exc}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
         message = _format_press(press)
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
@@ -728,6 +744,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 topic=topic,
                 description=description,
             )
+        except GameService.ModerationRejectedError as exc:
+            await interaction.response.send_message(
+                f"Moderation blocked that proposal: {exc}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
@@ -1618,6 +1641,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 display_name=display_name,
                 message=message,
             )
+        except GameService.ModerationRejectedError as exc:
+            await interaction.response.send_message(
+                f"Moderation blocked that message: {exc}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()

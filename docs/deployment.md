@@ -144,6 +144,20 @@ LLM_MODEL=your_model
 
 The game pauses automatically if the LLM fails repeatedly; monitor admin notifications and `/telemetry_report` for pause/resume events.
 
+## 6. Moderation Sidecar
+
+- Download Granite Guardian weights with `python -m great_work.tools.download_guardian_model --target ./models/guardian` (defaults to `ibm-granite/granite-guardian-3.2-3b-a800m`; requires `pip install huggingface_hub`). Authentication follows the standard Hugging Face token flow; pass `--token` explicitly or rely on cached credentials.
+- Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an IPC/gRPC endpoint. See `docs/SAFETY_PLAN.md` for architecture and operational guidance.
+- Leave the script unused if you prefer an alternate moderation provider—the repository ships without any large binaries by default.
+- Optional environment knobs:
+  ```env
+  GREAT_WORK_GUARDIAN_MODE=sidecar      # or local
+  GREAT_WORK_GUARDIAN_URL=http://localhost:8088/moderate
+  GREAT_WORK_GUARDIAN_ENABLED=true
+  GREAT_WORK_GUARDIAN_LOCAL_PATH=./models/guardian   # when using local mode
+  GREAT_WORK_GUARDIAN_CATEGORIES=Hate,Abuse,Profanity,Sexual,Violence,Self-Harm,Illicit
+  ```
+
 ## 6. Firewall & Networking Checklist
 
 - Open Discord outbound access (HTTPS).

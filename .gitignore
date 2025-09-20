@@ -33,3 +33,5 @@ coverage.xml
 
 # GitHub AI instructions
 .github/instructions/codacy.instructions.md
+
+models/guardian/

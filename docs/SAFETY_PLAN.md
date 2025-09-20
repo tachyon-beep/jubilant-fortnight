@@ -19,10 +19,12 @@ _Last updated: 2025-09-30_
 
 ## Model & Deployment
 
-- **Model choice:** Granite Guardian 2B (INT8) hosted locally. This footprint stays under ~6 GB RAM and runs comfortably on a modern workstation CPU.
+- **Model choice:** Granite Guardian 3.2 3B (A800M variant) hosted locally. The INT8 quantised build remains lightweight enough for workstations while providing stronger safety coverage.
 - **Runtime options:**
   - **Sidecar binary:** Run via Ollama (`ollama run granite-guardian:2b`) or a custom container. Ensure the service exposes a simple RPC endpoint for scoring requests.
   - **Process supervision:** Use systemd or a Docker container with restart policies. Telemetry should confirm the sidecar’s liveness (heartbeat check every minute).
+- **Fetching weights:** Run `python -m great_work.tools.download_guardian_model --target ./models/guardian` to fetch the Hugging Face snapshot (defaults to `ibm-granite/granite-guardian-3.2-3b-a800m`). The script depends on `huggingface_hub`; install it locally before executing. We keep the repository free of large binaries by relying on this helper.
+- **Integration modes:** Set `GREAT_WORK_GUARDIAN_MODE=sidecar` (default) to call an HTTP service at `GREAT_WORK_GUARDIAN_URL`, or `GREAT_WORK_GUARDIAN_MODE=local` to load the downloaded weights directly (requires `transformers`). In local mode point `GREAT_WORK_GUARDIAN_LOCAL_PATH` at the snapshot directory.
 - **Latency budget:**
   - Prefilter: sub-millisecond per request.
   - Guardian 2B INT8 on CPU: **~100–300 ms** per call when warm.
@@ -82,4 +84,3 @@ _Last updated: 2025-09-30_
 3. Extend telemetry schema with moderation events.
 4. Add operator documentation (TELEMETRY_RUNBOOK, deployment environment variables).
 5. Pilot with dry-run logging before enabling hard blocks to tune thresholds and keyword lists.
-

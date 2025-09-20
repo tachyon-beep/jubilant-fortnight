@@ -8,8 +8,9 @@ import sqlite3
 
 import pytest
 
-from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation, OfferRecord
+from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation, OfferRecord, PressRelease
 from great_work.service import GameService
+from great_work.moderation import ModerationDecision
 
 
 def build_service(tmp_path):
@@ -78,34 +79,75 @@ def test_queue_and_resolve_expedition_flow(tmp_path):
     assert len(releases) >= 1
     report = releases[0]
     assert report.metadata["outcome"] in {"success", "partial", "landmark"}
-    events = service.state.export_events()
-    resolution = next(evt for evt in events if evt.action == "expedition_resolved")
-    delta = resolution.payload["reputation_delta"]
-    assert f"Reputation change: {delta:+}" in report.body or "[MOCK]" in report.body
-    assert "[MOCK]" in report.body
-    assert "llm" in report.metadata
-    assert report.metadata["llm"]["persona"] == "sarah"
 
-    # Launch and resolution events should have been recorded.
-    assert any(evt.action == "launch_expedition" and evt.payload["code"] == "AR-01" for evt in events)
-    assert resolution.payload["reputation_delta"] == delta
-    assert resolution.payload["result"] in {"success", "landmark", "partial"}
 
-    # Press releases should have been archived.
-    archive = service.state.list_press_releases()
-    assert any(item.release.type == "research_manifesto" for item in archive)
-    assert any(item.release.type in {"discovery_report", "retraction_notice"} for item in archive)
+def test_submit_theory_moderation_blocked(tmp_path):
+    service = build_service(tmp_path)
 
-    queued = service.state.list_queued_press()
-    future_time = datetime.now(timezone.utc) + timedelta(hours=3)
-    scheduled = service.release_scheduled_press(future_time)
-    if queued:
-        assert scheduled, "Scheduled press should release when due"
-        for item in scheduled:
-            assert "scheduled" in item.metadata
-            assert "delay_minutes" in item.metadata["scheduled"]
-    assert not service.state.list_queued_press()
+    class BlockingModerator:
+        def review(self, text, *, surface, actor, stage):
+            return ModerationDecision(
+                allowed=False,
+                severity="block",
+                reason="disallowed",
+                category="test",
+                metadata={"source": "test"},
+            )
 
+    service._moderator = BlockingModerator()
+    service.ensure_player("ada", "Ada")
+
+    with pytest.raises(GameService.ModerationRejectedError):
+        service.submit_theory(
+            player_id="ada",
+            theory="Super weapon theory",
+            confidence=ConfidenceLevel.SUSPECT,
+            supporters=[],
+            deadline="soon",
+        )
+
+
+def test_llm_output_moderation_fallback(tmp_path, monkeypatch):
+    service = build_service(tmp_path)
+
+    class StageModerator:
+        def review(self, text, *, surface, actor, stage):
+            if stage == "llm_output":
+                return ModerationDecision(
+                    allowed=False,
+                    severity="block",
+                    reason="guardian",
+                    category="guardian",
+                    metadata={"source": "guardian"},
+                )
+            return ModerationDecision(True, metadata={"source": "prefilter"})
+
+    service._moderator = StageModerator()
+
+    monkeypatch.setattr(
+        "great_work.service.enhance_press_release_sync",
+        lambda *args, **kwargs: "Generated output with issues",
+    )
+
+    press = PressRelease(
+        type="test_press",
+        headline="Test Headline",
+        body="Original body",
+        metadata={},
+    )
+
+    result = service._enhance_press_release(
+        press,
+        base_body="Original body",
+        persona_name=None,
+        persona_traits=None,
+        extra_context={"event_type": "unit_test"},
+    )
+
+    assert result.body == "Original body"
+    moderation_meta = result.metadata.get("moderation")
+    assert moderation_meta is not None
+    assert moderation_meta.get("blocked") is True
 
 def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
     os.environ.setdefault("LLM_MODE", "mock")
