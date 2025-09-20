@@ -1,12 +1,16 @@
 """Tests for GameService edge cases and additional coverage."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from great_work.models import ConfidenceLevel, ExpeditionOutcome, Player
+from great_work.models import ConfidenceLevel, ExpeditionOutcome, Player, ExpeditionPreparation
 from great_work.service import GameService
+from great_work.llm_client import LLMGenerationError
+
+os.environ.setdefault("LLM_MODE", "mock")
 
 
 def test_player_status_returns_complete_info(tmp_path):
@@ -228,3 +232,71 @@ def test_generated_scholar_counter_increments(tmp_path):
     # The counter should be tracked
     assert isinstance(initial_count, int)
     assert initial_count >= 0
+
+
+def test_llm_failure_triggers_pause(tmp_path, monkeypatch):
+    """Repeated LLM failures should pause gameplay and notify admins."""
+    os.environ["LLM_MODE"] = "mock"
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    service._llm_pause_timeout = 0
+
+    def failing_enhance(*args, **kwargs):
+        raise LLMGenerationError("LLM offline")
+
+    monkeypatch.setattr("great_work.service.enhance_press_release_sync", failing_enhance)
+
+    service.ensure_player("sarah", "Sarah")
+    prep = ExpeditionPreparation()
+
+    release = service.queue_expedition(
+        code="AR-FAIL",
+        player_id="sarah",
+        expedition_type="field",
+        objective="Test LLM outage",
+        team=[],
+        funding=[],
+        preparation=prep,
+        prep_depth="standard",
+        confidence=ConfidenceLevel.SUSPECT,
+    )
+    assert release.type == "research_manifesto"
+    assert service.is_paused() is True
+    notifications = service.drain_admin_notifications()
+    assert any("paused" in message.lower() for message in notifications)
+
+    with pytest.raises(GameService.GamePausedError):
+        service.queue_expedition(
+            code="AR-FAIL2",
+            player_id="sarah",
+            expedition_type="field",
+            objective="Should not run",
+            team=[],
+            funding=[],
+            preparation=prep,
+            prep_depth="standard",
+            confidence=ConfidenceLevel.SUSPECT,
+        )
+
+    # Restore LLM and resume
+    def recovering_enhance(*args, **kwargs):
+        return "Recovered narrative"
+
+    monkeypatch.setattr("great_work.service.enhance_press_release_sync", recovering_enhance)
+
+    resume_press = service.resume_game("Admin")
+    assert service.is_paused() is False
+    assert "Recovered" in resume_press.body or resume_press.metadata.get("was_paused")
+
+    release_after = service.queue_expedition(
+        code="AR-RECOVER",
+        player_id="sarah",
+        expedition_type="field",
+        objective="LLM recovered",
+        team=[],
+        funding=[],
+        preparation=prep,
+        prep_depth="standard",
+        confidence=ConfidenceLevel.SUSPECT,
+    )
+    assert "Recovered narrative" in release_after.body

@@ -18,6 +18,11 @@ def track_command(func: Callable) -> Callable:
         command_name = func.__name__
         player_id = str(interaction.user.id)
         guild_id = str(interaction.guild_id) if interaction.guild_id else "dm"
+        channel_id = (
+            str(interaction.channel_id)
+            if getattr(interaction, "channel_id", None) is not None
+            else "dm"
+        )
         start_time = time.time()
         success = False
         error_type = None
@@ -45,19 +50,19 @@ def track_command(func: Callable) -> Callable:
                 player_id,
                 guild_id,
                 success=success,
-                duration_ms=duration_ms
+                duration_ms=duration_ms,
+                channel_id=channel_id
             )
 
             # Track player activity if successful
             if success and hasattr(interaction, 'user'):
-                try:
-                    from .service import GameService
-                    service = GameService()
-                    player_name = str(interaction.user.display_name)
+                bot = getattr(interaction, "client", None)
+                service = getattr(bot, "state_service", None) if bot else None
 
-                    # Try to get player status
-                    if hasattr(service, 'player_status'):
-                        status = service.player_status(player_name)
+                if service and hasattr(service, "player_status"):
+                    try:
+                        player_handle = str(interaction.user.display_name)
+                        status = service.player_status(player_handle)
                         if status:
                             telemetry.track_player_activity(
                                 player_id,
@@ -65,7 +70,7 @@ def track_command(func: Callable) -> Callable:
                                 status.get('reputation', 0),
                                 status.get('influence', {})
                             )
-                except Exception:
-                    pass  # Don't let telemetry errors break commands
+                    except Exception:
+                        pass  # Do not break command execution if telemetry fails
 
     return wrapper

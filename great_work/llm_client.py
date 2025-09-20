@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import logging
 import random
+import threading
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
@@ -11,6 +12,14 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+
+class LLMGenerationError(RuntimeError):
+    """Raised when the LLM cannot generate narrative content."""
+
+
+class LLMNotEnabledError(LLMGenerationError):
+    """Raised when the LLM client is disabled."""
 
 
 class SafetyLevel(Enum):
@@ -34,10 +43,22 @@ class LLMConfig:
     batch_size: int = 10  # For batch processing
     use_fallback_templates: bool = True  # Fallback to templates if LLM fails
     safety_enabled: bool = True
+    mock_mode: bool = False
+    retry_schedule: Optional[List[float]] = None
 
     @classmethod
     def from_env(cls) -> 'LLMConfig':
         """Load configuration from environment variables."""
+        mock_mode = os.getenv("LLM_MODE", "").lower() == "mock"
+        schedule_env = os.getenv("LLM_RETRY_SCHEDULE")
+        retry_schedule: Optional[List[float]] = None
+        if schedule_env:
+            try:
+                retry_schedule = [float(item.strip()) for item in schedule_env.split(",") if item.strip()]
+            except ValueError:
+                logger.warning("Invalid LLM_RETRY_SCHEDULE value: %s", schedule_env)
+                retry_schedule = None
+
         return cls(
             api_base=os.getenv("LLM_API_BASE", "http://localhost:5000/v1"),
             api_key=os.getenv("LLM_API_KEY", "not-needed-for-local"),
@@ -49,6 +70,8 @@ class LLMConfig:
             batch_size=int(os.getenv("LLM_BATCH_SIZE", "10")),
             use_fallback_templates=os.getenv("LLM_USE_FALLBACK", "true").lower() == "true",
             safety_enabled=os.getenv("LLM_SAFETY_ENABLED", "true").lower() == "true",
+            mock_mode=mock_mode,
+            retry_schedule=retry_schedule,
         )
 
 
@@ -57,10 +80,17 @@ class ContentModerator:
 
     def __init__(self):
         self.blocked_words = [
-            # Add offensive terms to block here
+            "kill",
+            "murder",
+            "terrorist",
+            "suicide",
+            "bomb",
+            "racist",
         ]
         self.warning_phrases = [
-            # Add concerning phrases here
+            "hate speech",
+            "slur",
+            "graphic violence",
         ]
 
     def check_content(self, text: str) -> SafetyLevel:
@@ -90,6 +120,14 @@ class LLMClient:
         self.config = config or LLMConfig.from_env()
         self.moderator = ContentModerator() if self.config.safety_enabled else None
         self._executor = ThreadPoolExecutor(max_workers=4)
+        self._retry_schedule = self.config.retry_schedule or [1.0, 3.0, 10.0, 30.0, 60.0, 120.0]
+        self.enabled = True
+
+        if self.config.mock_mode:
+            self.openai = None
+            self.client = None
+            logger.info("LLM client initialised in mock mode")
+            return
 
         # Import openai library if available
         try:
@@ -101,7 +139,6 @@ class LLMClient:
                 base_url=self.config.api_base,
                 timeout=self.config.timeout
             )
-            self.enabled = True
             logger.info(f"LLM client initialized with base URL: {self.config.api_base}")
         except ImportError:
             logger.warning("OpenAI library not installed. LLM features will be disabled.")
@@ -130,8 +167,13 @@ Be concise but flavorful. Maximum 2-3 sentences."""
         persona_traits: Optional[Dict[str, Any]] = None
     ) -> str:
         """Generate narrative text using LLM with optional persona voice."""
+        if self.config.mock_mode:
+            return self._mock_generation(prompt, context, persona_name)
+
         if not self.enabled:
-            return self._fallback_template(context)
+            if self.config.use_fallback_templates:
+                return self._fallback_template(context)
+            raise LLMNotEnabledError("LLM client is disabled")
 
         try:
             # Build full prompt with persona if provided
@@ -157,23 +199,28 @@ Be concise but flavorful. Maximum 2-3 sentences."""
                     safety = self.moderator.check_content(generated_text)
                     if safety == SafetyLevel.BLOCKED:
                         logger.warning(f"Generated content blocked for safety: {generated_text[:50]}...")
-                        return self._fallback_template(context)
+                        if self.config.use_fallback_templates:
+                            return self._fallback_template(context)
+                        raise LLMGenerationError("Generated content blocked by moderator")
                     elif safety in [SafetyLevel.MINOR_CONCERN, SafetyLevel.MODERATE_CONCERN]:
                         logger.info(f"Content passed with {safety.value}: {generated_text[:50]}...")
 
                 return generated_text
             else:
-                return self._fallback_template(context)
+                if self.config.use_fallback_templates:
+                    return self._fallback_template(context)
+                raise LLMGenerationError("LLM call exhausted retries")
 
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
             if self.config.use_fallback_templates:
                 return self._fallback_template(context)
-            raise
+            raise LLMGenerationError(str(e))
 
     async def _call_with_retry(self, messages: List[Dict[str, str]]) -> Optional[Any]:
         """Make API call with retry logic."""
-        for attempt in range(self.config.retry_attempts):
+        attempts = max(1, self.config.retry_attempts)
+        for attempt in range(attempts):
             try:
                 response = await asyncio.get_event_loop().run_in_executor(
                     self._executor,
@@ -187,8 +234,9 @@ Be concise but flavorful. Maximum 2-3 sentences."""
                 return response
             except Exception as e:
                 logger.warning(f"LLM API call attempt {attempt + 1} failed: {e}")
-                if attempt < self.config.retry_attempts - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                if attempt < attempts - 1:
+                    delay = self._retry_schedule[min(attempt, len(self._retry_schedule) - 1)]
+                    await asyncio.sleep(delay)
                 else:
                     logger.error("All retry attempts exhausted for LLM call")
                     return None
@@ -209,6 +257,48 @@ Be concise but flavorful. Maximum 2-3 sentences."""
         ]
 
         return random.choice(templates)
+
+    def _mock_generation(self, prompt: str, context: Dict[str, Any], persona_name: Optional[str]) -> str:
+        """Return deterministic text in mock mode."""
+        speaker = persona_name or context.get("player", "Narrator")
+        summary = context.get("summary") or context.get("action") or context.get("type", "event")
+        return f"[MOCK] {speaker}: {summary or prompt}"
+
+    def generate_narrative_sync(
+        self,
+        prompt: str,
+        context: Dict[str, Any],
+        persona_name: Optional[str] = None,
+        persona_traits: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Blocking helper for synchronous callers."""
+        coro = self.generate_narrative(
+            prompt=prompt,
+            context=context,
+            persona_name=persona_name,
+            persona_traits=persona_traits,
+        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        result_container: Dict[str, Any] = {}
+
+        def runner() -> None:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                result_container["value"] = new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+
+        thread = threading.Thread(target=runner)
+        thread.start()
+        thread.join()
+        if "value" not in result_container:
+            raise LLMGenerationError("Synchronous narrative generation failed")
+        return result_container["value"]
 
     async def generate_batch(
         self,
@@ -233,6 +323,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
     def close(self):
         """Clean up resources."""
         self._executor.shutdown(wait=True)
+        # No background loop to tear down
 
 
 # Singleton instance
@@ -281,3 +372,35 @@ async def enhance_press_release(
     )
 
     return enhanced
+
+
+def enhance_press_release_sync(
+    press_type: str,
+    base_content: str,
+    context: Dict[str, Any],
+    scholar_name: Optional[str] = None,
+    scholar_traits: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Synchronous variant backed by the client helper."""
+
+    prompt_map = {
+        "academic_bulletin": f"Write an academic announcement: {base_content}",
+        "research_manifesto": f"Write a bold research manifesto: {base_content}",
+        "discovery_report": f"Write an exciting discovery report: {base_content}",
+        "retraction_notice": f"Write a humble retraction notice: {base_content}",
+        "academic_gossip": f"Write intriguing academic gossip: {base_content}",
+        "recruitment_report": f"Write a recruitment update: {base_content}",
+        "defection_notice": f"Write a dramatic defection announcement: {base_content}",
+        "mentorship_announcement": f"Write a mentorship announcement: {base_content}",
+        "conference_report": f"Write a conference debate summary: {base_content}",
+        "symposium_announcement": f"Write a symposium topic announcement: {base_content}",
+    }
+    prompt = prompt_map.get(press_type, f"Write about: {base_content}")
+
+    client = get_llm_client()
+    return client.generate_narrative_sync(
+        prompt=prompt,
+        context=context,
+        persona_name=scholar_name,
+        persona_traits=scholar_traits,
+    )

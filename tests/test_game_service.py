@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import os
 import sqlite3
 
 import pytest
@@ -14,6 +15,8 @@ from great_work.service import GameService
 def build_service(tmp_path):
     """Helper that initialises a fresh :class:`GameService`."""
 
+    os.environ.setdefault("LLM_MODE", "mock")
+    os.environ.setdefault("LLM_RETRY_SCHEDULE", "1,5,15")
     db_path = tmp_path / "state.sqlite"
     service = GameService(db_path=db_path)
     # Ensure the roster was filled according to the design expectations.
@@ -66,7 +69,9 @@ def test_queue_and_resolve_expedition_flow(tmp_path):
 
     assert manifesto.type == "research_manifesto"
     assert "Expedition AR-01" in manifesto.headline
-    assert "Test the calendar alignment" in manifesto.body
+    assert "[MOCK]" in manifesto.body
+    assert "llm" in manifesto.metadata
+    assert manifesto.metadata["llm"]["persona"] == "sarah"
 
     releases = service.resolve_pending_expeditions()
 
@@ -76,12 +81,10 @@ def test_queue_and_resolve_expedition_flow(tmp_path):
     events = service.state.export_events()
     resolution = next(evt for evt in events if evt.action == "expedition_resolved")
     delta = resolution.payload["reputation_delta"]
-    assert f"Reputation change: {delta:+}" in report.body
-    assert "Dr Elara Ironquill" in report.body
-
-    if len(releases) > 1:
-        gossip = releases[1]
-        assert gossip.type in {"academic_gossip", "retraction_notice", "discovery_report", "faction_shift", "opportunity_unlocked"}
+    assert f"Reputation change: {delta:+}" in report.body or "[MOCK]" in report.body
+    assert "[MOCK]" in report.body
+    assert "llm" in report.metadata
+    assert report.metadata["llm"]["persona"] == "sarah"
 
     # Launch and resolution events should have been recorded.
     assert any(evt.action == "launch_expedition" and evt.payload["code"] == "AR-01" for evt in events)
@@ -92,6 +95,67 @@ def test_queue_and_resolve_expedition_flow(tmp_path):
     archive = service.state.list_press_releases()
     assert any(item.release.type == "research_manifesto" for item in archive)
     assert any(item.release.type in {"discovery_report", "retraction_notice"} for item in archive)
+
+    queued = service.state.list_queued_press()
+    future_time = datetime.now(timezone.utc) + timedelta(hours=3)
+    scheduled = service.release_scheduled_press(future_time)
+    if queued:
+        assert scheduled, "Scheduled press should release when due"
+        for item in scheduled:
+            assert "scheduled" in item.metadata
+            assert "delay_minutes" in item.metadata["scheduled"]
+    assert not service.state.list_queued_press()
+
+
+def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
+    os.environ.setdefault("LLM_MODE", "mock")
+
+    class StubTelemetry:
+        def __init__(self) -> None:
+            self.llm_calls = []
+            self.system_events = []
+
+        def track_llm_activity(self, press_type, success, duration_ms, persona=None, error=None):
+            self.llm_calls.append(
+                {
+                    "press_type": press_type,
+                    "success": success,
+                    "persona": persona,
+                    "error": error,
+                    "duration_ms": duration_ms,
+                }
+            )
+
+        def track_system_event(self, event, *, source=None, reason=None):
+            self.system_events.append(
+                {"event": event, "source": source, "reason": reason}
+            )
+
+    stub = StubTelemetry()
+    monkeypatch.setattr("great_work.service.get_telemetry", lambda: stub)
+
+    db_path = tmp_path / "telemetry.sqlite"
+    service = GameService(db_path=db_path)
+
+    preparation = ExpeditionPreparation()
+    service.queue_expedition(
+        code="TL-01",
+        player_id="sarah",
+        expedition_type="field",
+        objective="Trace LLM hooks",
+        team=["s.ironquill"],
+        funding=["academia"],
+        preparation=preparation,
+        prep_depth="standard",
+        confidence=ConfidenceLevel.CERTAIN,
+    )
+
+    assert stub.llm_calls, "Expected LLM telemetry to capture expedition manifesto enhancement"
+    call = stub.llm_calls[0]
+    assert call["press_type"] == "research_manifesto"
+    assert call["success"] is True
+    assert call["persona"] == "sarah"
+    assert call["error"] is None
 
 
 def test_recruitment_and_cooldown_flow(tmp_path):
@@ -181,6 +245,22 @@ def test_defection_offer_and_digest(tmp_path):
 
     assert refused is False
     assert second_notice.type == "defection_notice"
+    assert "llm" in notice.metadata
+    assert "llm" in second_notice.metadata
+    assert notice.metadata["llm"]["persona"] == "Dr Elara Ironquill"
+    assert second_notice.metadata["llm"]["persona"] == "Dr Elara Ironquill"
+
+    queued = service.state.list_queued_press()
+    assert queued, "Expected defection follow-ups to be scheduled"
+    scheduled_followups = service.release_scheduled_press(datetime.now(timezone.utc) + timedelta(hours=4))
+    assert scheduled_followups, "Scheduled defection follow-ups should release"
+    assert any(rel.type == "faction_statement" for rel in scheduled_followups)
+    assert any(rel.type == "academic_gossip" for rel in scheduled_followups)
+    assert not service.state.list_queued_press()
+
+    archive = service.state.list_press_releases(limit=50)
+    assert any(item.release.type == "faction_statement" for item in archive)
+    assert any(item.release.type == "academic_gossip" for item in archive)
 
     player = service.state.get_player("sarah")
     if player:
@@ -246,4 +326,3 @@ def test_wager_reference_exposes_thresholds_and_bounds(tmp_path):
     bounds = reference["reputation_bounds"]
     assert bounds["min"] == service.settings.reputation_bounds["min"]
     assert bounds["max"] == service.settings.reputation_bounds["max"]
-

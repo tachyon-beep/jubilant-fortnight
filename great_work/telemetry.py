@@ -24,6 +24,8 @@ class MetricType(Enum):
     PLAYER_ACTIVITY = "player_activity"
     SCHOLAR_STATS = "scholar_stats"
     ECONOMY_BALANCE = "economy_balance"
+    LLM_ACTIVITY = "llm_activity"
+    SYSTEM_EVENT = "system_event"
 
 
 @dataclass
@@ -80,18 +82,23 @@ class TelemetryCollector:
         player_id: str,
         guild_id: str,
         success: bool = True,
-        duration_ms: Optional[float] = None
+        duration_ms: Optional[float] = None,
+        channel_id: Optional[str] = None,
     ):
         """Track Discord command usage."""
+        tags = {
+            "player_id": player_id,
+            "guild_id": guild_id,
+            "success": str(success),
+        }
+        if channel_id:
+            tags["channel_id"] = channel_id
+
         self.record(
             MetricType.COMMAND_USAGE,
             command_name,
             1.0,
-            tags={
-                "player_id": player_id,
-                "guild_id": guild_id,
-                "success": str(success)
-            },
+            tags=tags,
             metadata={"duration_ms": duration_ms} if duration_ms else {}
         )
 
@@ -184,6 +191,60 @@ class TelemetryCollector:
                 "reputation": reputation,
                 "influence": influence_totals
             }
+        )
+
+    def track_llm_activity(
+        self,
+        press_type: str,
+        success: bool,
+        duration_ms: float,
+        persona: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Record latency/outcome information for an LLM narrative attempt."""
+
+        tags = {
+            "press_type": press_type,
+            "success": "true" if success else "false",
+        }
+        if persona:
+            tags["persona"] = persona
+
+        metadata: Dict[str, Any] = {"duration_ms": duration_ms}
+        if error:
+            metadata["error"] = error
+
+        self.record(
+            MetricType.LLM_ACTIVITY,
+            press_type,
+            duration_ms,
+            tags=tags,
+            metadata=metadata,
+        )
+
+    def track_system_event(
+        self,
+        event: str,
+        *,
+        source: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Record internal pause/resume or health events."""
+
+        tags = {}
+        if source:
+            tags["source"] = source
+
+        metadata = {}
+        if reason:
+            metadata["reason"] = reason
+
+        self.record(
+            MetricType.SYSTEM_EVENT,
+            event,
+            1.0,
+            tags=tags,
+            metadata=metadata,
         )
 
     def track_scholar_stats(
@@ -409,6 +470,128 @@ class TelemetryCollector:
                 }
             return results
 
+    def get_channel_usage(
+        self,
+        hours: int = 24
+    ) -> Dict[str, Dict[str, Any]]:
+        """Summarise command usage by channel over the given window."""
+
+        start_time = time.time() - (hours * 3600)
+
+        query = """
+            SELECT
+                COALESCE(json_extract(tags, '$.channel_id'), 'unknown') as channel,
+                COUNT(*) as usage_count,
+                COUNT(DISTINCT name) as unique_commands,
+                COUNT(DISTINCT json_extract(tags, '$.player_id')) as unique_players
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+            GROUP BY channel
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.COMMAND_USAGE.value,
+                start_time,
+            ])
+            usage: Dict[str, Dict[str, Any]] = {}
+            for row in cursor.fetchall():
+                channel_value = row[0]
+                channel = str(channel_value) if channel_value not in (None, "") else "unknown"
+                usage[channel] = {
+                    "usage_count": row[1] or 0,
+                    "unique_commands": row[2] or 0,
+                    "unique_players": row[3] or 0,
+                }
+            return usage
+
+    def get_llm_activity_summary(
+        self,
+        hours: int = 24
+    ) -> Dict[str, Dict[str, Any]]:
+        """Summarise LLM activity over the given window."""
+
+        start_time = time.time() - (hours * 3600)
+
+        query = """
+            SELECT
+                name,
+                SUM(CASE WHEN json_extract(tags, '$.success') = 'true' THEN 1 ELSE 0 END) as success_count,
+                SUM(CASE WHEN json_extract(tags, '$.success') = 'false' THEN 1 ELSE 0 END) as failure_count,
+                COUNT(*) as total_calls,
+                AVG(value) as avg_duration,
+                MAX(value) as max_duration
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+            GROUP BY name
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.LLM_ACTIVITY.value,
+                start_time,
+            ])
+            summary: Dict[str, Dict[str, Any]] = {}
+            for row in cursor.fetchall():
+                press_type = row[0]
+                successes = row[1] or 0
+                failures = row[2] or 0
+                total = row[3] or 0
+                avg_duration = row[4] or 0.0
+                max_duration = row[5] or 0.0
+
+                success_rate = successes / total if total else 0.0
+
+                summary[press_type] = {
+                    "total_calls": total,
+                    "successes": successes,
+                    "failures": failures,
+                    "success_rate": success_rate,
+                    "avg_duration_ms": avg_duration,
+                    "max_duration_ms": max_duration,
+                }
+
+            return summary
+
+    def get_system_events(
+        self,
+        hours: int = 24,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Return recent system events such as pause/resume notifications."""
+
+        start_time = time.time() - (hours * 3600)
+
+        query = """
+            SELECT
+                name,
+                timestamp,
+                json_extract(tags, '$.source') as source,
+                json_extract(metadata, '$.reason') as reason
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.SYSTEM_EVENT.value,
+                start_time,
+                limit,
+            ])
+            events = []
+            for row in cursor.fetchall():
+                events.append(
+                    {
+                        "event": row[0],
+                        "timestamp": datetime.fromtimestamp(row[1]).isoformat(),
+                        "source": row[2],
+                        "reason": row[3],
+                    }
+                )
+            return events
+
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
         report = {
@@ -417,7 +600,10 @@ class TelemetryCollector:
             "command_stats": self.get_command_stats(),
             "feature_engagement_7d": self.get_feature_engagement(7),
             "errors_24h": self.get_error_summary(24),
-            "performance_1h": self.get_performance_summary(hours=1)
+            "performance_1h": self.get_performance_summary(hours=1),
+            "llm_activity_24h": self.get_llm_activity_summary(24),
+            "channel_usage_24h": self.get_channel_usage(24),
+            "system_events_24h": self.get_system_events(24, limit=10),
         }
 
         # Add overall statistics

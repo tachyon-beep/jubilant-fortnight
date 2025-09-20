@@ -1,4 +1,5 @@
 """Test symposium voting system implementation."""
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
@@ -8,6 +9,7 @@ from great_work.service import GameService
 
 def test_symposium_flow():
     """Test the complete symposium flow."""
+    os.environ["LLM_MODE"] = "mock"
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         service = GameService(db_path)
@@ -27,6 +29,8 @@ def test_symposium_flow():
         )
         assert press is not None
         assert "symposium" in press.headline.lower()
+        assert "[MOCK]" in press.body
+        assert "llm" in press.metadata and press.metadata["llm"]["persona"] == "The Academy"
 
         # Check that symposium is active
         current = service.state.get_current_symposium_topic()
@@ -38,12 +42,15 @@ def test_symposium_flow():
         # Players vote
         vote1 = service.vote_symposium(player1_id, 1)  # Support
         assert vote1 is not None
+        assert "[MOCK]" in vote1.body
 
         vote2 = service.vote_symposium(player2_id, 2)  # Oppose
         assert vote2 is not None
+        assert "[MOCK]" in vote2.body
 
         vote3 = service.vote_symposium(player3_id, 1)  # Support
         assert vote3 is not None
+        assert "[MOCK]" in vote3.body
 
         # Check votes were recorded
         votes = service.state.get_symposium_votes(topic_id)
@@ -54,7 +61,9 @@ def test_symposium_flow():
         resolution = service.resolve_symposium()
         assert resolution is not None
         assert "resolved" in resolution.headline.lower()
-        assert "supported" in resolution.body.lower()  # Should win with 2/3 votes
+        assert "[MOCK]" in resolution.body
+        assert resolution.metadata["winner"] == "1"
+        assert resolution.metadata["votes"][1] == 2
 
         # Check symposium is no longer active
         current_after = service.state.get_current_symposium_topic()

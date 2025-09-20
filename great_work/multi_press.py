@@ -101,17 +101,17 @@ class MultiPressGenerator:
             context=expedition_ctx
         ))
 
-        # Discovery/retraction report (30 minutes later)
+        # Discovery/retraction report (immediate)
         if outcome_ctx.result.outcome.value in ["success", "sideways"]:
             layers.append(PressLayer(
-                delay_minutes=30,
+                delay_minutes=0,
                 type="discovery_report",
                 generator=discovery_report,
                 context=outcome_ctx
             ))
         else:
             layers.append(PressLayer(
-                delay_minutes=30,
+                delay_minutes=0,
                 type="retraction_notice",
                 generator=retraction_notice,
                 context=outcome_ctx
@@ -163,6 +163,90 @@ class MultiPressGenerator:
                     outcome_ctx.result.sideways_discovery,
                     delay_minutes=180
                 ))
+
+        return layers
+
+    def generate_symposium_layers(
+        self,
+        topic: str,
+        description: str,
+        phase: str,
+        scholars: List[Scholar],
+        votes: Optional[Dict[int, int]] = None,
+    ) -> List[PressLayer]:
+        """Generate layered coverage for symposium events."""
+
+        layers: List[PressLayer] = []
+        safe_scholars = scholars[:]
+        random.shuffle(safe_scholars)
+
+        if phase == "launch":
+            # Curate teaser reactions (delayed)
+            for i, scholar in enumerate(safe_scholars[:3]):
+                quote = f"{scholar.name} hints at bold arguments for '{topic}'."
+                ctx = GossipContext(
+                    scholar=scholar.name,
+                    quote=quote,
+                    trigger=f"Symposium launch: {topic}"
+                )
+                layers.append(
+                    PressLayer(
+                        delay_minutes=45 + (i * 20),
+                        type="academic_gossip",
+                        generator=academic_gossip,
+                        context=ctx,
+                    )
+                )
+        elif phase == "resolution" and votes:
+            total_votes = sum(votes.values()) or 1
+            winner_option = max(votes.keys(), key=lambda key: votes.get(key, 0))
+            winner_share = votes.get(winner_option, 0) / total_votes
+            depth = (
+                PressDepth.BREAKING
+                if winner_share >= 0.66
+                else PressDepth.STANDARD
+            )
+
+            analysts = safe_scholars[:4]
+            for i, scholar in enumerate(analysts):
+                quote = self._generate_symposium_reaction(
+                    scholar.name,
+                    topic,
+                    winner_option,
+                    winner_share,
+                )
+                ctx = GossipContext(
+                    scholar=scholar.name,
+                    quote=quote,
+                    trigger=f"Symposium: {topic}",
+                )
+                delay = 60 + (i * 15)
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="academic_gossip",
+                        generator=academic_gossip,
+                        context=ctx,
+                    )
+                )
+
+            if depth == PressDepth.BREAKING:
+                layers.append(
+                    PressLayer(
+                        delay_minutes=150,
+                        type="analysis",
+                        generator=lambda ctx: PressRelease(
+                            type="analysis",
+                            headline=f"Symposium Analysis: {topic}",
+                            body=(
+                                f"Scholars dissect the decisive outcome on '{topic}'. "
+                                f"Leading voices highlight lingering questions and follow-up debates."
+                            ),
+                            metadata={"topic": topic, "phase": "analysis"},
+                        ),
+                        context={},
+                    )
+                )
 
         return layers
 
@@ -327,6 +411,29 @@ class MultiPressGenerator:
         }
 
         return random.choice(quotes.get(emotion, ["No comment at this time."]))
+
+    def _generate_symposium_reaction(
+        self,
+        scholar_name: str,
+        topic: str,
+        winning_option: int,
+        winning_share: float,
+    ) -> str:
+        """Generate a symposium reaction quote."""
+
+        option_text = {
+            1: "support",
+            2: "oppose",
+            3: "call for further study",
+        }.get(winning_option, "debate")
+
+        sentiments = [
+            f"{scholar_name} applauds the {option_text} verdict on '{topic}', citing its clarity.",
+            f"{scholar_name} warns that the {option_text} outcome on '{topic}' leaves crucial questions unanswered.",
+            f"{scholar_name} notes that with {winning_share:.0%} backing, the academy must act decisively on '{topic}'.",
+            f"{scholar_name} believes the {option_text} majority on '{topic}' reflects a broader shift in priorities.",
+        ]
+        return random.choice(sentiments)
 
     def _generate_defection_reaction(
         self,

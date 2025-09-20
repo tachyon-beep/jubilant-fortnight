@@ -53,7 +53,8 @@ def test_track_command():
             player_id="player1",
             guild_id="guild1",
             success=True,
-            duration_ms=150.5
+            duration_ms=150.5,
+            channel_id="chan1",
         )
 
         assert len(collector._metrics_buffer) == 1
@@ -63,6 +64,7 @@ def test_track_command():
         assert event.tags["player_id"] == "player1"
         assert event.tags["success"] == "True"
         assert event.metadata["duration_ms"] == 150.5
+        assert event.tags["channel_id"] == "chan1"
 
 
 def test_track_feature_usage():
@@ -185,10 +187,10 @@ def test_get_command_stats():
         collector = TelemetryCollector(Path(tmpdir) / "test.db")
 
         # Track some commands
-        collector.track_command("theory", "p1", "g1", True)
-        collector.track_command("theory", "p2", "g1", True)
-        collector.track_command("expedition", "p1", "g1", True)
-        collector.track_command("expedition", "p1", "g1", False)
+        collector.track_command("theory", "p1", "g1", True, channel_id="chanA")
+        collector.track_command("theory", "p2", "g1", True, channel_id="chanA")
+        collector.track_command("expedition", "p1", "g1", True, channel_id="chanB")
+        collector.track_command("expedition", "p1", "g1", False, channel_id="chanB")
         collector.flush()
 
         stats = collector.get_command_stats()
@@ -201,6 +203,25 @@ def test_get_command_stats():
         assert stats["expedition"]["success_rate"] == 0.5
         assert stats["expedition"]["unique_players"] == 1
 
+        usage = collector.get_channel_usage()
+        assert usage["chanA"]["usage_count"] == 2
+        assert usage["chanA"]["unique_commands"] == 1
+        assert usage["chanA"]["unique_players"] == 2
+        assert usage["chanB"]["usage_count"] == 2
+        assert usage["chanB"]["unique_commands"] == 1
+        assert usage["chanB"]["unique_players"] == 1
+
+
+def test_channel_usage_handles_missing_channel():
+    """Channel usage summary should handle missing channel IDs."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "test.db")
+
+        collector.track_command("theory", "p1", "g1", True)
+        collector.flush()
+
+        usage = collector.get_channel_usage()
+        assert usage["unknown"]["usage_count"] == 1
 
 def test_get_feature_engagement():
     """Test retrieving feature engagement stats."""

@@ -10,7 +10,9 @@ from great_work.llm_client import (
     ContentModerator,
     SafetyLevel,
     enhance_press_release,
-    get_llm_client
+    enhance_press_release_sync,
+    get_llm_client,
+    LLMGenerationError,
 )
 
 
@@ -22,6 +24,8 @@ def test_llm_config_from_env():
         "LLM_MODEL_NAME": "test-model",
         "LLM_TEMPERATURE": "0.5",
         "LLM_MAX_TOKENS": "300",
+        "LLM_MODE": "mock",
+        "LLM_RETRY_SCHEDULE": "1,5,15",
     }):
         config = LLMConfig.from_env()
         assert config.api_base == "http://test:8080/v1"
@@ -29,6 +33,8 @@ def test_llm_config_from_env():
         assert config.model_name == "test-model"
         assert config.temperature == 0.5
         assert config.max_tokens == 300
+        assert config.mock_mode is True
+        assert config.retry_schedule == [1.0, 5.0, 15.0]
 
 
 def test_llm_config_defaults():
@@ -40,6 +46,8 @@ def test_llm_config_defaults():
     assert config.temperature == 0.8
     assert config.use_fallback_templates == True
     assert config.safety_enabled == True
+    assert config.mock_mode is False
+    assert config.retry_schedule is None
 
 
 def test_content_moderator_safe():
@@ -49,23 +57,21 @@ def test_content_moderator_safe():
     assert result == SafetyLevel.SAFE
 
 
+def test_content_moderator_blocked():
+    """Ensure blocked words trigger the expected safety level."""
+    moderator = ContentModerator()
+    result = moderator.check_content("The report mentions a bomb threat.")
+    assert result == SafetyLevel.BLOCKED
+
+
 def test_llm_client_initialization():
     """Test LLM client initialization."""
-    config = LLMConfig()
+    config = LLMConfig(mock_mode=True)
+    client = LLMClient(config)
 
-    # Mock the openai import and client creation
-    with patch('great_work.llm_client.LLMClient.__init__') as mock_init:
-        mock_init.return_value = None
-        client = LLMClient.__new__(LLMClient)
-        client.config = config
-        client.moderator = ContentModerator()
-        client.enabled = False  # Simulate openai not installed
-        client.openai = None
-        client.client = None
-
-        assert client.config.api_base == "http://localhost:5000/v1"
-        assert client.moderator is not None
-        assert client.enabled == False
+    assert client.config.mock_mode is True
+    assert client.enabled is True
+    client.close()
 
 
 def test_persona_prompt_generation():
@@ -113,6 +119,7 @@ async def test_generate_narrative_with_fallback():
     client.enabled = False  # Simulate LLM disabled
     client.moderator = None
     client._executor = None  # No executor needed for fallback
+    client._loop = asyncio.get_event_loop()
 
     # Mock the fallback method
     client._fallback_template = Mock(return_value="Fallback text")
@@ -161,6 +168,8 @@ def test_singleton_client():
         MockLLMClient.assert_called_once()
         assert client1 is client2
 
+        great_work.llm_client._llm_client = None
+
 
 @pytest.mark.asyncio
 async def test_generate_batch():
@@ -189,3 +198,19 @@ async def test_generate_batch():
     assert "Generated for 1" in results[0]
     assert "Generated for 2" in results[1]
     assert "Generated for 3" in results[2]
+
+
+def test_generate_narrative_sync_mock():
+    """Synchronous helper should work when mock mode is enabled."""
+    config = LLMConfig(mock_mode=True)
+    client = LLMClient(config)
+
+    result = client.generate_narrative_sync(
+        prompt="Describe the discovery",
+        context={"summary": "a curious artefact"},
+        persona_name="Dr. Mock",
+    )
+
+    assert "[MOCK]" in result
+    assert "Dr. Mock" in result
+    client.close()

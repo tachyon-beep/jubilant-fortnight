@@ -26,18 +26,22 @@ def test_mentorship_flow():
         # Queue mentorship
         press = service.queue_mentorship(player_id, scholar.id, "Academia")
         assert press is not None
-        assert "mentorship" in press.body.lower() or "guide" in press.body.lower()
+        assert "[mock]" in press.body.lower()
 
         # Check pending mentorships
-        pending = service.state.get_pending_mentorships()
-        assert len(pending) == 1
-        assert pending[0][1] == player_id
-        assert pending[0][2] == scholar.id
+        orders = service.state.list_orders(order_type="mentorship_activation", status="pending")
+        assert len(orders) == 1
+        order = orders[0]
+        assert order["actor_id"] == player_id
+        assert order["payload"]["scholar_id"] == scholar.id
 
         # Resolve mentorships through digest
         releases = service._resolve_mentorships()
         assert len(releases) > 0
         assert "commenced" in releases[0].body.lower()
+
+        completed_orders = service.state.list_orders(order_type="mentorship_activation")
+        assert completed_orders[0]["status"] == "completed"
 
         # Check active mentorship
         active = service.state.get_active_mentorship(scholar.id)
@@ -47,7 +51,7 @@ def test_mentorship_flow():
         # Test assign_lab
         press2 = service.assign_lab(player_id, scholar.id, "Industry")
         assert press2 is not None
-        assert "Industry" in press2.body
+        assert "[mock]" in press2.body.lower()
 
         # Reload scholar to check career track change
         scholar = service.state.get_scholar(scholar.id)

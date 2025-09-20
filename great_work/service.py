@@ -1,11 +1,16 @@
 """High-level game service orchestrating commands."""
 from __future__ import annotations
 
+import logging
+import os
 import random
+import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+import threading
 
 from .config import Settings, get_settings
 from .expeditions import ExpeditionResolver, FailureTables
@@ -38,9 +43,15 @@ from .press import (
     retraction_notice,
     research_manifesto,
 )
+from .multi_press import MultiPressGenerator
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
+from .telemetry import get_telemetry
+from .llm_client import enhance_press_release_sync, LLMGenerationError, LLMNotEnabledError
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,6 +70,9 @@ class ExpeditionOrder:
 
 class GameService:
     """Coordinates between state, RNG and generators."""
+
+    class GamePausedError(RuntimeError):
+        """Raised when the game is paused and actions are disallowed."""
 
     _MIN_SCHOLAR_ROSTER = 20
     _MAX_SCHOLAR_ROSTER = 30
@@ -104,9 +118,212 @@ class GameService:
         self._rng = DeterministicRNG(seed=42)
         self._pending_expeditions: Dict[str, ExpeditionOrder] = {}
         self._generated_counter = self._initial_generated_counter()
+        self._multi_press = MultiPressGenerator()
+        self._llm_lock = threading.Lock()
+        self._llm_fail_start: Optional[datetime] = None
+        self._llm_pause_timeout = float(os.getenv("LLM_PAUSE_TIMEOUT", "600"))
+        self._paused = False
+        self._pause_reason: Optional[str] = None
+        self._pause_source: Optional[str] = None
+        self._admin_notifications: deque[str] = deque()
+        self._telemetry = get_telemetry()
         if not any(True for _ in self.state.all_scholars()):
             self.state.seed_base_scholars()
         self._ensure_roster()
+
+    def is_paused(self) -> bool:
+        return self._paused
+
+    def pause_reason(self) -> Optional[str]:
+        return self._pause_reason
+
+    def drain_admin_notifications(self) -> List[str]:
+        messages = list(self._admin_notifications)
+        self._admin_notifications.clear()
+        return messages
+
+    def push_admin_notification(self, message: str) -> None:
+        self._queue_admin_notification(message)
+
+    def _queue_admin_notification(self, message: str) -> None:
+        logger.warning(message)
+        self._admin_notifications.append(message)
+
+    def release_scheduled_press(self, now: Optional[datetime] = None) -> List[PressRelease]:
+        """Release any scheduled press items that are due as of ``now``."""
+
+        now = now or datetime.now(timezone.utc)
+        due = self.state.due_queued_press(now)
+        if not due:
+            return []
+
+        releases: List[PressRelease] = []
+        for queue_id, release_at, payload in due:
+            release = PressRelease(
+                type=payload.get("type", "scheduled_press"),
+                headline=payload.get("headline", "Scheduled Update"),
+                body=payload.get("body", ""),
+                metadata=payload.get("metadata", {}),
+            )
+            release.metadata.setdefault("scheduled", {})
+            release.metadata["scheduled"].update(
+                {
+                    "release_at": release_at.isoformat(),
+                }
+            )
+            self._archive_press(release, now)
+            self.state.clear_queued_press(queue_id)
+            self.state.append_event(
+                Event(
+                    timestamp=now,
+                    action="scheduled_press_released",
+                    payload={
+                        "headline": release.headline,
+                        "release_at": release_at.isoformat(),
+                    },
+                )
+            )
+            releases.append(release)
+        return releases
+
+    def _ensure_not_paused(self) -> None:
+        if self._paused:
+            raise GameService.GamePausedError(self._pause_reason or "Game is paused")
+
+    def _register_llm_failure(self) -> bool:
+        now = datetime.now(timezone.utc)
+        with self._llm_lock:
+            if self._llm_fail_start is None:
+                self._llm_fail_start = now
+            elapsed = (now - self._llm_fail_start).total_seconds()
+            return elapsed >= self._llm_pause_timeout
+
+    def _clear_llm_failure(self) -> None:
+        with self._llm_lock:
+            self._llm_fail_start = None
+
+    def _pause_for_llm(self, reason: str) -> None:
+        with self._llm_lock:
+            if self._paused:
+                return
+            self._paused = True
+            self._pause_reason = f"Narrative generator unavailable: {reason}"
+            self._pause_source = "llm"
+        self._queue_admin_notification(
+            f"⚠️ Game paused — {self._pause_reason}"
+        )
+        try:
+            self._telemetry.track_system_event(
+                "llm_pause",
+                source="llm",
+                reason=reason,
+            )
+        except Exception:
+            logger.debug("Telemetry tracking for llm_pause failed", exc_info=True)
+
+    def _resume_from_llm(self) -> None:
+        with self._llm_lock:
+            if not self._paused or self._pause_source != "llm":
+                self._llm_fail_start = None
+                return
+            previous_reason = self._pause_reason
+            self._paused = False
+            self._pause_reason = None
+            self._pause_source = None
+            self._llm_fail_start = None
+        self._queue_admin_notification("✅ Narrative generator restored — game resumed.")
+        try:
+            self._telemetry.track_system_event(
+                "llm_resume",
+                source="llm",
+                reason=previous_reason,
+            )
+        except Exception:
+            logger.debug("Telemetry tracking for llm_resume failed", exc_info=True)
+
+    def _resolve_scholar_traits(self, scholar_name: str | None) -> Optional[Dict[str, object]]:
+        if not scholar_name:
+            return None
+        for scholar in self.state.all_scholars():
+            if scholar.name.lower() == scholar_name.lower():
+                return {
+                    "personality": scholar.archetype,
+                    "specialization": ", ".join(scholar.disciplines) or "general research",
+                    "quirks": scholar.methods,
+                    "drives": scholar.drives,
+                }
+        return None
+
+    def _enhance_press_release(
+        self,
+        release: PressRelease,
+        *,
+        base_body: str,
+        persona_name: Optional[str] = None,
+        persona_traits: Optional[Dict[str, object]] = None,
+        extra_context: Optional[Dict[str, object]] = None,
+    ) -> PressRelease:
+        self._ensure_not_paused()
+        telemetry = getattr(self, "_telemetry", None)
+        if telemetry is None:
+            telemetry = get_telemetry()
+            self._telemetry = telemetry
+        start_time = time.perf_counter()
+        context_payload: Dict[str, object] = {
+            "type": release.type,
+            "headline": release.headline,
+            "body": base_body,
+        }
+        if extra_context:
+            context_payload.update(extra_context)
+        try:
+            enhanced_body = enhance_press_release_sync(
+                release.type,
+                base_body,
+                context_payload,
+                persona_name,
+                persona_traits,
+            )
+            self._clear_llm_failure()
+            self._resume_from_llm()
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            try:
+                telemetry.track_llm_activity(
+                    release.type,
+                    success=True,
+                    duration_ms=duration_ms,
+                    persona=persona_name,
+                )
+            except Exception:
+                logger.debug("Telemetry tracking for LLM success failed", exc_info=True)
+        except (LLMGenerationError, LLMNotEnabledError) as exc:
+            logger.warning("LLM enhancement failed for %s: %s", release.type, exc)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            try:
+                telemetry.track_llm_activity(
+                    release.type,
+                    success=False,
+                    duration_ms=duration_ms,
+                    persona=persona_name,
+                    error=str(exc),
+                )
+            except Exception:
+                logger.debug("Telemetry tracking for LLM failure failed", exc_info=True)
+            if self._register_llm_failure():
+                self._pause_for_llm(str(exc))
+            return release
+
+        release.body = enhanced_body
+        metadata = dict(release.metadata)
+        metadata.setdefault("llm", {})
+        metadata["llm"].update(
+            {
+                "persona": persona_name,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        release.metadata = metadata
+        return release
 
     # Player helpers ----------------------------------------------------
     def ensure_player(self, player_id: str, display_name: Optional[str] = None) -> None:
@@ -133,6 +350,7 @@ class GameService:
         supporters: List[str],
         deadline: str,
     ) -> PressRelease:
+        self._ensure_not_paused()
         self.ensure_player(player_id)
         ctx = BulletinContext(
             bulletin_number=len(self.state.export_events()) + 1,
@@ -182,6 +400,7 @@ class GameService:
         prep_depth: str,
         confidence: ConfidenceLevel,
     ) -> PressRelease:
+        self._ensure_not_paused()
         self.ensure_player(player_id)
         player = self.state.get_player(player_id)
         assert player is not None
@@ -238,6 +457,22 @@ class GameService:
             funding=funding,
         )
         press = research_manifesto(ctx)
+        base_body = press.body
+        persona_name = player.display_name
+        persona_traits = None
+        context_payload = {
+            "player": persona_name,
+            "expedition_code": code,
+            "objective": objective,
+            "expedition_type": expedition_type,
+        }
+        press = self._enhance_press_release(
+            press,
+            base_body=base_body,
+            persona_name=persona_name,
+            persona_traits=persona_traits,
+            extra_context=context_payload,
+        )
         self._archive_press(press, order.timestamp)
         return press
 
@@ -293,7 +528,9 @@ class GameService:
         return self.resolve_pending_expeditions()
 
     def resolve_pending_expeditions(self) -> List[PressRelease]:
+        self._ensure_not_paused()
         releases: List[PressRelease] = []
+        releases.extend(self.release_scheduled_press())
         for code, order in list(self._pending_expeditions.items()):
             result = self.resolver.resolve(
                 self._rng, order.preparation, order.prep_depth, order.expedition_type
@@ -316,9 +553,51 @@ class GameService:
                 release = retraction_notice(ctx)
             else:
                 release = discovery_report(ctx)
+            base_body = release.body
+            persona_name = player.display_name
+            context_payload = {
+                "player": persona_name,
+                "expedition_code": code,
+                "outcome": result.outcome.value,
+                "reputation_delta": delta,
+            }
+            release = self._enhance_press_release(
+                release,
+                base_body=base_body,
+                persona_name=persona_name,
+                persona_traits=None,
+                extra_context=context_payload,
+            )
             releases.append(release)
             now = datetime.now(timezone.utc)
             self._archive_press(release, now)
+            expedition_ctx = ExpeditionContext(
+                code=order.code,
+                player=order.player_id,
+                expedition_type=order.expedition_type,
+                objective=order.objective,
+                team=order.team,
+                funding=order.funding,
+            )
+            depth = self._multi_press.determine_depth(
+                event_type=f"expedition_{order.expedition_type}",
+                reputation_change=delta,
+                confidence_level=order.confidence.value,
+                is_first_time=result.outcome == ExpeditionOutcome.LANDMARK,
+            )
+            scholars = list(self.state.all_scholars())
+            layers = self._multi_press.generate_expedition_layers(
+                expedition_ctx,
+                ctx,
+                scholars,
+                depth,
+            )
+            extra_releases = self._apply_multi_press_layers(
+                layers,
+                skip_types={"research_manifesto", release.type},
+                timestamp=now,
+            )
+            releases.extend(extra_releases)
             self.state.append_event(
                 Event(
                     timestamp=now,
@@ -372,6 +651,7 @@ class GameService:
                 releases.append(sidecast)
                 self._archive_press(sidecast, now)
             del self._pending_expeditions[code]
+        releases.extend(self.release_scheduled_press())
         return releases
 
     # Public actions ----------------------------------------------------
@@ -384,6 +664,7 @@ class GameService:
     ) -> Tuple[bool, PressRelease]:
         """Attempt to recruit a scholar, applying cooldown and influence effects."""
 
+        self._ensure_not_paused()
         self.ensure_player(player_id)
         player = self.state.get_player(player_id)
         scholar = self.state.get_scholar(scholar_id)
@@ -460,6 +741,7 @@ class GameService:
     ) -> Tuple[bool, PressRelease]:
         """Resolve a public defection offer and archive the resulting press."""
 
+        self._ensure_not_paused()
         scholar = self.state.get_scholar(scholar_id)
         if not scholar:
             raise ValueError("Unknown scholar")
@@ -467,8 +749,8 @@ class GameService:
         probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
         roll = self._rng.uniform(0.0, 1.0)
         timestamp = datetime.now(timezone.utc)
+        former_employer = scholar.contract.get("employer", "their patron")
         if roll < probability:
-            former_employer = scholar.contract.get("employer", "their patron")
             apply_scar(scholar, "defection", former_employer, timestamp)
             scholar.contract["employer"] = new_faction
             scholar.memory.adjust_feeling(former_employer, -4.0)
@@ -506,8 +788,43 @@ class GameService:
                 resolve_at,
                 {"faction": new_faction, "probability": probability},
             )
+        base_body = press.body
+        persona_traits = self._resolve_scholar_traits(scholar.name)
+        press = self._enhance_press_release(
+            press,
+            base_body=base_body,
+            persona_name=scholar.name,
+            persona_traits=persona_traits,
+            extra_context={
+                "scholar": scholar.name,
+                "outcome": outcome,
+                "probability": probability,
+                "new_faction": new_faction,
+            },
+        )
         self.state.save_scholar(scholar)
         self._archive_press(press, timestamp)
+        depth = self._multi_press.determine_depth(
+            event_type="defection",
+            is_first_time=outcome == "defected",
+        )
+        layers = self._multi_press.generate_defection_layers(
+            DefectionContext(
+                scholar=scholar.name,
+                outcome=outcome,
+                new_faction=new_faction,
+                probability=probability,
+            ),
+            scholar,
+            former_employer,
+            list(self.state.all_scholars()),
+            depth,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=timestamp,
+        )
         self.state.append_event(
             Event(
                 timestamp=timestamp,
@@ -537,6 +854,7 @@ class GameService:
         Returns:
             (offer_id, press_releases) tuple
         """
+        self._ensure_not_paused()
         timestamp = datetime.now(timezone.utc)
         scholar = self.state.get_scholar(scholar_id)
         rival = self.state.get_player(rival_id)
@@ -637,6 +955,7 @@ class GameService:
         Returns:
             (counter_offer_id, press_releases) tuple
         """
+        self._ensure_not_paused()
         timestamp = datetime.now(timezone.utc)
         original = self.state.get_offer(original_offer_id)
         player = self.state.get_player(player_id)
@@ -830,6 +1149,8 @@ class GameService:
             # Scholar accepts the offer
             winner_id = best_offer.rival_id if best_offer.offer_type == "initial" else best_offer.patron_id
             loser_id = best_offer.patron_id if best_offer.offer_type == "initial" else best_offer.rival_id
+            winner_player = self.state.get_player(winner_id)
+            winner_name = winner_player.display_name if winner_player else winner_id
 
             # Transfer scholar
             old_employer = scholar.contract.get("employer", "")
@@ -866,8 +1187,43 @@ class GameService:
                     "offer_id": best_offer.id,
                 }
             )
+            release = self._enhance_press_release(
+                release,
+                base_body=body,
+                persona_name=winner_name,
+                persona_traits=None,
+                extra_context={
+                    "scholar": scholar.name,
+                    "winner": winner_name,
+                    "loser": loser_id,
+                    "offer_id": best_offer.id,
+                },
+            )
             self._archive_press(release, timestamp)
             press.append(release)
+            new_faction = best_offer.faction if best_offer.offer_type == "initial" else old_employer
+            depth = self._multi_press.determine_depth(
+                event_type="defection",
+                is_first_time=best_offer.offer_type == "initial",
+            )
+            layers = self._multi_press.generate_defection_layers(
+                DefectionContext(
+                    scholar=scholar.name,
+                    outcome="defected" if best_offer.offer_type == "initial" else "remained",
+                    new_faction=new_faction,
+                    probability=best_probability,
+                ),
+                scholar,
+                old_employer or "Independent",
+                list(self.state.all_scholars()),
+                depth,
+            )
+            extra_layers = self._apply_multi_press_layers(
+                layers,
+                skip_types={release.type},
+                timestamp=timestamp,
+            )
+            press.extend(extra_layers)
 
             # Mark all offers as resolved
             for offer in offer_chain:
@@ -910,8 +1266,38 @@ class GameService:
                     "all_rejected": True,
                 }
             )
+            release = self._enhance_press_release(
+                release,
+                base_body=body,
+                persona_name=scholar.name,
+                persona_traits=self._resolve_scholar_traits(scholar.name),
+                extra_context={
+                    "scholar": scholar.name,
+                    "offer_chain": [o.id for o in offer_chain],
+                    "outcome": "rejected",
+                },
+            )
             self._archive_press(release, timestamp)
             press.append(release)
+            depth = self._multi_press.determine_depth(event_type="defection")
+            layers = self._multi_press.generate_defection_layers(
+                DefectionContext(
+                    scholar=scholar.name,
+                    outcome="refused",
+                    new_faction=scholar.contract.get("employer", ""),
+                    probability=best_probability,
+                ),
+                scholar,
+                scholar.contract.get("employer", ""),
+                list(self.state.all_scholars()),
+                depth,
+            )
+            extra_layers = self._apply_multi_press_layers(
+                layers,
+                skip_types={release.type},
+                timestamp=timestamp,
+            )
+            press.extend(extra_layers)
 
             # Mark all offers as rejected and return influence
             for offer in offer_chain:
@@ -1028,6 +1414,7 @@ class GameService:
         career_track: str | None = None,
     ) -> PressRelease:
         """Queue a mentorship for the next digest resolution."""
+        self._ensure_not_paused()
         player = self.state.get_player(player_id)
         if not player:
             raise ValueError("Unknown player")
@@ -1043,6 +1430,18 @@ class GameService:
 
         # Queue the mentorship
         mentorship_id = self.state.add_mentorship(player_id, scholar_id, career_track)
+        self.state.enqueue_order(
+            "mentorship_activation",
+            actor_id=player_id,
+            subject_id=scholar_id,
+            payload={
+                "mentorship_id": mentorship_id,
+                "scholar_id": scholar_id,
+                "career_track": career_track,
+            },
+            source_table="mentorships",
+            source_id=str(mentorship_id),
+        )
 
         # Generate press release
         quote = f"I shall guide {scholar.name} towards greater achievements."
@@ -1052,6 +1451,17 @@ class GameService:
                 quote=quote,
                 trigger=f"Mentorship of {scholar.name}",
             )
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=player.display_name,
+            persona_traits=None,
+            extra_context={
+                "event": "mentorship_queued",
+                "player": player.display_name,
+                "scholar": scholar.name,
+            },
         )
 
         now = datetime.now(timezone.utc)
@@ -1078,6 +1488,7 @@ class GameService:
         career_track: str,
     ) -> PressRelease:
         """Assign a scholar to a new career track (Academia or Industry)."""
+        self._ensure_not_paused()
         player = self.state.get_player(player_id)
         if not player:
             raise ValueError("Unknown player")
@@ -1113,6 +1524,18 @@ class GameService:
                 quote=quote,
                 trigger=f"Lab assignment for {scholar.name}",
             )
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=player.display_name,
+            persona_traits=None,
+            extra_context={
+                "event": "assign_lab",
+                "player": player.display_name,
+                "scholar": scholar.name,
+                "career_track": career_track,
+            },
         )
 
         now = datetime.now(timezone.utc)
@@ -1172,6 +1595,20 @@ class GameService:
             supporters=supporters,
             opposition=opposition,
         )
+        self.state.enqueue_order(
+            "conference_resolution",
+            actor_id=player_id,
+            subject_id=code,
+            payload={
+                "conference_code": code,
+                "theory_id": theory_id,
+                "confidence": confidence.value,
+                "supporters": supporters,
+                "opposition": opposition,
+            },
+            source_table="conferences",
+            source_id=code,
+        )
 
         # Generate press release
         supporter_names = [s.name for s in self.state.all_scholars() if s.id in supporters]
@@ -1210,25 +1647,47 @@ class GameService:
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
 
-        for code, player_id, theory_id, confidence_str, supporters, opposition in self.state.get_pending_conferences():
-            player = self.state.get_player(player_id)
-            if not player:
+        due_orders = self.state.fetch_due_orders("conference_resolution", now)
+        for order in due_orders:
+            order_id = order["id"]
+            payload = order["payload"]
+            code = payload.get("conference_code") or order.get("subject_id")
+            if not code:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "missing_code"},
+                )
                 continue
 
+            conference = self.state.get_conference_by_code(code)
+            if not conference:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "conference_missing"},
+                )
+                continue
+
+            code, player_id, theory_id, confidence_str, supporters, opposition, _ = conference
+            player = self.state.get_player(player_id)
             theory_data = self.state.get_theory_by_id(theory_id)
-            if not theory_data:
+            if not player or not theory_data:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "conference_context_missing"},
+                )
                 continue
             _, theory = theory_data
 
             confidence = ConfidenceLevel(confidence_str)
 
-            # Simple resolution: roll d100 with modifiers based on support
             base_roll = self._rng.randint(1, 100)
             support_modifier = len(supporters) * 5
             opposition_modifier = len(opposition) * 5
             final_roll = base_roll + support_modifier - opposition_modifier
 
-            # Determine outcome based on roll
             if final_roll >= 60:
                 outcome = ExpeditionOutcome.SUCCESS
             elif final_roll >= 40:
@@ -1236,7 +1695,6 @@ class GameService:
             else:
                 outcome = ExpeditionOutcome.FAILURE
 
-            # Apply reputation changes
             reputation_delta = self._confidence_delta(confidence, outcome)
             player.adjust_reputation(
                 reputation_delta,
@@ -1245,7 +1703,6 @@ class GameService:
             )
             self.state.upsert_player(player)
 
-            # Resolve the conference
             self.state.resolve_conference(
                 code=code,
                 outcome=outcome.value,
@@ -1258,7 +1715,6 @@ class GameService:
                 },
             )
 
-            # Generate press release
             outcome_text = {
                 ExpeditionOutcome.SUCCESS: "The conference concluded with resounding support for the theory",
                 ExpeditionOutcome.PARTIAL: "The conference ended with mixed opinions",
@@ -1289,11 +1745,17 @@ class GameService:
                     },
                 )
             )
+            self.state.update_order_status(
+                order_id,
+                "completed",
+                result={"outcome": outcome.value},
+            )
 
         return releases
 
     def start_symposium(self, topic: str, description: str) -> PressRelease:
         """Start a new symposium with the given topic."""
+        self._ensure_not_paused()
         now = datetime.now(timezone.utc)
 
         # Resolve any previous symposium first
@@ -1322,6 +1784,16 @@ class GameService:
             ),
             metadata={"topic_id": topic_id, "topic": topic},
         )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name="The Academy",
+            persona_traits=None,
+            extra_context={
+                "event": "symposium_started",
+                "topic": topic,
+            },
+        )
 
         self._archive_press(press, now)
         self.state.append_event(
@@ -1332,10 +1804,23 @@ class GameService:
             )
         )
 
+        layers = self._multi_press.generate_symposium_layers(
+            topic,
+            description,
+            phase="launch",
+            scholars=list(self.state.all_scholars()),
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=now,
+        )
+
         return press
 
     def vote_symposium(self, player_id: str, vote_option: int) -> PressRelease:
         """Record a player's vote on the current symposium topic."""
+        self._ensure_not_paused()
         player = self.state.get_player(player_id)
         if not player:
             raise ValueError("Unknown player")
@@ -1366,6 +1851,17 @@ class GameService:
                 trigger="Symposium vote",
             )
         )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=player.display_name,
+            persona_traits=None,
+            extra_context={
+                "event": "symposium_vote",
+                "topic": topic,
+                "vote_option": vote_option,
+            },
+        )
 
         now = datetime.now(timezone.utc)
         self._archive_press(press, now)
@@ -1385,6 +1881,7 @@ class GameService:
 
     def symposium_call(self) -> List[PressRelease]:
         """Generate press releases for a symposium call."""
+        self._ensure_not_paused()
         releases = []
 
         # Generate a symposium announcement
@@ -1392,6 +1889,13 @@ class GameService:
             type="symposium_announcement",
             headline="Weekly Symposium Call",
             body="The weekly symposium is now open for discussion. All scholars are invited to participate.",
+        )
+        release = self._enhance_press_release(
+            release,
+            base_body=release.body,
+            persona_name="The Academy",
+            persona_traits=None,
+            extra_context={"event": "symposium_call"},
         )
         releases.append(release)
 
@@ -1405,6 +1909,7 @@ class GameService:
 
     def resolve_symposium(self) -> PressRelease:
         """Resolve the current symposium and announce the results."""
+        self._ensure_not_paused()
         current = self.state.get_current_symposium_topic()
         if not current:
             return PressRelease(
@@ -1451,6 +1956,17 @@ class GameService:
                 "votes": votes,
             },
         )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name="The Academy",
+            persona_traits=None,
+            extra_context={
+                "event": "symposium_resolved",
+                "topic": topic,
+                "winner": winner,
+            },
+        )
 
         now = datetime.now(timezone.utc)
         self._archive_press(press, now)
@@ -1466,6 +1982,19 @@ class GameService:
             )
         )
 
+        layers = self._multi_press.generate_symposium_layers(
+            topic,
+            description,
+            phase="resolution",
+            scholars=list(self.state.all_scholars()),
+            votes=votes,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=now,
+        )
+
         return press
 
     # Admin tools ---------------------------------------------------
@@ -1477,6 +2006,7 @@ class GameService:
         reason: str,
     ) -> PressRelease:
         """Admin command to adjust a player's reputation."""
+        self._ensure_not_paused()
         player = self.state.get_player(player_id)
         if not player:
             raise ValueError(f"Player {player_id} not found")
@@ -1504,6 +2034,17 @@ class GameService:
                 "player": player_id,
                 "delta": delta,
                 "reason": reason,
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_adjust_reputation",
+                "player": player.display_name,
+                "delta": delta,
             },
         )
 
@@ -1535,6 +2076,7 @@ class GameService:
         reason: str,
     ) -> PressRelease:
         """Admin command to adjust a player's influence."""
+        self._ensure_not_paused()
         player = self.state.get_player(player_id)
         if not player:
             raise ValueError(f"Player {player_id} not found")
@@ -1567,6 +2109,18 @@ class GameService:
                 "reason": reason,
             },
         )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_adjust_influence",
+                "player": player.display_name,
+                "faction": faction,
+                "delta": delta,
+            },
+        )
 
         now = datetime.now(timezone.utc)
         self._archive_press(press, now)
@@ -1596,6 +2150,7 @@ class GameService:
         reason: str,
     ) -> PressRelease:
         """Admin command to force a scholar defection."""
+        self._ensure_not_paused()
         scholar = self.state.get_scholar(scholar_id)
         if not scholar:
             raise ValueError(f"Scholar {scholar_id} not found")
@@ -1630,6 +2185,17 @@ class GameService:
                 "reason": reason,
             },
         )
+        admin_press = self._enhance_press_release(
+            admin_press,
+            base_body=admin_press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_force_defection",
+                "scholar": scholar.name,
+                "new_faction": new_faction,
+            },
+        )
 
         now = datetime.now(timezone.utc)
         self._archive_press(admin_press, now)
@@ -1655,6 +2221,7 @@ class GameService:
         reason: str,
     ) -> PressRelease:
         """Admin command to cancel a pending expedition."""
+        self._ensure_not_paused()
         # Check if expedition exists in pending expeditions
         if expedition_code not in self._pending_expeditions:
             raise ValueError(f"Expedition {expedition_code} not found or already resolved")
@@ -1698,6 +2265,16 @@ class GameService:
                 "reason": reason,
             },
         )
+        press = self._enhance_press_release(
+            press,
+            base_body=press.body,
+            persona_name=admin_id,
+            persona_traits=None,
+            extra_context={
+                "event": "admin_cancel_expedition",
+                "expedition_code": expedition_code,
+            },
+        )
 
         now = datetime.now(timezone.utc)
         self._archive_press(press, now)
@@ -1709,6 +2286,56 @@ class GameService:
                     "admin": admin_id,
                     "expedition_code": expedition_code,
                     "reason": reason,
+                },
+            )
+        )
+
+        return press
+
+    def resume_game(self, admin_id: Optional[str] = None) -> PressRelease:
+        """Resume the game after a pause."""
+
+        actor = admin_id or "system"
+        with self._llm_lock:
+            was_paused = self._paused
+            previous_reason = self._pause_reason
+            self._paused = False
+            self._pause_reason = None
+            self._pause_source = None
+            self._llm_fail_start = None
+
+        message = (
+            f"✅ Game resumed by {actor}."
+            if was_paused
+            else f"ℹ️ Resume requested by {actor}; game was not paused."
+        )
+        self._queue_admin_notification(message)
+
+        body_lines = [message]
+        if previous_reason:
+            body_lines.append(f"Previous pause reason: {previous_reason}")
+
+        press = PressRelease(
+            type="admin_action",
+            headline="Game Resume",
+            body="\n".join(body_lines),
+            metadata={
+                "admin": actor,
+                "previous_reason": previous_reason,
+                "was_paused": was_paused,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="game_resumed",
+                payload={
+                    "admin": actor,
+                    "was_paused": was_paused,
+                    "previous_reason": previous_reason,
                 },
             )
         )
@@ -1744,7 +2371,7 @@ class GameService:
         press = self.state.list_press_releases(limit=limit)
         return {"events": events[-limit:], "press": press}
 
-    def export_web_archive(self, output_dir: Path | None = None) -> Path:
+    def export_web_archive(self, output_dir: Path | None = None, *, source: str = "manual") -> Path:
         """Export the complete game history as a static web archive.
 
         Args:
@@ -1753,20 +2380,30 @@ class GameService:
         Returns:
             Path to the exported archive directory
         """
-        from pathlib import Path
         from .web_archive import WebArchive
 
         if output_dir is None:
             output_dir = Path("web_archive")
 
         archive = WebArchive(self.state, output_dir)
-        return archive.export_full_archive()
+        result = archive.export_full_archive()
+        try:
+            self._telemetry.track_system_event(
+                "web_archive_export",
+                source=source,
+                reason=str(result),
+            )
+        except Exception:
+            logger.debug("Telemetry tracking for web archive export failed", exc_info=True)
+        return result
 
     def advance_digest(self) -> List[PressRelease]:
         """Advance the digest tick, decaying cooldowns and maintaining the roster."""
 
+        self._ensure_not_paused()
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
+        releases.extend(self.release_scheduled_press(now))
         years_elapsed, current_year = self.state.advance_timeline(
             now, self.settings.time_scale_days_per_year
         )
@@ -1935,25 +2572,49 @@ class GameService:
         """Resolve pending mentorships at digest time."""
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
+        due_orders = self.state.fetch_due_orders("mentorship_activation", now)
+        for order in due_orders:
+            order_id = order["id"]
+            payload = order["payload"]
+            mentorship_id = payload.get("mentorship_id")
+            scholar_id = payload.get("scholar_id")
+            career_track = payload.get("career_track")
+            mentorship = (
+                self.state.get_mentorship_by_id(mentorship_id)
+                if mentorship_id is not None
+                else None
+            )
+            if not mentorship:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "mentorship_missing"},
+                )
+                continue
 
-        for mentorship_id, player_id, scholar_id, career_track in self.state.get_pending_mentorships():
+            _, player_id, scholar_id_db, _, status = mentorship
+            scholar_id = scholar_id or scholar_id_db
             scholar = self.state.get_scholar(scholar_id)
-            if not scholar:
-                continue
-
             player = self.state.get_player(player_id)
-            if not player:
+            if not scholar or not player or status != "pending":
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "mentorship_unavailable"},
+                )
                 continue
 
-            # Check if scholar already has an active mentorship (shouldn't happen but be safe)
             existing = self.state.get_active_mentorship(scholar_id)
             if existing:
+                self.state.update_order_status(
+                    order_id,
+                    "cancelled",
+                    result={"reason": "duplicate_activation"},
+                )
                 continue
 
-            # Activate the mentorship
             self.state.activate_mentorship(mentorship_id)
 
-            # Update scholar's career track if specified
             if career_track and career_track in self._CAREER_TRACKS:
                 old_track = scholar.career.get("track", "Academia")
                 if old_track != career_track:
@@ -1962,7 +2623,6 @@ class GameService:
                     scholar.career["ticks"] = 0
                     self.state.save_scholar(scholar)
 
-            # Generate press release
             quote = f"The mentorship between {player.display_name} and {scholar.name} has officially commenced."
             press = academic_gossip(
                 GossipContext(
@@ -1984,6 +2644,11 @@ class GameService:
                         "mentorship_id": mentorship_id,
                     },
                 )
+            )
+            self.state.update_order_status(
+                order_id,
+                "completed",
+                result={"mentorship_id": mentorship_id},
             )
 
         return releases
@@ -2249,7 +2914,56 @@ class GameService:
         for release in releases:
             self._archive_press(release, now)
 
+        releases.extend(self.release_scheduled_press(now))
         return releases
+
+    def _apply_multi_press_layers(
+        self,
+        layers,
+        *,
+        skip_types: set[str],
+        timestamp: datetime,
+    ) -> List[PressRelease]:
+        """Render additional press layers, archiving each generated release."""
+
+        if not layers:
+            return []
+        remaining = [layer for layer in layers if layer.type not in skip_types]
+        if not remaining:
+            return []
+        immediate: List[PressRelease] = []
+        for layer in remaining:
+            release = layer.generator(layer.context)
+            if layer.delay_minutes <= 0:
+                self._archive_press(release, timestamp)
+                immediate.append(release)
+                continue
+
+            release.metadata.setdefault("scheduled", {})
+            release.metadata["scheduled"].update(
+                {
+                    "delay_minutes": layer.delay_minutes,
+                    "generated_at": timestamp.isoformat(),
+                    "layer_type": layer.type,
+                }
+            )
+            release_at = timestamp + timedelta(minutes=layer.delay_minutes)
+            self.state.enqueue_press_release(release, release_at)
+            self.state.append_event(
+                Event(
+                    timestamp=timestamp,
+                    action="press_scheduled",
+                    payload={
+                        "headline": release.headline,
+                        "release_at": release_at.isoformat(),
+                        "layer_type": layer.type,
+                    },
+                )
+            )
+            self._queue_admin_notification(
+                f"📰 Scheduled follow-up press '{release.headline}' for {release_at.strftime('%Y-%m-%d %H:%M UTC')}"
+            )
+        return immediate
 
     def _maybe_spawn_sidecast(self, order: ExpeditionOrder, result) -> Optional[PressRelease]:
         if result.outcome == ExpeditionOutcome.FAILURE:

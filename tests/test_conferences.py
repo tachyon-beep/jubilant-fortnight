@@ -50,14 +50,13 @@ def test_conference_flow():
         assert "conference" in conf_press.body.lower() or "debate" in conf_press.body.lower()
 
         # Check pending conferences
-        pending = service.state.get_pending_conferences()
-        assert len(pending) == 1
-        code, p_id, t_id, conf, supp, opp = pending[0]
-        assert p_id == player_id
-        assert t_id == theory_id
-        assert conf == ConfidenceLevel.SUSPECT.value
-        assert supp == supporters
-        assert opp == opposition
+        orders = service.state.list_orders(order_type="conference_resolution", status="pending")
+        assert len(orders) == 1
+        order = orders[0]
+        assert order["actor_id"] == player_id
+        assert order["payload"]["theory_id"] == theory_id
+        assert order["payload"]["supporters"] == supporters
+        assert order["payload"]["opposition"] == opposition
 
         # Resolve conferences
         releases = service.resolve_conferences()
@@ -65,8 +64,8 @@ def test_conference_flow():
         assert "conference" in releases[0].body.lower()
 
         # Check that conference was resolved
-        pending_after = service.state.get_pending_conferences()
-        assert len(pending_after) == 0
+        orders_after = service.state.list_orders(order_type="conference_resolution")
+        assert orders_after[0]["status"] == "completed"
 
         # Check player reputation was affected
         player = service.state.get_player(player_id)

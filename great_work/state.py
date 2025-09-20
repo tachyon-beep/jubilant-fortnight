@@ -137,6 +137,29 @@ CREATE TABLE IF NOT EXISTS symposium_votes (
     FOREIGN KEY (topic_id) REFERENCES symposium_topics (id),
     UNIQUE (topic_id, player_id)
 );
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_type TEXT NOT NULL,
+    actor_id TEXT,
+    subject_id TEXT,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    scheduled_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    source_table TEXT,
+    source_id TEXT,
+    result TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_orders_status_scheduled
+    ON orders (status, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_orders_type_status
+    ON orders (order_type, status);
+CREATE TABLE IF NOT EXISTS queued_press (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    release_at TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
 """
 
 
@@ -351,6 +374,183 @@ class GameState:
             (row[0], row[1], row[2], datetime.fromisoformat(row[3]), json.loads(row[4]))
             for row in rows
         ]
+
+    # Scheduled press --------------------------------------------------
+    def enqueue_press_release(
+        self,
+        release: PressRelease,
+        release_at: datetime,
+    ) -> None:
+        payload = json.dumps(
+            {
+                "type": release.type,
+                "headline": release.headline,
+                "body": release.body,
+                "metadata": release.metadata,
+            }
+        )
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO queued_press (release_at, payload) VALUES (?, ?)",
+                (release_at.isoformat(), payload),
+            )
+            conn.commit()
+
+    def due_queued_press(self, now: datetime) -> List[Tuple[int, datetime, Dict[str, object]]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT id, release_at, payload FROM queued_press WHERE release_at <= ? ORDER BY release_at ASC",
+                (now.isoformat(),),
+            ).fetchall()
+        releases: List[Tuple[int, datetime, Dict[str, object]]] = []
+        for row in rows:
+            queue_id = int(row[0])
+            release_at = datetime.fromisoformat(row[1])
+            payload = json.loads(row[2])
+            releases.append((queue_id, release_at, payload))
+        return releases
+
+    def clear_queued_press(self, queue_id: int) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("DELETE FROM queued_press WHERE id = ?", (queue_id,))
+            conn.commit()
+
+    def list_queued_press(self) -> List[Tuple[int, datetime, Dict[str, object]]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT id, release_at, payload FROM queued_press ORDER BY release_at ASC"
+            ).fetchall()
+        return [
+            (int(row[0]), datetime.fromisoformat(row[1]), json.loads(row[2]))
+            for row in rows
+        ]
+
+    # Generic orders ---------------------------------------------------
+    def enqueue_order(
+        self,
+        order_type: str,
+        *,
+        payload: Dict[str, object],
+        actor_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        scheduled_at: Optional[datetime] = None,
+        source_table: Optional[str] = None,
+        source_id: Optional[str] = None,
+    ) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        scheduled_iso = scheduled_at.isoformat() if scheduled_at else None
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO orders
+                       (order_type, actor_id, subject_id, payload, status, scheduled_at, created_at, updated_at, source_table, source_id, result)
+                       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL)""",
+                (
+                    order_type,
+                    actor_id,
+                    subject_id,
+                    json.dumps(payload),
+                    scheduled_iso,
+                    now,
+                    now,
+                    source_table,
+                    source_id,
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def fetch_due_orders(
+        self,
+        order_type: str,
+        now: datetime,
+    ) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, actor_id, subject_id, payload, scheduled_at
+                       FROM orders
+                       WHERE order_type = ?
+                         AND status = 'pending'
+                         AND (scheduled_at IS NULL OR scheduled_at <= ?)
+                       ORDER BY created_at""",
+                (order_type, now.isoformat()),
+            ).fetchall()
+        due_orders: List[Dict[str, object]] = []
+        for row in rows:
+            scheduled_at = datetime.fromisoformat(row[4]) if row[4] else None
+            due_orders.append(
+                {
+                    "id": int(row[0]),
+                    "actor_id": row[1],
+                    "subject_id": row[2],
+                    "payload": json.loads(row[3]),
+                    "scheduled_at": scheduled_at,
+                }
+            )
+        return due_orders
+
+    def update_order_status(
+        self,
+        order_id: int,
+        status: str,
+        *,
+        result: Optional[Dict[str, object]] = None,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """UPDATE orders
+                       SET status = ?, updated_at = ?, result = ?
+                       WHERE id = ?""",
+                (
+                    status,
+                    now,
+                    json.dumps(result) if result is not None else None,
+                    order_id,
+                ),
+            )
+            conn.commit()
+
+    def list_orders(
+        self,
+        order_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        query = "SELECT id, order_type, actor_id, subject_id, payload, status, scheduled_at, created_at, updated_at, source_table, source_id, result FROM orders"
+        conditions: List[str] = []
+        params: List[object] = []
+        if order_type:
+            conditions.append("order_type = ?")
+            params.append(order_type)
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at"
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        orders: List[Dict[str, object]] = []
+        for row in rows:
+            scheduled_at = datetime.fromisoformat(row[6]) if row[6] else None
+            orders.append(
+                {
+                    "id": int(row[0]),
+                    "order_type": row[1],
+                    "actor_id": row[2],
+                    "subject_id": row[3],
+                    "payload": json.loads(row[4]),
+                    "status": row[5],
+                    "scheduled_at": scheduled_at,
+                    "created_at": datetime.fromisoformat(row[7]),
+                    "updated_at": datetime.fromisoformat(row[8]),
+                    "source_table": row[9],
+                    "source_id": row[10],
+                    "result": json.loads(row[11]) if row[11] else None,
+                }
+            )
+        return orders
 
     def export_events(self) -> List[Event]:
         events: List[Event] = []
@@ -675,14 +875,37 @@ class GameState:
 
     def get_pending_mentorships(self) -> List[Tuple[int, str, str, str | None]]:
         """Get all pending mentorships for resolution."""
+        orders = self.list_orders(order_type="mentorship_activation", status="pending")
+        pending: List[Tuple[int, str, str, str | None]] = []
+        for order in orders:
+            payload = order["payload"]
+            mentorship_id = payload.get("mentorship_id")
+            if mentorship_id is None:
+                continue
+            pending.append(
+                (
+                    mentorship_id,
+                    order.get("actor_id"),
+                    payload.get("scholar_id"),
+                    payload.get("career_track"),
+                )
+            )
+        return pending
+
+    def get_mentorship_by_id(
+        self,
+        mentorship_id: int,
+    ) -> Optional[Tuple[int, str, str, str | None, str]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
-            rows = conn.execute(
-                """SELECT id, player_id, scholar_id, career_track
+            row = conn.execute(
+                """SELECT id, player_id, scholar_id, career_track, status
                    FROM mentorships
-                   WHERE status = 'pending'
-                   ORDER BY created_at""",
-            ).fetchall()
-            return rows
+                   WHERE id = ?""",
+                (mentorship_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return row[0], row[1], row[2], row[3], row[4]
 
     def activate_mentorship(self, mentorship_id: int) -> None:
         """Mark a mentorship as active."""
@@ -735,17 +958,52 @@ class GameState:
 
     def get_pending_conferences(self) -> List[Tuple[str, str, int, str, List[str], List[str]]]:
         """Get conferences awaiting resolution."""
+        orders = self.list_orders(order_type="conference_resolution", status="pending")
+        pending: List[Tuple[str, str, int, str, List[str], List[str]]] = []
+        for order in orders:
+            payload = order["payload"]
+            code = payload.get("conference_code") or order.get("subject_id")
+            if not code:
+                continue
+            player_id = order.get("actor_id")
+            theory_id = payload.get("theory_id")
+            confidence = payload.get("confidence")
+            supporters = payload.get("supporters", [])
+            opposition = payload.get("opposition", [])
+            pending.append(
+                (
+                    code,
+                    player_id,
+                    theory_id,
+                    confidence,
+                    supporters,
+                    opposition,
+                )
+            )
+        return pending
+
+    def get_conference_by_code(
+        self,
+        code: str,
+    ) -> Optional[Tuple[str, str, int, str, List[str], List[str], datetime]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
-            rows = conn.execute(
-                """SELECT code, player_id, theory_id, confidence, supporters, opposition
+            row = conn.execute(
+                """SELECT code, player_id, theory_id, confidence, supporters, opposition, timestamp
                    FROM conferences
-                   WHERE outcome IS NULL
-                   ORDER BY timestamp""",
-            ).fetchall()
-            return [
-                (code, player_id, theory_id, confidence, json.loads(supporters), json.loads(opposition))
-                for code, player_id, theory_id, confidence, supporters, opposition in rows
-            ]
+                   WHERE code = ?""",
+                (code,),
+            ).fetchone()
+        if not row:
+            return None
+        return (
+            row[0],
+            row[1],
+            int(row[2]),
+            row[3],
+            json.loads(row[4]),
+            json.loads(row[5]),
+            datetime.fromisoformat(row[6]),
+        )
 
     def resolve_conference(
         self,

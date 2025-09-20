@@ -29,6 +29,7 @@ class ChannelRouter:
     orders: Optional[int]
     gazette: Optional[int]
     table_talk: Optional[int]
+    admin: Optional[int]
 
     @staticmethod
     def from_env() -> "ChannelRouter":
@@ -46,6 +47,7 @@ class ChannelRouter:
             orders=_parse("GREAT_WORK_CHANNEL_ORDERS"),
             gazette=_parse("GREAT_WORK_CHANNEL_GAZETTE"),
             table_talk=_parse("GREAT_WORK_CHANNEL_TABLE_TALK"),
+            admin=_parse("GREAT_WORK_CHANNEL_ADMIN"),
         )
 
 
@@ -71,6 +73,29 @@ async def _post_to_channel(
         logger.exception("Failed to send %s message", purpose)
 
 
+async def _post_file_to_channel(
+    bot: commands.Bot,
+    channel_id: Optional[int],
+    file_path: Path,
+    *,
+    caption: str,
+    purpose: str,
+) -> None:
+    """Send a file attachment to a configured channel."""
+
+    if channel_id is None:
+        logger.debug("Skipping %s file post; channel not configured", purpose)
+        return
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
+        return
+    try:
+        await channel.send(content=caption, file=discord.File(str(file_path)))
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to send %s file message", purpose)
+
+
 def _format_press(press: PressRelease) -> str:
     return f"**{press.headline}**\n{press.body}"
 
@@ -86,6 +111,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             logger.warning("Invalid DISCORD_APP_ID: %s", app_id_raw)
     bot = commands.Bot(command_prefix="/", intents=intents, application_id=application_id)
     service = GameService(db_path)
+    setattr(bot, "state_service", service)
     router = ChannelRouter.from_env()
     scheduler: Optional[GazetteScheduler] = None
 
@@ -94,6 +120,17 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             scheduler.shutdown()
 
     atexit.register(_shutdown_scheduler)
+
+    async def _flush_admin_notifications() -> None:
+        notes = service.drain_admin_notifications()
+        if not notes:
+            return
+        if router.admin is None:
+            for note in notes:
+                logger.info("ADMIN: %s", note)
+            return
+        for note in notes:
+            await _post_to_channel(bot, router.admin, note, purpose="admin")
 
     @bot.event
     async def on_ready() -> None:
@@ -104,10 +141,10 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             logger.info("Synced %d commands", len(synced))
         except Exception as exc:  # pragma: no cover - logging only
             logger.exception("Failed to sync commands: %s", exc)
-        if scheduler is None and router.gazette is not None:
-            scheduler = GazetteScheduler(
-                service,
-                publisher=lambda press: asyncio.run_coroutine_threadsafe(
+        if scheduler is None and (router.gazette is not None or router.admin is not None):
+            publisher = None
+            if router.gazette is not None:
+                publisher = lambda press: asyncio.run_coroutine_threadsafe(
                     _post_to_channel(
                         bot,
                         router.gazette,
@@ -115,7 +152,36 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         purpose="gazette",
                     ),
                     bot.loop,
-                ),
+                )
+
+            admin_publisher = None
+            admin_file_publisher = None
+            if router.admin is not None:
+                admin_publisher = lambda message: asyncio.run_coroutine_threadsafe(
+                    _post_to_channel(
+                        bot,
+                        router.admin,
+                        message,
+                        purpose="admin",
+                    ),
+                    bot.loop,
+                )
+                admin_file_publisher = lambda path, caption: asyncio.run_coroutine_threadsafe(
+                    _post_file_to_channel(
+                        bot,
+                        router.admin,
+                        path,
+                        caption=caption,
+                        purpose="admin",
+                    ),
+                    bot.loop,
+                )
+
+            scheduler = GazetteScheduler(
+                service,
+                publisher=publisher,
+                admin_publisher=admin_publisher,
+                admin_file_publisher=admin_file_publisher,
             )
             scheduler.start()
             logger.info("Started Gazette scheduler publishing to %s", router.gazette)
@@ -136,6 +202,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 f"Invalid confidence {confidence}. Choose from {[c.value for c in ConfidenceLevel]}",
                 ephemeral=True,
             )
+            await _flush_admin_notifications()
             return
         supporter_list = [s.strip() for s in supporters.split(",") if s.strip()]
         press = service.submit_theory(
@@ -148,6 +215,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         message = _format_press(press)
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
+        await _flush_admin_notifications()
 
     @app_commands.command(name="launch_expedition", description="Queue an expedition for resolution")
     @track_command
@@ -182,6 +250,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             level = ConfidenceLevel(confidence)
         except ValueError:
             await interaction.response.send_message("Invalid confidence level", ephemeral=True)
+            await _flush_admin_notifications()
             return
         preparation = ExpeditionPreparation(
             think_tank_bonus=think_tank,
@@ -205,17 +274,26 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         message = _format_press(press)
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
+        await _flush_admin_notifications()
 
     @app_commands.command(name="resolve_expeditions", description="Resolve all pending expeditions")
+    @track_command
     async def resolve_expeditions(interaction: discord.Interaction) -> None:
-        digest_releases = service.advance_digest()
-        releases = digest_releases + service.resolve_pending_expeditions()
+        try:
+            digest_releases = service.advance_digest()
+            releases = digest_releases + service.resolve_pending_expeditions()
+        except GameService.GamePausedError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
         if not releases:
             await interaction.response.send_message("No expeditions waiting.")
+            await _flush_admin_notifications()
             return
         text = "\n\n".join(_format_press(press) for press in releases)
         await interaction.response.send_message(text)
         await _post_to_channel(bot, router.orders, text, purpose="orders")
+        await _flush_admin_notifications()
 
     @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
     @track_command
@@ -236,16 +314,20 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             )
         except PermissionError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
             return
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
             return
         prefix = "Success" if success else "Failure"
         message = f"{prefix}: {press.headline}\n{press.body}"
         await interaction.response.send_message(message)
         await _post_to_channel(bot, router.orders, message, purpose="orders")
+        await _flush_admin_notifications()
 
     @app_commands.command(name="mentor", description="Begin mentoring a scholar")
+    @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
         career_track="Optional career track (Academia or Industry)",
@@ -267,8 +349,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.orders, message, purpose="orders")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @app_commands.command(name="assign_lab", description="Assign a mentored scholar to a new career track")
+    @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
         career_track="Career track (Academia or Industry)",
@@ -290,8 +376,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.orders, message, purpose="orders")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @app_commands.command(name="poach", description="Attempt to poach another player's scholar")
+    @track_command
     @app_commands.describe(
         scholar_id="Scholar to poach",
         target_faction="Faction to recruit them to",
@@ -334,6 +424,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
         if not influence_offer:
             await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            await _flush_admin_notifications()
             return
 
         # Build terms
@@ -360,10 +451,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
             await interaction.response.send_message(message)
             await _post_to_channel(bot, router.orders, message, purpose="orders")
+            await _flush_admin_notifications()
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
 
     @app_commands.command(name="counter", description="Counter a rival's poaching attempt")
+    @track_command
     @app_commands.describe(
         offer_id="ID of the offer to counter",
         academic_influence="Academic influence to offer (0-100)",
@@ -404,6 +498,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
         if not counter_influence:
             await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            await _flush_admin_notifications()
             return
 
         # Build terms
@@ -429,10 +524,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
             await interaction.response.send_message(message)
             await _post_to_channel(bot, router.orders, message, purpose="orders")
+            await _flush_admin_notifications()
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
 
     @app_commands.command(name="view_offers", description="View active offers involving your scholars")
+    @track_command
     async def view_offers(interaction: discord.Interaction) -> None:
         service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
 
@@ -441,6 +539,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
             if not offers:
                 await interaction.response.send_message("No active offers involving you.", ephemeral=True)
+                await _flush_admin_notifications()
                 return
 
             message = "**Active Offers:**\n"
@@ -456,10 +555,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 message += f"Created: {offer.created_at.strftime('%Y-%m-%d %H:%M')}\n"
 
             await interaction.response.send_message(message, ephemeral=True)
+            await _flush_admin_notifications()
         except Exception as exc:
             await interaction.response.send_message(f"Error: {exc}", ephemeral=True)
+            await _flush_admin_notifications()
 
     @app_commands.command(name="conference", description="Launch a conference to debate a theory")
+    @track_command
     @app_commands.describe(
         theory_id="Theory ID to debate",
         confidence="Confidence wager level",
@@ -481,6 +583,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 f"Invalid confidence {confidence}. Choose from {[c.value for c in ConfidenceLevel]}",
                 ephemeral=True,
             )
+            await _flush_admin_notifications()
             return
 
         supporter_list = [s.strip() for s in supporters.split(",") if s.strip()]
@@ -497,10 +600,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             message = f"{press.headline}\n{press.body}"
             await interaction.response.send_message(message)
             await _post_to_channel(bot, router.orders, message, purpose="orders")
+            await _flush_admin_notifications()
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
 
     @app_commands.command(name="symposium_vote", description="Cast your vote on the current symposium topic")
+    @track_command
     @app_commands.describe(
         vote="Your vote: 1 (support), 2 (oppose), 3 (further study)",
     )
@@ -519,6 +625,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.orders, message, purpose="orders")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
     @track_command
@@ -542,6 +651,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
+    @track_command
     async def wager(interaction: discord.Interaction) -> None:
         reference = service.wager_reference()
         lines = ["Confidence wagers:"]
@@ -560,6 +670,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="gazette", description="Show recent Gazette headlines")
+    @track_command
     async def gazette(interaction: discord.Interaction, limit: int = 5) -> None:
         if limit <= 0 or limit > 20:
             await interaction.response.send_message("Limit must be between 1 and 20", ephemeral=True)
@@ -575,6 +686,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="export_log", description="Export recent events and press")
+    @track_command
     async def export_log(interaction: discord.Interaction, limit: int = 10) -> None:
         if limit <= 0 or limit > 50:
             await interaction.response.send_message("Limit must be between 1 and 50", ephemeral=True)
@@ -587,13 +699,15 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         for event in log["events"]:
             event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
         await interaction.response.send_message("\n".join(press_lines + [""] + event_lines), ephemeral=True)
+        await _flush_admin_notifications()
 
     @app_commands.command(name="export_web_archive", description="Generate static HTML archive of game history")
+    @track_command
     async def export_web_archive(interaction: discord.Interaction) -> None:
         """Export the complete game history as a static web archive."""
         await interaction.response.defer(ephemeral=True)
         try:
-            output_path = service.export_web_archive()
+            output_path = service.export_web_archive(source="command")
 
             # Count files and get stats
             press_count = len(list(service.state.list_press_releases()))
@@ -614,8 +728,10 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.followup.send(message, ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"Error generating archive: {e}", ephemeral=True)
+        await _flush_admin_notifications()
 
     @app_commands.command(name="archive_link", description="Get web archive permalink for a press release")
+    @track_command
     async def archive_link(interaction: discord.Interaction, headline_search: str) -> None:
         """Return permalink for specific press release matching the search term."""
         from .web_archive import WebArchive
@@ -634,6 +750,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 f"No press releases found matching '{headline_search}'",
                 ephemeral=True
             )
+            await _flush_admin_notifications()
             return
 
         # Generate permalinks for matches
@@ -664,6 +781,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             message = "\n".join(lines)
 
         await interaction.response.send_message(message, ephemeral=True)
+        await _flush_admin_notifications()
 
     @app_commands.command(name="telemetry_report", description="View telemetry and usage statistics (admin only)")
     @track_command
@@ -718,6 +836,55 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 for op, perf in sorted(report['performance_1h'].items(), key=lambda x: x[1]['avg_duration_ms'], reverse=True)[:5]:
                     lines.append(f"• {op}: avg {perf['avg_duration_ms']:.1f}ms ({perf['sample_count']} samples)")
 
+            channel_usage = report.get('channel_usage_24h', {})
+            if channel_usage:
+                lines.append("\n**Channel Usage (24 hours):**")
+                for channel_id, stats in sorted(channel_usage.items(), key=lambda x: x[1]['usage_count'], reverse=True)[:5]:
+                    if channel_id.isdigit() and interaction.guild:
+                        channel_obj = interaction.guild.get_channel(int(channel_id))
+                        if channel_obj:
+                            channel_label = f"#{channel_obj.name}"
+                        else:
+                            channel_label = f"<#{channel_id}>"
+                    elif channel_id == "dm":
+                        channel_label = "Direct Messages"
+                    elif channel_id == "unknown":
+                        channel_label = "Unknown"
+                    else:
+                        channel_label = channel_id
+
+                    lines.append(
+                        "• {channel}: {count} cmds, {players} players, {cmds} unique commands".format(
+                            channel=channel_label,
+                            count=stats['usage_count'],
+                            players=stats['unique_players'],
+                            cmds=stats['unique_commands'],
+                        )
+                    )
+
+            llm_stats = report.get('llm_activity_24h', {})
+            if llm_stats:
+                lines.append("\n**LLM Activity (24 hours):**")
+                for press_type, stats in sorted(llm_stats.items(), key=lambda x: x[1]['total_calls'], reverse=True)[:5]:
+                    success_rate = stats['success_rate'] * 100
+                    lines.append(
+                        "• {press}: {succ}/{total} success ({rate:.0f}%), avg {avg:.0f}ms, max {max:.0f}ms".format(
+                            press=press_type.replace('_', ' '),
+                            succ=stats['successes'],
+                            total=stats['total_calls'],
+                            rate=success_rate,
+                            avg=stats['avg_duration_ms'],
+                            max=stats['max_duration_ms'],
+                        )
+                    )
+
+            system_events = report.get('system_events_24h', [])
+            if system_events:
+                lines.append("\n**System Events (24 hours):**")
+                for event in system_events[:5]:
+                    detail = f" — {event['reason']}" if event.get('reason') else ""
+                    lines.append(f"• {event['timestamp']}: {event['event']}{detail}")
+
             message = "\n".join(lines)
 
             # Split message if too long
@@ -730,6 +897,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.followup.send(f"Error generating report: {e}", ephemeral=True)
 
     @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
+    @track_command
     async def table_talk(interaction: discord.Interaction, message: str) -> None:
         display_name = interaction.user.display_name
         if router.table_talk is None:
@@ -741,6 +909,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         payload = f"**{display_name}:** {message}"
         await _post_to_channel(bot, router.table_talk, payload, purpose="table-talk")
         await interaction.response.send_message("Posted to table-talk.", ephemeral=True)
+        await _flush_admin_notifications()
 
     # Admin command group
     gw_admin = app_commands.Group(
@@ -749,6 +918,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     )
 
     @gw_admin.command(name="adjust_reputation", description="Adjust a player's reputation")
+    @track_command
     @app_commands.describe(
         player_id="Player identifier",
         delta="Reputation change amount",
@@ -774,8 +944,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @gw_admin.command(name="adjust_influence", description="Adjust a player's influence")
+    @track_command
     @app_commands.describe(
         player_id="Player identifier",
         faction="Faction name",
@@ -803,8 +977,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @gw_admin.command(name="force_defection", description="Force a scholar to defect")
+    @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
         new_faction="New faction for the scholar",
@@ -829,8 +1007,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
     @gw_admin.command(name="cancel_expedition", description="Cancel a pending expedition")
+    @track_command
     @app_commands.describe(
         expedition_code="Expedition code",
         reason="Reason for cancellation",
@@ -852,7 +1034,19 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        await _flush_admin_notifications()
 
+    @gw_admin.command(name="resume_game", description="Resume the game if it is paused")
+    @track_command
+    async def admin_resume(interaction: discord.Interaction) -> None:
+        admin_id = str(interaction.user.display_name)
+        press = service.resume_game(admin_id)
+        message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message, ephemeral=True)
+        await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        await _flush_admin_notifications()
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)
