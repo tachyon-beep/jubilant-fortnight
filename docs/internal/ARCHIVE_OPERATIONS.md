@@ -49,4 +49,8 @@ The ZIP will appear in `web_archive/snapshots/` and a message will post to the a
 - Verify the admin channel post after each digest to confirm uploads are succeeding and check `archive_server` container logs if the public site fails to update.
 - When switching to external hosting (e.g., S3), disable `GREAT_WORK_ARCHIVE_PUBLISH_DIR` and configure the appropriate publisher adapter.
 - Keep bot credentials secure; snapshot uploads rely on the configured admin channel ID, and the nginx container exposes static files on port 8080 by default.
-- Default alert thresholds (`GREAT_WORK_ALERT_MAX_DIGEST_MS=5000`, `GREAT_WORK_ALERT_MAX_QUEUE=12`, `GREAT_WORK_ALERT_MIN_RELEASES=1`) keep the scheduler noisy only when runtimes spike, the scheduled queue backs up, or digests publish nothing—adjust in production if your cadence differs.
+- Default alert thresholds (`GREAT_WORK_ALERT_MAX_DIGEST_MS=5000`, `GREAT_WORK_ALERT_MAX_QUEUE=12`,
+  `GREAT_WORK_ALERT_MIN_RELEASES=1`, `GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS=4000`,
+  `GREAT_WORK_ALERT_LLM_FAILURE_RATE=0.25`, `GREAT_WORK_ALERT_MAX_ORDER_PENDING=6`,
+  `GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS=8`) keep the scheduler noisy only when runtimes spike, the
+  scheduled queue backs up, or digests publish nothing—adjust in production if your cadence differs.

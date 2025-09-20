@@ -2,16 +2,52 @@
 from __future__ import annotations
 
 import json
-import time
 import logging
+import os
 import sqlite3
-from datetime import datetime
-from typing import Dict, Any, List, Optional
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _get_env_float(env_key: str, default: float) -> float:
+    """Return a float environment variable with a fallback."""
+
+    value = os.getenv(env_key)
+    if value is None:
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _status_upper(value: Optional[float], threshold: float) -> Optional[str]:
+    """Evaluate metric where higher values are worse."""
+
+    if value is None or threshold <= 0:
+        return None
+    if value >= threshold:
+        return "alert"
+    warning_threshold = threshold * 0.75
+    if value >= warning_threshold:
+        return "warning"
+    return "ok"
+
+
+def _status_lower(value: Optional[float], threshold: float) -> Optional[str]:
+    """Evaluate metric where lower values are worse."""
+
+    if value is None or threshold <= 0:
+        return None
+    if value < threshold:
+        return "alert"
+    return "ok"
 
 
 class MetricType(Enum):
@@ -29,6 +65,7 @@ class MetricType(Enum):
     PRESS_CADENCE = "press_cadence"
     DIGEST = "digest"
     QUEUE_DEPTH = "queue_depth"
+    ORDER_STATE = "order_state"
 
 
 @dataclass
@@ -317,6 +354,68 @@ class TelemetryCollector:
             float(queue_size),
             metadata={"horizon_hours": horizon_hours},
         )
+
+    def track_order_snapshot(
+        self,
+        *,
+        order_type: str,
+        event: str,
+        pending_count: int,
+        oldest_pending_seconds: Optional[float],
+    ) -> Dict[str, Optional[str]]:
+        """Record dispatcher backlog snapshot for an order type."""
+
+        metadata: Dict[str, Any] = {
+            "pending_count": pending_count,
+        }
+        if oldest_pending_seconds is not None:
+            metadata["oldest_pending_seconds"] = float(oldest_pending_seconds)
+
+        self.record(
+            MetricType.ORDER_STATE,
+            order_type,
+            float(pending_count),
+            tags={"event": event},
+            metadata=metadata,
+        )
+
+        pending_threshold = _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_PENDING", 6.0)
+        age_threshold_hours = _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0)
+
+        pending_message: Optional[str] = None
+        stale_message: Optional[str] = None
+
+        if pending_threshold > 0 and pending_count >= pending_threshold and event in {"enqueue", "poll"}:
+            pending_message = (
+                f"Dispatcher backlog for {order_type.replace('_', ' ')} at {pending_count} pending (threshold {pending_threshold})."
+            )
+            self.track_system_event(
+                "alert_order_backlog_pending",
+                source="dispatcher",
+                reason=pending_message,
+            )
+
+        if (
+            oldest_pending_seconds is not None
+            and age_threshold_hours > 0
+            and (oldest_pending_seconds / 3600.0) >= age_threshold_hours
+            and event == "poll"
+        ):
+            hours = oldest_pending_seconds / 3600.0
+            stale_message = (
+                f"Oldest pending {order_type.replace('_', ' ')} order is {hours:.1f}h old "
+                f"(threshold {age_threshold_hours:.1f}h)."
+            )
+            self.track_system_event(
+                "alert_order_backlog_stale",
+                source="dispatcher",
+                reason=stale_message,
+            )
+
+        return {
+            "pending_alert": pending_message,
+            "stale_alert": stale_message,
+        }
 
     def track_scholar_stats(
         self,
@@ -718,10 +817,13 @@ class TelemetryCollector:
                 COUNT(*) as total_digests,
                 AVG(value) as avg_duration,
                 MAX(value) as max_duration,
+                MIN(value) as min_duration,
                 AVG(CAST(json_extract(tags, '$.release_count') AS INTEGER)) as avg_releases,
                 MAX(CAST(json_extract(tags, '$.release_count') AS INTEGER)) as max_releases,
+                MIN(CAST(json_extract(tags, '$.release_count') AS INTEGER)) as min_releases,
                 AVG(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as avg_queue,
-                MAX(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as max_queue
+                MAX(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as max_queue,
+                MIN(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as min_queue
             FROM metrics
             WHERE metric_type = ? AND timestamp >= ?
         """
@@ -737,19 +839,25 @@ class TelemetryCollector:
                     "total_digests": 0,
                     "avg_duration_ms": 0.0,
                     "max_duration_ms": 0.0,
+                    "min_duration_ms": 0.0,
                     "avg_release_count": 0.0,
                     "max_release_count": 0,
+                    "min_release_count": 0,
                     "avg_queue_size": 0.0,
                     "max_queue_size": 0,
+                    "min_queue_size": 0,
                 }
             return {
                 "total_digests": int(row[0] or 0),
                 "avg_duration_ms": float(row[1] or 0.0),
                 "max_duration_ms": float(row[2] or 0.0),
-                "avg_release_count": float(row[3] or 0.0),
-                "max_release_count": int(row[4] or 0),
-                "avg_queue_size": float(row[5] or 0.0),
-                "max_queue_size": int(row[6] or 0),
+                "min_duration_ms": float(row[3] or 0.0),
+                "avg_release_count": float(row[4] or 0.0),
+                "max_release_count": int(row[5] or 0),
+                "min_release_count": int(row[6] or 0),
+                "avg_queue_size": float(row[7] or 0.0),
+                "max_queue_size": int(row[8] or 0),
+                "min_queue_size": int(row[9] or 0),
             }
 
     def get_queue_depth_summary(
@@ -785,6 +893,81 @@ class TelemetryCollector:
                 }
             return summary
 
+    def get_order_backlog_summary(
+        self,
+        hours: int = 24,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Summarise dispatcher backlog metrics by order type."""
+
+        start_time = time.time() - (hours * 3600)
+        summary: Dict[str, Dict[str, Any]] = {}
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                    SELECT
+                        name,
+                        AVG(value) as avg_pending,
+                        MAX(value) as max_pending,
+                        MIN(value) as min_pending,
+                        AVG(CAST(json_extract(metadata, '$.oldest_pending_seconds') AS REAL)) as avg_oldest,
+                        MAX(CAST(json_extract(metadata, '$.oldest_pending_seconds') AS REAL)) as max_oldest,
+                        MIN(CAST(json_extract(metadata, '$.oldest_pending_seconds') AS REAL)) as min_oldest
+                    FROM metrics
+                    WHERE metric_type = ? AND timestamp >= ?
+                    GROUP BY name
+                """,
+                (
+                    MetricType.ORDER_STATE.value,
+                    start_time,
+                ),
+            )
+            for row in cursor.fetchall():
+                order_type = row[0]
+                summary[order_type] = {
+                    "avg_pending": float(row[1] or 0.0),
+                    "max_pending": float(row[2] or 0.0),
+                    "min_pending": float(row[3] or 0.0),
+                    "avg_oldest_seconds": float(row[4] or 0.0),
+                    "max_oldest_seconds": float(row[5] or 0.0),
+                    "min_oldest_seconds": float(row[6] or 0.0),
+                }
+
+            if summary:
+                for order_type in list(summary.keys()):
+                    row = conn.execute(
+                        """
+                            SELECT
+                                value,
+                                json_extract(metadata, '$.oldest_pending_seconds') as oldest_seconds,
+                                timestamp
+                            FROM metrics
+                            WHERE metric_type = ? AND name = ?
+                            ORDER BY timestamp DESC
+                            LIMIT 1
+                        """,
+                        (
+                            MetricType.ORDER_STATE.value,
+                            order_type,
+                        ),
+                    ).fetchone()
+                    if row:
+                        latest_pending = float(row[0] or 0.0)
+                        oldest_seconds = row[1]
+                        latest_timestamp = datetime.fromtimestamp(row[2]).isoformat()
+                    else:
+                        latest_pending = summary[order_type]["max_pending"]
+                        oldest_seconds = summary[order_type]["max_oldest_seconds"]
+                        latest_timestamp = None
+
+                    summary[order_type]["latest_pending"] = latest_pending
+                    summary[order_type]["latest_oldest_seconds"] = (
+                        float(oldest_seconds) if oldest_seconds is not None else 0.0
+                    )
+                    summary[order_type]["latest_timestamp"] = latest_timestamp
+
+        return summary
+
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
         report = {
@@ -800,6 +983,7 @@ class TelemetryCollector:
             "press_cadence_24h": self.get_press_cadence_summary(24, limit=10),
             "digest_health_24h": self.get_digest_summary(24),
             "queue_depth_24h": self.get_queue_depth_summary(24),
+            "order_backlog_24h": self.get_order_backlog_summary(24),
             "symposium": self.get_symposium_metrics(24),
         }
 
@@ -821,7 +1005,182 @@ class TelemetryCollector:
                 "last_event": datetime.fromtimestamp(row[3]).isoformat() if row[3] else None
             }
 
+        report["health"] = self.evaluate_health(report)
+
         return report
+
+    def evaluate_health(self, report_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Evaluate telemetry signals against alert thresholds."""
+
+        data = report_data or {}
+        digest_stats = data.get("digest_health_24h") or self.get_digest_summary(24)
+        queue_summary = data.get("queue_depth_24h") or self.get_queue_depth_summary(24)
+        llm_stats = data.get("llm_activity_24h") or self.get_llm_activity_summary(24)
+
+        thresholds = {
+            "digest_ms": _get_env_float("GREAT_WORK_ALERT_MAX_DIGEST_MS", 5000.0),
+            "min_releases": _get_env_float("GREAT_WORK_ALERT_MIN_RELEASES", 1.0),
+            "queue_size": _get_env_float("GREAT_WORK_ALERT_MAX_QUEUE", 12.0),
+            "llm_latency_ms": _get_env_float("GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS", 4000.0),
+            "llm_failure_rate": _get_env_float("GREAT_WORK_ALERT_LLM_FAILURE_RATE", 0.2),
+            "order_pending": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_PENDING", 6.0),
+            "order_age_hours": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0),
+        }
+
+        checks: List[Dict[str, Any]] = []
+        counts = {"ok": 0, "warning": 0, "alert": 0}
+
+        def _register(metric: str, label: str, status: Optional[str], detail: str, *,
+                      observed: Optional[float] = None,
+                      threshold: Optional[float] = None,
+                      window: str = "24h") -> None:
+            if status is None:
+                return
+            counts[status] += 1
+            checks.append(
+                {
+                    "metric": metric,
+                    "label": label,
+                    "status": status,
+                    "detail": detail,
+                    "observed": observed,
+                    "threshold": threshold,
+                    "window": window,
+                }
+            )
+
+        if digest_stats.get("total_digests", 0) > 0:
+            max_runtime = digest_stats.get("max_duration_ms") or 0.0
+            runtime_status = _status_upper(max_runtime, thresholds["digest_ms"])
+            _register(
+                "digest_runtime",
+                "Digest runtime",
+                runtime_status,
+                f"Max runtime {max_runtime:.0f} ms (threshold {thresholds['digest_ms']:.0f} ms)",
+                observed=max_runtime,
+                threshold=thresholds["digest_ms"],
+            )
+
+            min_releases = digest_stats.get("min_release_count")
+            release_status = _status_lower(min_releases, thresholds["min_releases"])
+            if release_status == "alert":
+                _register(
+                    "digest_release_floor",
+                    "Digest release count",
+                    release_status,
+                    f"Lowest digest published {min_releases} items (expected ≥ {int(thresholds['min_releases'])})",
+                    observed=float(min_releases or 0.0),
+                    threshold=thresholds["min_releases"],
+                )
+            else:
+                _register(
+                    "digest_release_floor",
+                    "Digest release count",
+                    release_status,
+                    f"Lowest digest published {min_releases} items",
+                    observed=float(min_releases or 0.0),
+                    threshold=thresholds["min_releases"],
+                )
+
+        if queue_summary:
+            worst_horizon: Optional[str] = None
+            worst_stats: Optional[Dict[str, float]] = None
+            for horizon, stats in queue_summary.items():
+                if worst_stats is None or stats.get("max_queue", 0.0) > worst_stats.get("max_queue", 0.0):
+                    worst_horizon = horizon
+                    worst_stats = stats
+            if worst_stats is not None:
+                max_queue = worst_stats.get("max_queue", 0.0)
+                queue_status = _status_upper(max_queue, thresholds["queue_size"])
+                horizon_label = f"≤{worst_horizon}h" if worst_horizon is not None else "queue"
+                avg_queue = worst_stats.get("avg_queue", 0.0)
+                _register(
+                    "press_queue_depth",
+                    f"Press queue {horizon_label}",
+                    queue_status,
+                    f"Max pending {max_queue:.0f} (avg {avg_queue:.1f})",
+                    observed=max_queue,
+                    threshold=thresholds["queue_size"],
+                )
+
+        total_calls = 0
+        total_successes = 0
+        weighted_latency_sum = 0.0
+        max_latency = 0.0
+        for stats in llm_stats.values():
+            calls = stats.get("total_calls", 0)
+            successes = stats.get("successes", 0)
+            total_calls += calls
+            total_successes += successes
+            avg_latency = stats.get("avg_duration_ms", 0.0)
+            weighted_latency_sum += avg_latency * calls
+            max_latency = max(max_latency, stats.get("max_duration_ms", 0.0))
+
+        if total_calls > 0:
+            overall_avg_latency = weighted_latency_sum / total_calls if total_calls else 0.0
+            latency_status = _status_upper(overall_avg_latency, thresholds["llm_latency_ms"])
+            _register(
+                "llm_latency",
+                "LLM latency",
+                latency_status,
+                f"Avg {overall_avg_latency:.0f} ms (max {max_latency:.0f} ms across {total_calls} calls)",
+                observed=overall_avg_latency,
+                threshold=thresholds["llm_latency_ms"],
+            )
+
+            failure_rate = 1.0 - (total_successes / total_calls)
+            failure_status = _status_upper(failure_rate, thresholds["llm_failure_rate"])
+            _register(
+                "llm_failure_rate",
+                "LLM failure rate",
+                failure_status,
+                f"{failure_rate:.0%} failures across {total_calls} calls",
+                observed=failure_rate,
+                threshold=thresholds["llm_failure_rate"],
+            )
+
+        order_summary = data.get("order_backlog_24h") or self.get_order_backlog_summary(24)
+        if order_summary:
+            # Determine the order type with the highest current pending count
+            worst_pending_type, worst_pending_stats = max(
+                order_summary.items(),
+                key=lambda item: item[1].get("latest_pending", 0.0),
+            )
+            latest_pending = worst_pending_stats.get("latest_pending", 0.0)
+            pending_status = _status_upper(latest_pending, thresholds["order_pending"])
+            pretty_type = worst_pending_type.replace("_", " ")
+            _register(
+                "order_pending",
+                f"Dispatcher backlog ({pretty_type})",
+                pending_status,
+                f"Current pending {latest_pending:.0f} (max {worst_pending_stats.get('max_pending', 0.0):.0f})",
+                observed=latest_pending,
+                threshold=thresholds["order_pending"],
+            )
+
+            worst_stale_type, worst_stale_stats = max(
+                order_summary.items(),
+                key=lambda item: item[1].get("latest_oldest_seconds", 0.0),
+            )
+            oldest_hours = (
+                worst_stale_stats.get("latest_oldest_seconds", 0.0) / 3600.0
+            )
+            staleness_status = _status_upper(oldest_hours, thresholds["order_age_hours"])
+            pretty_stale = worst_stale_type.replace("_", " ")
+            _register(
+                "order_staleness",
+                f"Oldest pending order ({pretty_stale})",
+                staleness_status,
+                f"Oldest pending age {oldest_hours:.1f}h",
+                observed=oldest_hours,
+                threshold=thresholds["order_age_hours"],
+            )
+
+        return {
+            "checks": checks,
+            "status_counts": counts,
+            "thresholds": thresholds,
+        }
 
     def get_symposium_metrics(self, hours: int = 24) -> Dict[str, Any]:
         """Summarise symposium scoring and debt telemetry."""

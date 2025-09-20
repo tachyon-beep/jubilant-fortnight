@@ -1063,6 +1063,19 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 f"• Unique players: {report['overall']['unique_players']}",
             ]
 
+            health = report.get('health', {})
+            checks = health.get('checks', [])
+            if checks:
+                lines.append("\n**Health Summary:**")
+                status_icons = {"ok": "✅", "warning": "⚠️", "alert": "🛑"}
+                for check in checks[:6]:
+                    icon = status_icons.get(check.get('status'), "•")
+                    label = check.get('label', check.get('metric', 'metric'))
+                    detail = check.get('detail', '')
+                    lines.append(f"{icon} {label}: {detail}")
+                if len(checks) > 6:
+                    lines.append(f"…plus {len(checks) - 6} more checks")
+
             # Command usage
             if report['command_stats']:
                 lines.append("\n**Command Usage:**")
@@ -1178,6 +1191,27 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 if threshold:
                     lines.append(
                         f"• Alert threshold: {threshold} pending items"
+                    )
+
+            backlog_summary = report.get('order_backlog_24h', {})
+            if backlog_summary:
+                lines.append("\n**Dispatcher Backlog (24 hours):**")
+                ordered = sorted(
+                    backlog_summary.items(),
+                    key=lambda item: item[1].get('latest_pending', 0.0),
+                    reverse=True,
+                )
+                for order_type, stats in ordered[:5]:
+                    latest = stats.get('latest_pending', 0.0)
+                    max_pending = stats.get('max_pending', 0.0)
+                    oldest_hours = stats.get('latest_oldest_seconds', 0.0) / 3600.0
+                    lines.append(
+                        "• {otype}: {latest:.0f} pending (max {max_pending:.0f}), oldest {oldest:.1f}h".format(
+                            otype=order_type.replace('_', ' '),
+                            latest=latest,
+                            max_pending=max_pending,
+                            oldest=oldest_hours,
+                        )
                     )
 
             symposium_metrics = report.get('symposium', {})
@@ -1401,6 +1435,101 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
             return
+        await _flush_admin_notifications()
+
+    @gw_admin.command(name="list_orders", description="List dispatcher orders")
+    @track_command
+    @app_commands.describe(
+        order_type="Filter by order type (e.g. followup:symposium_reprimand)",
+        status="Order status filter (pending/completed/cancelled/any)",
+        limit="Maximum number of rows to display (1-25)",
+    )
+    async def admin_list_orders(
+        interaction: discord.Interaction,
+        order_type: Optional[str] = None,
+        status: Optional[str] = "pending",
+        limit: int = 10,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        limit = max(1, min(limit, 25))
+        status_filter = None if not status or status.lower() == "any" else status.lower()
+        orders = service.admin_list_orders(
+            order_type=order_type or None,
+            status=status_filter,
+            limit=limit,
+        )
+
+        if not orders:
+            await interaction.response.send_message("No dispatcher orders found.", ephemeral=True)
+            return
+
+        lines = ["**Dispatcher Orders:**"]
+        for order in orders:
+            payload = order.get("payload") or {}
+            payload_preview = ", ".join(
+                f"{key}={payload[key]}" for key in list(payload.keys())[:3]
+            )
+            if len(payload) > 3:
+                payload_preview += ", …"
+            scheduled = order.get("scheduled_at") or "—"
+            created = order.get("created_at") or "—"
+            lines.append(
+                "#{id} {otype} [{status}] actor={actor} subject={subject} scheduled={scheduled} created={created}".format(
+                    id=order["id"],
+                    otype=order.get("order_type", "unknown"),
+                    status=order.get("status", "?"),
+                    actor=order.get("actor_id") or "—",
+                    subject=order.get("subject_id") or "—",
+                    scheduled=scheduled,
+                    created=created,
+                )
+            )
+            if payload_preview:
+                lines.append(f"  payload: {payload_preview}")
+
+        message = "\n".join(lines)
+        if len(message) > 1900:
+            message = message[:1897] + "…"
+
+        await interaction.response.send_message(message, ephemeral=True)
+        await _flush_admin_notifications()
+
+    @gw_admin.command(name="cancel_order", description="Cancel a dispatcher order")
+    @track_command
+    @app_commands.describe(
+        order_id="Numeric identifier of the dispatcher order",
+        reason="Optional reason for cancellation",
+    )
+    async def admin_cancel_order(
+        interaction: discord.Interaction,
+        order_id: int,
+        reason: Optional[str] = None,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            summary = service.admin_cancel_order(order_id=order_id, reason=reason)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        response = (
+            f"Cancelled order #{summary['id']} ({summary['order_type']})."
+            + (f" Reason: {reason}" if reason else "")
+        )
+        await interaction.response.send_message(response, ephemeral=True)
         await _flush_admin_notifications()
 
     @gw_admin.command(name="resume_game", description="Resume the game if it is paused")

@@ -245,11 +245,15 @@ class GameService:
         for _, release_at, payload in self.state.list_queued_press():
             if release_at > horizon:
                 continue
+            metadata = payload.get("metadata", {}) or {}
+            badges = self._press_badges(metadata)
             upcoming.append(
                 {
                     "headline": payload.get("headline", "Scheduled Update"),
                     "type": payload.get("type", "scheduled_press"),
                     "release_at": release_at,
+                    "metadata": metadata,
+                    "badges": badges,
                 }
             )
         upcoming.sort(key=lambda item: item["release_at"])
@@ -274,7 +278,7 @@ class GameService:
                 {
                     "headline": payload.get("headline", "Scheduled Update"),
                     "type": payload.get("type", "scheduled_press"),
-                    "metadata": payload.get("metadata", {}),
+                    "metadata": payload.get("metadata", {}) or {},
                     "release_at": release_at,
                 }
             )
@@ -306,6 +310,9 @@ class GameService:
             else:
                 relative = f"{delta_minutes}m"
             absolute = release_at.strftime("%Y-%m-%d %H:%M UTC")
+            metadata = item.get("metadata", {})
+            badges = self._press_badges(metadata)
+            label_prefix = f"[{" | ".join(badges)}] " if badges else ""
             summary = f"{item['headline']} — {absolute} (in {relative})"
             if blurb_template:
                 blurb = blurb_template.format(
@@ -315,6 +322,8 @@ class GameService:
                 )
             else:
                 blurb = summary
+            if label_prefix:
+                blurb = f"{label_prefix}{blurb}"
             lines.append(f"• {blurb}")
             metadata_items.append(
                 {
@@ -322,6 +331,8 @@ class GameService:
                     "type": item["type"],
                     "release_at": release_at.isoformat(),
                     "relative_minutes": delta_minutes,
+                    "badges": badges,
+                    "source": metadata.get("source"),
                 }
             )
 
@@ -367,6 +378,23 @@ class GameService:
             )
         )
         return release
+
+    @staticmethod
+    def _press_badges(metadata: Dict[str, object]) -> List[str]:
+        """Derive descriptive badges for scheduled press metadata."""
+
+        if not isinstance(metadata, dict):
+            return []
+        badges: List[str] = []
+        source = metadata.get("source")
+        if source == "sideways_followup":
+            badges.append("Follow-Up")
+        tags = metadata.get("tags")
+        if isinstance(tags, (list, tuple)):
+            badges.extend(str(tag) for tag in tags if tag)
+        elif isinstance(tags, str) and tags:
+            badges.append(tags)
+        return badges
 
     def _ensure_not_paused(self) -> None:
         if self._paused:

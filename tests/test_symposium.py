@@ -201,6 +201,40 @@ def test_symposium_proposal_limits():
             service.submit_symposium_proposal("p2", "Topic F", "Desc")
 
 
+def test_symposium_reprimand_followup():
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = build_service(
+            db_path,
+            debt_threshold=1,
+            debt_penalty=0,
+            debt_cooldown_days=0,
+        )
+        player_id = "debtor"
+        service.ensure_player(player_id, "Debt Holder")
+
+        now = datetime.now(timezone.utc)
+        service.state.record_symposium_debt(
+            player_id=player_id,
+            faction="academia",
+            amount=5,
+            now=now,
+        )
+
+        player = service.state.get_player(player_id)
+        result = service._settle_symposium_debts(player, now)
+        assert result["reprisals"], "Expected reprisal events"
+
+        orders = service.admin_list_orders(order_type="followup:symposium_reprimand", limit=5)
+        assert orders, "Expected symposium reprimand follow-up order"
+
+        releases = service._resolve_followups()
+        reprimand_press = next((press for press in releases if press.type == "symposium_reprimand"), None)
+        assert reprimand_press is not None
+        assert "reprisal" in reprimand_press.body.lower()
+
+
 def test_symposium_proposal_expiry_cleanup():
     os.environ["LLM_MODE"] = "mock"
     with tempfile.TemporaryDirectory() as tmpdir:

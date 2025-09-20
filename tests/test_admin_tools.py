@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+import os
 
 from great_work.models import ConfidenceLevel, ExpeditionPreparation
 from great_work.service import GameService
@@ -9,6 +10,7 @@ from great_work.service import GameService
 
 def test_admin_tools():
     """Test admin tool functionality."""
+    os.environ.setdefault("LLM_MODE", "mock")
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         service = GameService(db_path)
@@ -105,6 +107,24 @@ def test_admin_tools():
 
         # Check that expedition is no longer pending
         assert "TEST-001" not in service._pending_expeditions
+
+        # Dispatcher order listing and cancellation
+        order_id = service.state.enqueue_order(
+            "test_manual",
+            actor_id="system",
+            subject_id="subject",
+            payload={"note": "for testing"},
+        )
+        orders = service.admin_list_orders(order_type="test_manual", status="pending", limit=5)
+        assert any(order["id"] == order_id for order in orders)
+
+        summary = service.admin_cancel_order(order_id=order_id, reason="cleanup")
+        assert summary["id"] == order_id
+        assert summary["order_type"] == "test_manual"
+
+        cancelled = service.state.get_order(order_id)
+        assert cancelled is not None
+        assert cancelled["status"] == "cancelled"
 
         print("Admin tools test passed!")
 

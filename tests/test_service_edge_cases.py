@@ -6,7 +6,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from great_work.models import ConfidenceLevel, ExpeditionOutcome, Player, ExpeditionPreparation
+from great_work.models import (
+    ConfidenceLevel,
+    ExpeditionOutcome,
+    Player,
+    ExpeditionPreparation,
+    PressRelease,
+)
 from great_work.service import GameService
 from great_work.llm_client import LLMGenerationError
 
@@ -196,6 +202,37 @@ def test_recruitment_with_cooldown(tmp_path):
 
         assert isinstance(press.type, str)
         assert press.type == "recruitment_report"
+
+
+def test_digest_highlights_include_followup_badges(tmp_path):
+    """Digest highlights should surface badges for sideways follow-up press."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    now = datetime.now(timezone.utc)
+
+    followup_release = PressRelease(
+        type="sideways_followup",
+        headline="Follow-up bulletin",
+        body="Dispatcher follow-up",
+        metadata={
+            "source": "sideways_followup",
+            "tags": ["archives"],
+        },
+    )
+    service.state.enqueue_press_release(
+        followup_release,
+        now + timedelta(hours=2),
+    )
+
+    highlight = service.create_digest_highlights(now=now, within_hours=24)
+    assert highlight is not None
+    items = highlight.metadata["digest_highlights"]["items"]
+    assert items[0]["badges"] == ["Follow-Up", "archives"]
+
+    upcoming = service.upcoming_press(limit=1, within_hours=24)
+    assert upcoming
+    assert upcoming[0]["badges"] == ["Follow-Up", "archives"]
 
 
 def test_advance_digest_with_no_events(tmp_path):

@@ -20,6 +20,10 @@ GREAT_WORK_CHANNEL_UPCOMING=channel_id_for_optional_upcoming_highlights
 GREAT_WORK_ALERT_MAX_DIGEST_MS=5000          # alert if digest exceeds 5s
 GREAT_WORK_ALERT_MAX_QUEUE=12               # alert if scheduled press backlog exceeds 12 items
 GREAT_WORK_ALERT_MIN_RELEASES=1             # alert if a digest emits fewer than 1 release
+GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS=4000    # alert if average LLM latency exceeds 4s
+GREAT_WORK_ALERT_LLM_FAILURE_RATE=0.25      # alert if LLM failures exceed 25%
+GREAT_WORK_ALERT_MAX_ORDER_PENDING=6        # alert if dispatcher backlog exceeds 6 orders
+GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS=8      # alert if any pending order ages past 8h
 
 # Narrative Tone (optional)
 GREAT_WORK_PRESS_SETTING=post_cyberpunk_collapse  # or high_fantasy, renaissance_europe_1400s
@@ -61,6 +65,39 @@ The optional `telemetry-dashboard` service reads `telemetry.db` and exposes char
 - Access locally at `http://localhost:8082`
 
 If you forgo the dashboard, `/telemetry_report` in Discord prints queue depth, digest stats, and alert thresholds.
+
+### Telemetry Runbook
+
+The `/telemetry_report` command now opens with a **Health Summary**, mapping key metrics to the thresholds above. Icons show the current status (`✅` OK, `⚠️` approaching threshold, `🛑` exceeded). When a metric fires:
+
+- **Digest runtime** – When runtime crosses the limit, review recent digests, LLM queues, and
+  archive publishing. Investigate long-running narrative generation and consider pausing scheduled
+  digests if latency persists.
+- **Digest release floor** – A warning that a digest published fewer than the expected minimum
+  (default `1`). Check `service.pending_press_count()` and ensure scheduled follow-ups are being
+  generated; confirm the scheduler is not paused.
+- **Press queue depth** – Highlights the deepest backlog sampled in the last 24 hours. If it exceeds
+  the queue threshold, triage outstanding follow-ups, prune stale orders, or increase digest frequency.
+- **LLM latency** – Average LLM latency above the threshold usually indicates a saturated
+  model endpoint. Check the LLM service health, retry budget, and consider switching to fallback
+  mode.
+- **LLM failure rate** – When failures pass the allowed rate, review admin notifications for
+  pause events, inspect the LLM logs, and manually pause the game if necessary.
+- **Dispatcher backlog** – When pending orders rise above the limit, prioritise resolving them during
+  the next digest and look for blocked mentorships/conferences. An admin notification is posted when this
+  threshold trips.
+- **Order staleness** – If any pending order ages past the staleness threshold, investigate why it has
+  not resolved (e.g., missing data, paused scheduler) and consider canceling/re-queuing. Admins receive a
+  reminder once the stale age threshold is crossed.
+
+### Dispatcher Moderation
+
+- List pending work with `/gw_admin list_orders` (filter by order type and status). Results show the order
+  id, actor, subject, and payload preview.
+- Cancel items with `/gw_admin cancel_order order_id:<id> [reason:<text>]`. The game logs the cancellation,
+  emits telemetry, and notifies the admin channel. Cancelled orders no longer execute during the digest tick.
+
+Update the environment variables to tune when alerts trigger, and capture any operator-specific playbook additions in your internal notes.
 
 ## 4. Archive Publishing
 

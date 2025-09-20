@@ -244,8 +244,10 @@ class GazetteScheduler:
             else:
                 relative = f"{delta_minutes}m"
             timestamp = release_at.strftime("%Y-%m-%d %H:%M UTC")
+            badges = item.get("badges") or []
+            label = f"[{" | ".join(badges)}] " if badges else ""
             lines.append(
-                f"• {item['headline']} — {timestamp} (in {relative})"
+                f"• {label}{item['headline']} — {timestamp} (in {relative})"
             )
         message = "\n".join(lines)
         try:

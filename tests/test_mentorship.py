@@ -2,6 +2,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+import random
+import os
 
 from great_work.models import Player
 from great_work.service import GameService
@@ -10,6 +12,7 @@ from great_work.service import GameService
 def test_mentorship_flow():
     """Test the complete mentorship flow."""
     with tempfile.TemporaryDirectory() as tmpdir:
+        os.environ.setdefault("LLM_MODE", "mock")
         db_path = Path(tmpdir) / "test.db"
         service = GameService(db_path)
 
@@ -24,10 +27,19 @@ def test_mentorship_flow():
         scholar = scholars[0]
 
         # Queue mentorship
+        random.seed(0)
         press = service.queue_mentorship(player_id, scholar.id, "Academia")
         assert press is not None
         assert press.type == "academic_gossip"
         assert "llm" in press.metadata
+
+        queued_press = service.state.list_queued_press()
+        mentorship_updates = [payload for _, _, payload in queued_press if payload.get("type") == "mentorship_update"]
+        assert mentorship_updates, "Expected mentorship follow-up layers to be queued"
+        assert any(
+            item.get("metadata", {}).get("track") == "Academia" and item.get("metadata", {}).get("phase") == "queued"
+            for item in mentorship_updates
+        )
 
         # Check pending mentorships
         orders = service.state.list_orders(order_type="mentorship_activation", status="pending")

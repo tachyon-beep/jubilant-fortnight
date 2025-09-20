@@ -118,6 +118,27 @@ def test_scholar_removal_cascades(tmp_path):
     assert state.get_scholar("test_scholar") is None
 
 
+def test_dispatcher_admin_notifier(tmp_path, monkeypatch):
+    """Dispatcher backlog alerts should enqueue admin notifications when thresholds are exceeded."""
+
+    messages: list[str] = []
+
+    def notifier(message: str) -> None:
+        messages.append(message)
+
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_PENDING", "1")
+    state = GameState(
+        db_path=tmp_path / "test.db",
+        start_year=1923,
+        admin_notifier=notifier,
+    )
+
+    state.enqueue_order("mentorship_activation", payload={})
+    state.fetch_due_orders("mentorship_activation", datetime.now(timezone.utc))
+
+    assert any("dispatcher backlog" in message.lower() for message in messages)
+
+
 def test_scholar_not_found_returns_none(tmp_path):
     """Getting a non-existent scholar should return None."""
     state = GameState(db_path=tmp_path / "test.db", start_year=1923)

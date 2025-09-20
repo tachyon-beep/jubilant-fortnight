@@ -1,0 +1,42 @@
+phases:
+  queued:
+    fast:
+      - "{mentor} shares induction dossiers with {scholar}, promising tempestuous debates."
+      - "Department aides prepare {scholar}'s seat at the {track_descriptor} colloquium under {mentor}."
+    long:
+      - "{mentor} outlines a rigorous {track_descriptor} curriculum for {scholar}, weaving fresh fieldwork with archive study."
+      - "Orientation notes from {mentor} set expectations for {scholar}'s first {track_descriptor} sprints and debriefs."
+  activation:
+    fast:
+      - "{scholar} begins dawn workshops with {mentor}, immersing in {track_descriptor} drills."
+      - "{mentor}'s circle welcomes {scholar} to midnight labs and annotated {track_descriptor} casefiles."
+    long:
+      - "Early progress memos highlight {scholar}'s appetite for {track_descriptor} assignments and {mentor}'s bespoke critiques."
+      - "Faculty whispers say {mentor} is already revising the {track_descriptor} syllabus around {scholar}'s instincts."
+  progression:
+    fast:
+      - "Rumours suggest {mentor} has flagged {scholar}'s latest {track_descriptor} experiment for Gazette highlights."
+      - "{scholar}'s cohort credits {mentor} for unlocking restricted {track_descriptor} archives this week."
+    long:
+      - "Interim reviews praise {scholar}'s momentum while {mentor} maps the next {track_descriptor} hurdle and peer showcase."
+      - "{mentor} circulates annotated lab journals charting {scholar}'s {track_descriptor} breakthroughs and stumbles."
+  completion:
+    fast:
+      - "{mentor} hosts a quiet toast for {scholar}'s final {track_descriptor} colloquy."
+      - "{scholar} gifts {mentor} a bound log of their {track_descriptor} investigations."
+    long:
+      - "Graduation notes celebrate {scholar}'s mastery of {track_descriptor} craft and the culminating dossier {mentor} files with the Academy."
+      - "{mentor} briefs patrons on {scholar}'s signature {track_descriptor} contribution and opens nominations for the next cohort."
+tracks:
+  Academia:
+    descriptor: "academic lecture circuit"
+  Industry:
+    descriptor: "industrial lab floor"
+  Government:
+    descriptor: "state archives"
+  Religious:
+    descriptor: "sacred library"
+  Foreign:
+    descriptor: "transnational exchange desk"
+  Default:
+    descriptor: "cross-disciplinary atelier"

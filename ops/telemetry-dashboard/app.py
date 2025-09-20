@@ -45,6 +45,17 @@ def build_context(report: dict) -> dict:
         key=lambda item: item[1]["total_calls"],
         reverse=True,
     )
+    queue_depth = sorted(
+        report.get("queue_depth_24h", {}).items(),
+        key=lambda item: int(item[0]),
+    )
+    order_backlog = sorted(
+        report.get("order_backlog_24h", {}).items(),
+        key=lambda item: item[1].get("latest_pending", 0.0),
+        reverse=True,
+    )
+    health = report.get("health", {})
+    health_checks = health.get("checks", [])
     symposium = report.get("symposium", {})
     symposium_scoring = symposium.get("scoring", {})
     scoring_top = symposium_scoring.get("top", [])
@@ -55,6 +66,10 @@ def build_context(report: dict) -> dict:
         "command_stats_sorted": command_stats_sorted,
         "press_cadence": press_cadence,
         "llm_activity": llm_activity,
+        "queue_depth": queue_depth,
+        "order_backlog": order_backlog,
+        "health_checks": health_checks,
+        "health_thresholds": health.get("thresholds", {}),
         "symposium_scoring": symposium_scoring,
         "symposium_scoring_top": scoring_top,
         "symposium_debts": symposium_debts,

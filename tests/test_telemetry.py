@@ -182,6 +182,43 @@ def test_track_queue_depth_and_summary():
         assert summary["24"]["avg_queue"] == 1.0
 
 
+def test_track_order_snapshot_and_summary():
+    """Dispatcher backlog snapshots should surface latest and max pending counts."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "orders.db")
+
+        alerts = collector.track_order_snapshot(
+            order_type="mentorship_activation",
+            event="enqueue",
+            pending_count=3,
+            oldest_pending_seconds=3600.0,
+        )
+        assert alerts["pending_alert"] is None  # enqueue alone does not trigger admin notifier logic
+        collector.track_order_snapshot(
+            order_type="mentorship_activation",
+            event="update:completed",
+            pending_count=2,
+            oldest_pending_seconds=1800.0,
+        )
+        collector.track_order_snapshot(
+            order_type="conference_resolution",
+            event="enqueue",
+            pending_count=1,
+            oldest_pending_seconds=None,
+        )
+        collector.flush()
+
+        summary = collector.get_order_backlog_summary(hours=1)
+        assert summary
+        assert "mentorship_activation" in summary
+        stats = summary["mentorship_activation"]
+        assert stats["latest_pending"] == 2.0
+        assert stats["max_pending"] == 3.0
+        assert stats["latest_oldest_seconds"] == 1800.0
+        assert "conference_resolution" in summary
+        assert summary["conference_resolution"]["latest_pending"] == 1.0
+
+
 def test_digest_summary():
     """Digest summaries should surface runtime and queue size."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -199,6 +236,9 @@ def test_digest_summary():
         assert digest["avg_duration_ms"] == 1200.0
         assert digest["avg_release_count"] == 3.0
         assert digest["avg_queue_size"] == 5.0
+        assert digest["min_duration_ms"] == 1200.0
+        assert digest["min_release_count"] == 3
+        assert digest["min_queue_size"] == 5
 
 
 def test_flush_metrics():
@@ -360,6 +400,93 @@ def test_generate_report():
         assert "errors_24h" in report
         assert "performance_1h" in report
         assert report["overall"]["total_events"] == 4
+        assert "health" in report
+        assert isinstance(report["health"].get("checks"), list)
+
+
+def test_health_evaluation_thresholds(monkeypatch):
+    """Health evaluation should surface alerts when metrics breach thresholds."""
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_DIGEST_MS", "100")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MIN_RELEASES", "2")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_QUEUE", "3")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS", "200")
+    monkeypatch.setenv("GREAT_WORK_ALERT_LLM_FAILURE_RATE", "0.25")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_PENDING", "2")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", "0.5")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "health.db")
+
+        collector.track_digest(
+            duration_ms=250.0,
+            release_count=1,
+            scheduled_queue_size=5,
+        )
+        collector.track_queue_depth(5, horizon_hours=48)
+        collector.track_queue_depth(2, horizon_hours=24)
+        collector.track_llm_activity(
+            press_type="expedition",
+            success=False,
+            duration_ms=250.0,
+            error="timeout",
+        )
+        collector.track_llm_activity(
+            press_type="expedition",
+            success=True,
+            duration_ms=300.0,
+        )
+        collector.track_order_snapshot(
+            order_type="mentorship_activation",
+            event="poll",
+            pending_count=3,
+            oldest_pending_seconds=3600.0,
+        )
+        collector.flush()
+
+        report = collector.generate_report()
+        checks = report["health"]["checks"]
+
+        digest_alert = next(
+            (check for check in checks if check["metric"] == "digest_runtime"),
+            None,
+        )
+        assert digest_alert is not None
+        assert digest_alert["status"] == "alert"
+
+        release_alert = next(
+            (check for check in checks if check["metric"] == "digest_release_floor"),
+            None,
+        )
+        assert release_alert is not None
+        assert release_alert["status"] == "alert"
+
+        queue_alert = next(
+            (check for check in checks if check["metric"] == "press_queue_depth"),
+            None,
+        )
+        assert queue_alert is not None
+        assert queue_alert["status"] == "alert"
+
+        failure_alert = next(
+            (check for check in checks if check["metric"] == "llm_failure_rate"),
+            None,
+        )
+        assert failure_alert is not None
+        assert failure_alert["status"] == "alert"
+
+        order_pending_alert = next(
+            (check for check in checks if check["metric"] == "order_pending"),
+            None,
+        )
+        assert order_pending_alert is not None
+        assert order_pending_alert["status"] == "alert"
+
+        order_stale_alert = next(
+            (check for check in checks if check["metric"] == "order_staleness"),
+            None,
+        )
+        assert order_stale_alert is not None
+        assert order_stale_alert["status"] == "alert"
 
 
 def test_cleanup_old_data():

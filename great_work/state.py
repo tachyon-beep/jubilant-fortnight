@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from .models import (
     Event,
@@ -19,6 +19,7 @@ from .models import (
     TheoryRecord,
 )
 from .scholars import ScholarRepository
+from .telemetry import get_telemetry
 
 _DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
@@ -223,10 +224,12 @@ class GameState:
         repository: ScholarRepository | None = None,
         *,
         start_year: int,
+        admin_notifier: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._db_path = db_path
         self._repo = repository or ScholarRepository()
         self._start_year = start_year
+        self._admin_notifier = admin_notifier
         self._ensure_schema()
         self._ensure_timeline()
         self._cached_players: Dict[str, Player] = {}
@@ -377,8 +380,15 @@ class GameState:
     def remove_scholar(self, scholar_id: str) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("DELETE FROM scholars WHERE id = ?", (scholar_id,))
-            conn.execute("DELETE FROM relationships WHERE scholar_id = ? OR subject_id = ?", (scholar_id, scholar_id))
+            conn.execute(
+                "DELETE FROM relationships WHERE scholar_id = ? OR subject_id = ?",
+                (scholar_id, scholar_id),
+            )
             conn.execute("DELETE FROM followups WHERE scholar_id = ?", (scholar_id,))
+            conn.execute(
+                "DELETE FROM orders WHERE order_type LIKE 'followup:%' AND actor_id = ?",
+                (scholar_id,),
+            )
             conn.commit()
         self._cached_scholars.pop(scholar_id, None)
 
@@ -432,48 +442,105 @@ class GameState:
             conn.commit()
 
     # Follow-up queue ---------------------------------------------------
+    def _migrate_followups_to_orders(self) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT scholar_id, kind, payload, resolve_at FROM followups"
+            ).fetchall()
+        if not rows:
+            return
+
+        for scholar_id, kind, payload_json, resolve_at in rows:
+            payload = json.loads(payload_json)
+            scheduled_at = datetime.fromisoformat(resolve_at)
+            self.enqueue_order(
+                f"followup:{kind}",
+                actor_id=scholar_id,
+                subject_id=scholar_id,
+                payload=payload,
+                scheduled_at=scheduled_at,
+            )
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute("DELETE FROM followups")
+            conn.commit()
+
     def schedule_followup(
         self, scholar_id: str, kind: str, resolve_at: datetime, payload: Dict[str, object]
     ) -> None:
-        with closing(sqlite3.connect(self._db_path)) as conn:
-            conn.execute(
-                "INSERT INTO followups (scholar_id, kind, payload, resolve_at) VALUES (?, ?, ?, ?)",
-                (scholar_id, kind, json.dumps(payload), resolve_at.isoformat()),
-            )
-            conn.commit()
+        self._migrate_followups_to_orders()
+        self.enqueue_order(
+            f"followup:{kind}",
+            actor_id=scholar_id,
+            subject_id=scholar_id,
+            payload=payload,
+            scheduled_at=resolve_at,
+        )
 
     def due_followups(self, now: datetime) -> List[Tuple[int, str, str, Dict[str, object]]]:
+        self._migrate_followups_to_orders()
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
-                "SELECT id, scholar_id, kind, payload FROM followups WHERE resolve_at <= ? ORDER BY id ASC",
+                """
+                    SELECT id, order_type, actor_id, payload
+                    FROM orders
+                    WHERE order_type LIKE 'followup:%'
+                      AND status = 'pending'
+                      AND (scheduled_at IS NULL OR scheduled_at <= ?)
+                    ORDER BY created_at
+                """,
                 (now.isoformat(),),
             ).fetchall()
-        return [
-            (
-                row[0],
-                row[1],
-                row[2],
-                json.loads(row[3]),
-            )
-            for row in rows
-        ]
+        followups: List[Tuple[int, str, str, Dict[str, object]]] = []
+        for order_id, order_type, actor_id, payload_json in rows:
+            try:
+                payload = json.loads(payload_json)
+            except (TypeError, json.JSONDecodeError):  # pragma: no cover - legacy guard
+                payload = {}
+            kind = order_type.split(":", 1)[1] if ":" in order_type else order_type
+            followups.append((int(order_id), actor_id or "", kind, payload))
+        return followups
 
-    def clear_followup(self, followup_id: int) -> None:
+    def clear_followup(
+        self,
+        followup_id: int,
+        *,
+        status: str = "completed",
+        result: Optional[Dict[str, object]] = None,
+    ) -> None:
+        updated = self.update_order_status(followup_id, status, result=result)
+        if updated:
+            return
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("DELETE FROM followups WHERE id = ?", (followup_id,))
             conn.commit()
 
     def list_followups(self) -> List[Tuple[int, str, str, datetime, Dict[str, object]]]:
         """List all followups (not just due ones)."""
+        self._migrate_followups_to_orders()
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
-                """SELECT id, scholar_id, kind, resolve_at, payload
-                FROM followups ORDER BY resolve_at ASC"""
+                """
+                    SELECT id, order_type, actor_id, payload, scheduled_at
+                    FROM orders
+                    WHERE order_type LIKE 'followup:%' AND status = 'pending'
+                    ORDER BY COALESCE(scheduled_at, created_at)
+                """
             ).fetchall()
-        return [
-            (row[0], row[1], row[2], datetime.fromisoformat(row[3]), json.loads(row[4]))
-            for row in rows
-        ]
+        followups: List[Tuple[int, str, str, datetime, Dict[str, object]]] = []
+        for order_id, order_type, actor_id, payload_json, scheduled_at in rows:
+            try:
+                payload = json.loads(payload_json)
+            except (TypeError, json.JSONDecodeError):  # pragma: no cover
+                payload = {}
+            kind = order_type.split(":", 1)[1] if ":" in order_type else order_type
+            resolve_at = (
+                datetime.fromisoformat(scheduled_at)
+                if scheduled_at is not None
+                else datetime.now(timezone.utc)
+            )
+            followups.append((int(order_id), actor_id or "", kind, resolve_at, payload))
+        return followups
 
     # Scheduled press --------------------------------------------------
     def enqueue_press_release(
@@ -562,7 +629,10 @@ class GameState:
                 ),
             )
             conn.commit()
-            return int(cursor.lastrowid)
+            order_id = int(cursor.lastrowid)
+
+        self._record_order_snapshot(order_type, event="enqueue")
+        return order_id
 
     def fetch_due_orders(
         self,
@@ -591,6 +661,7 @@ class GameState:
                     "scheduled_at": scheduled_at,
                 }
             )
+        self._record_order_snapshot(order_type, event="poll")
         return due_orders
 
     def update_order_status(
@@ -599,9 +670,17 @@ class GameState:
         status: str,
         *,
         result: Optional[Dict[str, object]] = None,
-    ) -> None:
+    ) -> bool:
         now = datetime.now(timezone.utc).isoformat()
+        order_type: Optional[str] = None
         with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT order_type FROM orders WHERE id = ?",
+                (order_id,),
+            ).fetchone()
+            if row:
+                order_type = row[0]
+
             conn.execute(
                 """UPDATE orders
                        SET status = ?, updated_at = ?, result = ?
@@ -614,6 +693,11 @@ class GameState:
                 ),
             )
             conn.commit()
+
+        if order_type:
+            self._record_order_snapshot(order_type, event=f"update:{status}")
+            return True
+        return False
 
     def list_orders(
         self,
@@ -656,6 +740,90 @@ class GameState:
                 }
             )
         return orders
+
+    def get_order(self, order_id: int) -> Optional[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT id, order_type, actor_id, subject_id, payload, status,
+                              scheduled_at, created_at, updated_at, source_table, source_id, result
+                       FROM orders WHERE id = ?""",
+                (order_id,),
+            ).fetchone()
+        if not row:
+            return None
+        scheduled_at = datetime.fromisoformat(row[6]) if row[6] else None
+        return {
+            "id": int(row[0]),
+            "order_type": row[1],
+            "actor_id": row[2],
+            "subject_id": row[3],
+            "payload": json.loads(row[4]) if row[4] else {},
+            "status": row[5],
+            "scheduled_at": scheduled_at,
+            "created_at": datetime.fromisoformat(row[7]) if row[7] else None,
+            "updated_at": datetime.fromisoformat(row[8]) if row[8] else None,
+            "source_table": row[9],
+            "source_id": row[10],
+            "result": json.loads(row[11]) if row[11] else None,
+        }
+
+    def _pending_order_stats(self, order_type: str) -> Tuple[int, Optional[float]]:
+        """Return pending count and age in seconds for the given order type."""
+
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                """SELECT COUNT(*) as pending,
+                              MIN(created_at) as oldest_created
+                       FROM orders
+                       WHERE order_type = ? AND status = 'pending'""",
+                (order_type,),
+            ).fetchone()
+
+        pending_count = int(row[0] or 0) if row else 0
+        oldest_iso = row[1] if row and row[1] else None
+        if oldest_iso:
+            oldest_dt = datetime.fromisoformat(oldest_iso)
+            age_seconds = max(
+                0.0,
+                (datetime.now(timezone.utc) - oldest_dt).total_seconds(),
+            )
+        else:
+            age_seconds = None
+        return pending_count, age_seconds
+
+    def _record_order_snapshot(self, order_type: str, *, event: str) -> None:
+        """Emit telemetry snapshot for the dispatcher backlog."""
+
+        try:
+            telemetry = get_telemetry()
+        except Exception:  # pragma: no cover - telemetry failures shouldn't break state updates
+            telemetry = None
+
+        pending_count, oldest_seconds = self._pending_order_stats(order_type)
+        alerts: Dict[str, Optional[str]] = {
+            "pending_alert": None,
+            "stale_alert": None,
+        }
+
+        if telemetry is not None:
+            try:
+                alerts = telemetry.track_order_snapshot(
+                    order_type=order_type,
+                    event=event,
+                    pending_count=pending_count,
+                    oldest_pending_seconds=oldest_seconds,
+                )
+            except Exception:  # pragma: no cover - defensive guardrail
+                alerts = {"pending_alert": None, "stale_alert": None}
+
+        if self._admin_notifier and event == "poll":
+            for key, prefix in (("pending_alert", "⚠️ "), ("stale_alert", "🕒 ")):
+                message = alerts.get(key)
+                if message:
+                    try:
+                        self._admin_notifier(f"{prefix}{message}")
+                    except Exception:  # pragma: no cover - admin notifications should not break flow
+                        pass
 
     def export_events(self) -> List[Event]:
         events: List[Event] = []

@@ -18,7 +18,8 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
    - Symposium backlog health: proposal scoring weights, outstanding debt totals, reprisal counts.
    - Health signals: digest duration, LLM latency distribution, pause frequency.
 2. Define success metrics aligned with product goals (e.g., % public vs ephemeral replies, avg time from press schedule to release).
-3. Establish alert thresholds for pause duration, command error spikes, and archive export failures.
+3. Establish alert thresholds for pause duration, command error spikes, and archive export failures
+   (defaults now recorded in the deployment guide).
 
 ### Proposed Approach
 - **Schema additions:**
@@ -28,7 +29,11 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
   - Extend `/telemetry_report` with new sections (layered press, engagement, digest health, symposium scoring/debt) and paginate when output exceeds Discord limits.
   - Ship a lightweight FastAPI/Jinja dashboard inside the ops container to visualise historical metrics directly from `telemetry.db`, including symposium scoring tables, debt snapshots, and reprisal logs.
 - **Alerting:**
-  - Configurable thresholds exposed via environment variables (`GREAT_WORK_ALERT_MAX_DIGEST_MS`, `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`). When breached, enqueue admin notifications and log system events.
+  - Configurable thresholds exposed via environment variables (`GREAT_WORK_ALERT_MAX_DIGEST_MS`,
+    `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`,
+    `GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS`, `GREAT_WORK_ALERT_LLM_FAILURE_RATE`,
+    `GREAT_WORK_ALERT_MAX_ORDER_PENDING`, `GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`). When breached,
+    enqueue admin notifications, log system events, and surface a health summary in `/telemetry_report`.
 - **Operator notes:**
   - `/telemetry_report` now prints queue depth averages/maxima alongside the active thresholds, giving moderators a quick read on backlog health.
   - Queue depth snapshots are sampled when upcoming highlights are generated (default horizon 48h); adjust horizon via `GREAT_WORK_CHANNEL_UPCOMING` settings if cadence changes.
@@ -37,6 +42,7 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
     2. When a player’s debt exceeds the reprisal threshold for more than one digest, confirm a reprisal fired and ping moderators to nudge repayment.
     3. Three or more reprisals in a 24h window should prompt a moderation follow-up and potentially manual influence adjustments.
   - `/symposium_backlog` mirrors the dashboard ranking for ad-hoc Discord checks.
+  - Symposium debt reprisals now schedule `symposium_reprimand` follow-ups that publish public warnings and appear in the dispatcher queue; review them via `/gw_admin list_orders` and cancel as needed with `/gw_admin cancel_order`.
 
 ### Decision Points
 1. **Dashboard medium:** ✅ Use Discord `/telemetry_report` plus the bundled FastAPI/Jinja dashboard container for richer historical slices.
@@ -117,8 +123,7 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ## Next Steps & Approvals
 
-1. Finalise success-metric thresholds (pause duration, engagement targets) for alerting defaults.
-2. Document dashboard container configuration presets (port mappings, sample compose entry) for operators and include guidance on interpreting symposium scoring/debt widgets and reprisal thresholds.
-3. Confirm naming conventions for the opt-in upcoming-highlights channel and integrate into onboarding docs.
+1. Document dashboard container configuration presets (port mappings, sample compose entry) for operators and include guidance on interpreting symposium scoring/debt widgets and reprisal thresholds.
+2. Confirm naming conventions for the opt-in upcoming-highlights channel and integrate into onboarding docs.
 
 With hosting, dashboard medium, and cadence cadence decisions set, we can proceed into implementation planning for Phase 3 polish.
