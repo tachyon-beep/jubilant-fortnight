@@ -24,6 +24,7 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 | Symposium debt | 30 influence (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT`) | Sum of outstanding symposium debt | Alert indicates players falling behind – consider rescheduling pledges or lowering penalties. |
 | Symposium reprisals | 3 per player (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS`) | Highest reprisal count in 24 h | Reach out to the affected player; consider waiving upcoming penalties. |
 | Investment concentration | 60 % share (`GREAT_WORK_ALERT_INVESTMENT_SHARE`) | Share of investments attributed to a single player | If alert, encourage rival factions or seed new long-tail sinks. |
+| Archive snapshot usage | 512 MB (`GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`) | Total size of ZIP snapshots kept on disk | If alert, prune old snapshots or move them to long-term storage before the disk fills. |
 
 ### Adjusting Thresholds
 
@@ -64,6 +65,13 @@ If investments concentrate on one player, consider introducing temporary incenti
 
 - Telemetry samples are retained for 30 days by default (see `TelemetryCollector.cleanup_old_data`).
 - Run `python -m great_work.telemetry --prune` (or call `cleanup_old_data`) monthly to keep the DB compact.
+
+## Archive Publishing Signals
+
+- `archive_published_container` and `archive_published_github_pages` confirm each digest successfully deployed both the local nginx volume and the GitHub Pages repository. Investigate the scheduler logs if either event goes missing.
+- `archive_publish_pages_failed` indicates the mirror step hit an exception (usually permissions or an uninitialised Pages directory); check the admin channel alert and repair the working tree.
+- `archive_snapshot_usage` tracks rolling snapshot disk usage. When `archive_snapshot_usage_exceeded` fires, prune `web_archive/snapshots/` or offload older ZIPs before repeated digests fail.
+- Review the Git working tree under `GREAT_WORK_ARCHIVE_PAGES_DIR` after a failure; partially synced content should be committed/pushed only after validation.
 
 ## Quick Reference
 

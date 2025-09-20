@@ -135,6 +135,21 @@ class TestWebArchive:
             permalink3 = archive.generate_permalink(sample_press[1])
             assert permalink != permalink3
 
+    def test_generate_permalink_with_custom_base_url(self, state, sample_press):
+        """Custom base URLs should be respected when generating permalinks."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive = WebArchive(state, Path(tmpdir), base_url="/gazette/archive/")
+
+            permalink = archive.generate_permalink(sample_press[0])
+
+            assert permalink.startswith("/gazette/archive/press/")
+            assert permalink.endswith(".html")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive = WebArchive(state, Path(tmpdir), base_url="https://example.com/great-work")
+            permalink = archive.generate_permalink(sample_press[0])
+            assert permalink.startswith("https://example.com/great-work/press/")
+
     def test_permalink_stability(self, state):
         """Test that permalinks remain stable over time."""
         with tempfile.TemporaryDirectory() as tmpdir:

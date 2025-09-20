@@ -57,24 +57,25 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 ## 2. Archive Automation & Hosting
 
 ### Current State
-- Gazette scheduler exports the static archive every digest, syncs the contents into `web_archive_public/`, and uploads ZIP snapshots to the admin channel (`great_work/scheduler.py:20`, `docs/internal/ARCHIVE_OPERATIONS.md`).
-- Hosting is handled by the bundled nginx container; optional managed adapters (S3/GitHub Pages) remain future work.
+- Gazette scheduler exports the static archive every digest, syncs the contents into `web_archive_public/`, mirrors the build into a configured GitHub Pages repo, and uploads ZIP snapshots to the admin channel (`great_work/scheduler.py:20`, `docs/internal/ARCHIVE_OPERATIONS.md`).
+- Hosting is handled by the bundled nginx container and the GitHub Pages adapter; S3 remains an optional future provider if operators prefer object storage.
 
 ### Objectives
 1. Publish the archive to a persistent host (S3 bucket, GitHub Pages, or similar) after each digest.
 2. Implement retention policies for local and remote snapshots (e.g., keep last 30, prune older).
 3. Provide a one-command operator workflow, with failure telemetry and admin alerts when publishing stalls.
 
-- **Hosting target (decided):** Self-hosted static site served from the project’s container image so anyone can run the publisher container. The digest job publishes into the container volume and the container exposes the archive over HTTPS. (Alternatives such as S3/GitHub Pages remain viable if operators prefer managed hosting.)
+- **Hosting target (decided):** Self-hosted static site served from the project’s container image so anyone can run the publisher container. GitHub Pages acts as the managed option via the built-in publisher adapter. (Alternatives such as S3 remain viable if operators prefer object storage.)
 - **Automation flow:**
   1. After archive export, sync `web_archive/` into `web_archive_public/` (served by the container volume).
-  2. Record deployment metadata (digest timestamp) in telemetry via `track_system_event` and alert on failure.
-  3. Zip snapshots remain for disaster recovery; prune older than retention window automatically.
+  2. Mirror the same output into the GitHub Pages repository (respecting `GREAT_WORK_ARCHIVE_PAGES_SUBDIR`) and drop `.nojekyll` for static hosting.
+  3. Record deployment metadata (digest timestamp) in telemetry via `track_system_event` and alert on failure.
+  4. Zip snapshots remain for disaster recovery; prune older than retention window automatically.
 - **Configuration:**
-  - Extend settings with `archive.hosting` block (provider, credentials/env vars, retention days).
+  - Environment variables (`GREAT_WORK_ARCHIVE_PAGES_DIR`, `GREAT_WORK_ARCHIVE_PAGES_SUBDIR`, `GREAT_WORK_ARCHIVE_BASE_URL`) select the GitHub Pages target; `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB` governs disk alerts.
   - Add optional dry-run mode for local testing.
 - **Monitoring:**
-  - Emit telemetry on deployment duration/success.
+  - Emit telemetry on deployment duration/success, including `archive_published_github_pages` and storage usage events.
   - Notify admin channel if publishing fails, including error summary and retry guidance.
 
 ### Decision Points
@@ -82,11 +83,11 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 2. **Credential management:** Simplified—container runs with local filesystem access; no external credentials required unless operators add optional adapters.
 
 ### Implementation Plan
-1. Prototype provider adapters (`archive.publishers.s3`, `archive.publishers.github_pages`) behind a common interface.
-2. Wire `GazetteScheduler._publish_digest` to invoke the configured publisher after local export.
-3. Implement snapshot pruning routine (local + remote) respecting retention config.
-4. Capture deployment telemetry and admin notifications on failure.
-5. Update `docs/internal/ARCHIVE_OPERATIONS.md`, README deployment section, and requirements tracking.
+1. Prototype provider adapters (`archive.publishers.s3`, `archive.publishers.github_pages`) behind a common interface. ✅ – GitHub Pages adapter landed; S3 remains TODO.
+2. Wire `GazetteScheduler._publish_digest` to invoke the configured publisher after local export. ✅
+3. Implement snapshot pruning routine (local + remote) respecting retention config. ✅ – local pruning with storage alerts complete; remote pruning deferred until S3 work.
+4. Capture deployment telemetry and admin notifications on failure. ✅
+5. Update `docs/internal/ARCHIVE_OPERATIONS.md`, README deployment section, and requirements tracking. ✅
 
 ## 3. Mentorship/Admin Multi-layer Cadence
 

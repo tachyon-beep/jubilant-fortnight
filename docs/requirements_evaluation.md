@@ -151,7 +151,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 4 | 100% |
 
-**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, and digest ticks ship ZIP snapshots to the admin channel—meeting archival accessibility requirements even though the GitHub Pages publish workflow we’ve selected remains undocumented and manual today.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L180】
+**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, digest ticks ship ZIP snapshots to the admin channel, and the scheduler now mirrors exports into a GitHub Pages repository with documented operator workflow.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L260】
 
 ## Key Follow-ups
 

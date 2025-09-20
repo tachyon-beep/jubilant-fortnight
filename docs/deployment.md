@@ -36,6 +36,14 @@ LLM_TIMEOUT=30
 LLM_RETRY_ATTEMPTS=3
 LLM_RETRY_SCHEDULE=1,3,10,30                # seconds between retries
 LLM_USE_FALLBACK=true
+
+# Archive Publishing (optional overrides)
+GREAT_WORK_ARCHIVE_BASE_URL=/archive                # Adjust when hosting under a prefix
+GREAT_WORK_ARCHIVE_PAGES_DIR=/opt/great-work-pages  # Local clone of the gh-pages branch
+GREAT_WORK_ARCHIVE_PAGES_SUBDIR=archive             # Subdirectory inside the pages repo
+GREAT_WORK_ARCHIVE_PAGES_NOJEKYLL=true              # Emit .nojekyll marker on publish
+GREAT_WORK_ARCHIVE_PAGES_ENABLED=true               # Toggle GitHub Pages mirroring
+GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=512               # Alert threshold for local snapshots
 ```
 
 Adjust the alert numbers to match your cadence; for example, if you expect long digests, raise `GREAT_WORK_ALERT_MAX_DIGEST_MS`. When the queue builds up, the scheduler records depth measurements and admin notifications help the operator intervene.
@@ -104,7 +112,12 @@ Update the environment variables to tune when alerts trigger, and capture any op
 - The scheduler exports HTML to `web_archive/` each digest, syncs it into `web_archive_public/`, and uploads ZIP snapshots to the admin channel.
 - To serve the archive publicly, run the `archive_server` container (nginx) and map the port.
 - Retention defaults to 30 snapshots; adjust `GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS` if you require more history.
-- Refer to `docs/internal/ARCHIVE_OPERATIONS.md` for recovery steps and manual export instructions.
+- For a managed host, point `GREAT_WORK_ARCHIVE_PAGES_DIR` at a local clone of your GitHub Pages branch (for example, `gh-pages`). The scheduler mirrors each digest export into `<repo>/<GREAT_WORK_ARCHIVE_PAGES_SUBDIR>` (default `archive/`), drops a `.nojekyll` marker, and emits telemetry on success/failure. Commit and push the branch to publish.
+- Set `GREAT_WORK_ARCHIVE_BASE_URL` to match the public path (e.g., `/my-org/great-work/archive`) so generated permalinks resolve correctly on Pages.
+- Snapshots are now monitored via `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`; when the total ZIP size exceeds the limit the scheduler notifies the admin channel and records telemetry.
+- Refer to `docs/internal/ARCHIVE_OPERATIONS.md` for recovery steps, GitHub Pages workflow details, and manual export instructions.
+- Optional: enable the `Publish Archive to Pages` GitHub Action to auto-commit/push updates. Seed the `gh-pages` branch once, then run the workflow (push-trigger or manual dispatch) whenever `web_archive_public/` contains fresh exports.
+- `settings.yaml` also exposes `archive_publishing.github_pages` defaults so deployments can enable/disable Pages mirroring without environment overrides.
 
 ## 5. Local LLM Persona Stack
 

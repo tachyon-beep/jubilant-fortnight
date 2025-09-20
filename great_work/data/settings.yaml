@@ -55,6 +55,13 @@ archive_endowment:
   min_amount: 4
   reputation_threshold: 12
   reputation_bonus: 1
+
+archive_publishing:
+  github_pages:
+    enabled: false
+    directory: ""
+    subdir: "archive"
+    nojekyll: true
 confidence_wagers:
   suspect:
     reward: 2

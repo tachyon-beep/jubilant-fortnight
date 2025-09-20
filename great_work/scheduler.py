@@ -44,7 +44,40 @@ class GazetteScheduler:
         self._archive_publish_dir = (
             Path(publish_dir).resolve() if publish_dir else None
         )
+        pages_enabled_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_ENABLED")
+        pages_dir_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_DIR")
+        pages_subdir_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_SUBDIR")
+        pages_nojekyll_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_NOJEKYLL")
+
+        pages_enabled = self.settings.archive_pages_enabled
+        if pages_enabled_env is not None:
+            pages_enabled = pages_enabled_env.lower() not in {"false", "0", "off"}
+        if pages_dir_env:
+            pages_enabled = True
+
+        self._archive_pages_enabled = pages_enabled
+
+        pages_dir_value = pages_dir_env if pages_dir_env is not None else self.settings.archive_pages_directory
+        pages_dir_value = pages_dir_value.strip() if isinstance(pages_dir_value, str) else ""
+        self._archive_pages_dir = Path(pages_dir_value).resolve() if pages_dir_value else None
+
+        self._archive_pages_subdir = (
+            pages_subdir_env if pages_subdir_env is not None else self.settings.archive_pages_subdir
+        )
+        if not isinstance(self._archive_pages_subdir, str):
+            self._archive_pages_subdir = str(self._archive_pages_subdir)
+
+        if pages_nojekyll_env is not None:
+            self._archive_pages_nojekyll = pages_nojekyll_env.lower() not in {"false", "0", "off"}
+        else:
+            self._archive_pages_nojekyll = self.settings.archive_pages_nojekyll
         self._archive_snapshot_limit = int(os.getenv("GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS", "30") or 0)
+        try:
+            storage_limit = os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB", "0") or "0"
+            self._archive_storage_limit_mb = float(storage_limit)
+        except ValueError:
+            logger.warning("Invalid GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=%s; ignoring", os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB"))
+            self._archive_storage_limit_mb = 0.0
 
     def start(self) -> None:
         for digest_time in self.settings.gazette_times:
@@ -98,6 +131,7 @@ class GazetteScheduler:
             archive_path = self.service.export_web_archive(Path("web_archive"), source="scheduler")
             logger.info(f"Web archive exported to {archive_path}")
             self._publish_to_container(archive_path)
+            self._publish_to_pages(archive_path)
             if self._admin_file_publisher is not None:
                 snapshot_path = self._package_archive(archive_path)
                 caption = f"📚 Web archive snapshot ready ({snapshot_path.name})"
@@ -168,6 +202,7 @@ class GazetteScheduler:
         snapshot_path = Path(zip_file)
         if self._archive_snapshot_limit > 0:
             self._prune_snapshots(snapshots_dir)
+        self._check_snapshot_storage(snapshots_dir)
         return snapshot_path
 
     def _publish_to_container(self, archive_path: Path) -> None:
@@ -217,6 +252,96 @@ class GazetteScheduler:
                 logger.info("Pruned archive snapshot %s", stale)
             except Exception:  # pragma: no cover - defensive cleanup
                 logger.exception("Failed to prune snapshot %s", stale)
+
+    def _publish_to_pages(self, archive_path: Path) -> None:
+        """Copy the archive to a GitHub Pages working directory if configured."""
+
+        if not self._archive_pages_enabled or self._archive_pages_dir is None:
+            return
+
+        source = archive_path.resolve()
+        subdir = (self._archive_pages_subdir or "archive").strip("/")
+        if not subdir:
+            subdir = "archive"
+        target_root = self._archive_pages_dir
+        target = target_root / subdir
+
+        try:
+            target_root.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(source, target)
+            if self._archive_pages_nojekyll:
+                nojekyll_path = target_root / ".nojekyll"
+                if not nojekyll_path.exists():
+                    nojekyll_path.write_text("", encoding="utf-8")
+            telemetry = get_telemetry()
+            try:
+                telemetry.track_system_event(
+                    "archive_published_github_pages",
+                    source="gazette_scheduler",
+                    reason=str(target),
+                )
+            except Exception:  # pragma: no cover - defensive logging only
+                logger.debug("Telemetry tracking for GitHub Pages publish failed", exc_info=True)
+            logger.info("Archive published to GitHub Pages directory: %s", target)
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.exception("Failed to publish archive to GitHub Pages directory")
+            self._notify_admin(
+                f"⚠️ Failed to publish archive to GitHub Pages directory: {exc}"
+            )
+            try:
+                get_telemetry().track_system_event(
+                    "archive_publish_pages_failed",
+                    source="gazette_scheduler",
+                    reason=str(exc),
+                )
+            except Exception:
+                logger.debug("Telemetry recording for GitHub Pages failure failed", exc_info=True)
+
+    def _check_snapshot_storage(self, snapshots_dir: Path) -> None:
+        """Emit telemetry and alerts when snapshot storage crosses thresholds."""
+
+        if self._archive_storage_limit_mb <= 0:
+            return
+        if not snapshots_dir.exists():
+            return
+
+        total_bytes = 0
+        for snapshot in snapshots_dir.glob("web_archive_*.zip"):
+            try:
+                total_bytes += snapshot.stat().st_size
+            except OSError:
+                continue
+
+        total_mb = total_bytes / (1024 * 1024)
+        telemetry = get_telemetry()
+        try:
+            telemetry.track_system_event(
+                "archive_snapshot_usage",
+                source="gazette_scheduler",
+                reason=f"{total_mb:.2f} MB",
+            )
+        except Exception:  # pragma: no cover - telemetry shouldn't break scheduler
+            logger.debug("Failed to record archive snapshot usage", exc_info=True)
+
+        if total_mb < self._archive_storage_limit_mb:
+            return
+
+        message = (
+            "⚠️ Archive snapshots now consume "
+            f"{total_mb:.1f} MB which exceeds the configured limit "
+            f"({self._archive_storage_limit_mb:.1f} MB). Consider pruning or offloading older exports."
+        )
+        self._notify_admin(message)
+        try:
+            telemetry.track_system_event(
+                "archive_snapshot_usage_exceeded",
+                source="gazette_scheduler",
+                reason=f"{total_mb:.2f} MB",
+            )
+        except Exception:  # pragma: no cover - defensive logging only
+            logger.debug("Failed to record archive snapshot usage alert", exc_info=True)
 
     def _emit_upcoming_highlights(self) -> None:
         """Send upcoming layered press summary to the opt-in channel."""

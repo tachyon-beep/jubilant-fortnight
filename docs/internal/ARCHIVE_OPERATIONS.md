@@ -29,6 +29,28 @@ python -m great_work.discord_bot export_web_archive
 ```
 The ZIP will appear in `web_archive/snapshots/` and a message will post to the admin channel.
 
+## GitHub Pages Workflow
+
+We standardised on GitHub Pages for the managed archive host. To enable the automated publisher:
+
+1. Clone the `gh-pages` (or equivalent) branch somewhere accessible to the bot host, e.g. `/opt/great-work-pages`.
+2. Set the configuration:
+   - `GREAT_WORK_ARCHIVE_PAGES_DIR=/opt/great-work-pages`
+   - `GREAT_WORK_ARCHIVE_PAGES_SUBDIR=archive` (or any subfolder where the HTML should live)
+   - `GREAT_WORK_ARCHIVE_PAGES_ENABLED=true` (or set `archive_publishing.github_pages.enabled: true` in `settings.yaml`).
+   - `GREAT_WORK_ARCHIVE_BASE_URL=/my-org/great-work/archive` so permalinks resolve when hosted under a prefix.
+3. Restart the bot. After each digest the scheduler mirrors `web_archive/` into `<pages_dir>/<subdir>/`, replacing the folder contents, writes `.nojekyll` at the repository root, and records `archive_published_github_pages` telemetry.
+4. Inspect the Git working tree, commit the updated HTML, and `git push` the Pages branch. Operators can automate this step with CI if desired.
+
+If publishing fails (missing directory, permission error, etc.) the scheduler posts a ⚠️ notification to the admin channel and logs `archive_publish_pages_failed` telemetry so the runbook can be followed.
+
+### CI Automation
+
+- The `Publish Archive to Pages` GitHub Action (`.github/workflows/publish_pages.yml`) watches for changes under `web_archive/` or `web_archive_public/` and can also be triggered manually. When archive content is present it checks out the `gh-pages` branch, syncs the export, and pushes a commit using the repository token.
+- Ensure `gh-pages` exists (create an empty branch once if needed) so the workflow has a target. The action will create `.nojekyll` automatically.
+- Because the job skips when no archive payload is detected, operators can safely run it on demand after seeding `web_archive_public/` or uploading a generated archive artifact.
+- Disable publishing by setting `GREAT_WORK_ARCHIVE_PAGES_ENABLED=false` (or toggling the YAML setting) when external hosting is not desired; the scheduler will continue to serve the local nginx volume only.
+
 ## Recovery Procedure
 
 1. Identify the desired snapshot either from disk (`web_archive/snapshots/`) or by downloading it from the admin channel history.
@@ -42,7 +64,8 @@ The ZIP will appear in `web_archive/snapshots/` and a message will post to the a
 ## Monitoring & Telemetry
 
 - Scheduler logs (via Discord bot logs) include lines like `Archive published to container directory` and `Web archive snapshot published to admin channel` with the full path.
-- Telemetry records `archive_published_container` and `web_archive_export` system events to track frequency and success; review `/telemetry_report` or the bundled dashboard for recent activity.
+- Telemetry records `archive_published_container`, `archive_published_github_pages`, and `web_archive_export` system events to track frequency and success; review `/telemetry_report` or the bundled dashboard for recent activity. Storage usage is tracked via `archive_snapshot_usage` and raises `archive_snapshot_usage_exceeded` when limits are crossed.
+- Configure `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB` (default 0 = disabled) to receive admin alerts before local snapshots consume excessive disk space.
 
 ## Best Practices
 
@@ -54,3 +77,4 @@ The ZIP will appear in `web_archive/snapshots/` and a message will post to the a
   `GREAT_WORK_ALERT_LLM_FAILURE_RATE=0.25`, `GREAT_WORK_ALERT_MAX_ORDER_PENDING=6`,
   `GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS=8`) keep the scheduler noisy only when runtimes spike, the
   scheduled queue backs up, or digests publish nothing—adjust in production if your cadence differs.
+- Keep `GREAT_WORK_ARCHIVE_PAGES_SUBDIR` pointed at a dedicated folder (default `archive/`) so the publisher can safely replace contents without touching repository metadata.

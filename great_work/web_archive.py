@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -25,10 +26,13 @@ class ArchivePage:
 class WebArchive:
     """Generate static HTML archive of game history."""
 
-    def __init__(self, state: GameState, output_dir: Path):
+    def __init__(self, state: GameState, output_dir: Path, *, base_url: str | None = None):
         self.state = state
         self.output_dir = output_dir
-        self.base_url = "/archive"  # Can be configured for different hosting
+        configured_base = base_url if base_url is not None else os.getenv("GREAT_WORK_ARCHIVE_BASE_URL", "/archive")
+        if configured_base not in {"", "/"}:
+            configured_base = configured_base.rstrip("/")
+        self.base_url = configured_base or "/archive"
 
         # Create directory structure
         self.press_dir = output_dir / "press"

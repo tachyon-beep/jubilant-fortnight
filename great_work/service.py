@@ -4978,7 +4978,12 @@ class GameService:
         press = self.state.list_press_releases(limit=limit)
         return {"events": events[-limit:], "press": press}
 
-    def export_web_archive(self, output_dir: Path | None = None, *, source: str = "manual") -> Path:
+    def export_web_archive(
+        self,
+        output_dir: Path | None = None,
+        *,
+        source: str = "manual",
+    ) -> Path:
         """Export the complete game history as a static web archive.
 
         Args:
@@ -4992,7 +4997,9 @@ class GameService:
         if output_dir is None:
             output_dir = Path("web_archive")
 
-        archive = WebArchive(self.state, output_dir)
+        base_url = os.getenv("GREAT_WORK_ARCHIVE_BASE_URL")
+
+        archive = WebArchive(self.state, output_dir, base_url=base_url)
         result = archive.export_full_archive()
         try:
             self._telemetry.track_system_event(

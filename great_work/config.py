@@ -60,6 +60,10 @@ class Settings:
     archive_endowment_min_amount: int
     archive_endowment_reputation_threshold: int
     archive_endowment_reputation_bonus: int
+    archive_pages_enabled: bool
+    archive_pages_directory: str
+    archive_pages_subdir: str
+    archive_pages_nojekyll: bool
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Settings":
@@ -93,6 +97,7 @@ class Settings:
         projects_cfg = data.get("faction_projects", {})
         investments_cfg = data.get("faction_investments", {})
         archive_cfg = data.get("archive_endowment", {})
+        pages_cfg = data.get("archive_publishing", {}).get("github_pages", {})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
             timeline_start_year=int(data["time_scale"].get("start_year", 1920)),
@@ -139,6 +144,10 @@ class Settings:
             archive_endowment_min_amount=int(archive_cfg.get("min_amount", 3)),
             archive_endowment_reputation_threshold=int(archive_cfg.get("reputation_threshold", 12)),
             archive_endowment_reputation_bonus=int(archive_cfg.get("reputation_bonus", 1)),
+            archive_pages_enabled=bool(pages_cfg.get("enabled", False)),
+            archive_pages_directory=str(pages_cfg.get("directory", "")),
+            archive_pages_subdir=str(pages_cfg.get("subdir", "archive")),
+            archive_pages_nojekyll=bool(pages_cfg.get("nojekyll", True)),
         )
 
 
