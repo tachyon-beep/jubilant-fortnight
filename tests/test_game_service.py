@@ -190,6 +190,24 @@ def test_recruitment_and_cooldown_flow(tmp_path):
     followups = service.advance_digest()
     assert any(rel.type == "academic_gossip" for rel in followups)
 
+    queued_press = service.state.list_queued_press()
+    recruitment_layers = [
+        payload
+        for _, _, payload in queued_press
+        if payload.get("metadata", {})
+        .get("scheduled", {})
+        .get("event_type")
+        == "recruitment"
+    ]
+    assert recruitment_layers, "expected layered recruitment follow-ups to be queued"
+    assert any(
+        payload.get("metadata", {})
+        .get("scheduled", {})
+        .get("layer_type")
+        in {"academic_gossip", "recruitment_followup"}
+        for payload in recruitment_layers
+    )
+
     status = service.player_status("sarah")
     assert status["reputation"] == service.state.get_player("sarah").reputation
     assert status["influence"]["academia"] <= status["influence_cap"]

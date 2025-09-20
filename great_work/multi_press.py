@@ -46,6 +46,28 @@ def admin_update(context: Dict[str, Any]) -> PressRelease:
     )
 
 
+def recruitment_followup(context: Dict[str, Any]) -> PressRelease:
+    """Generate a recruitment follow-up artefact."""
+
+    return PressRelease(
+        type=context.get("type", "recruitment_followup"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def table_talk_digest(context: Dict[str, Any]) -> PressRelease:
+    """Generate a digest summarising table-talk reactions."""
+
+    return PressRelease(
+        type=context.get("type", "table_talk_digest"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
 class PressDepth(Enum):
     """Depth of press coverage for an event."""
     MINIMAL = "minimal"      # Single press release
@@ -543,6 +565,162 @@ class MultiPressGenerator:
 
         return layers
 
+    def generate_recruitment_layers(
+        self,
+        *,
+        player: str,
+        scholar: Scholar,
+        success: bool,
+        faction: str,
+        chance: float,
+        observers: List[Scholar],
+    ) -> List[PressLayer]:
+        """Generate layered coverage for recruitment attempts."""
+
+        layers: List[PressLayer] = []
+        tone_seed = self._tone_seed("recruitment_followup")
+
+        safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
+        audience = [obs for obs in observers if obs.id != scholar.id]
+        random.shuffle(audience)
+        reactions: List[Dict[str, str]] = []
+
+        for delay, observer in zip(safe_fast, audience[:3]):
+            quote = self._generate_recruitment_quote(
+                commentator=observer.name,
+                scholar_name=scholar.name,
+                player_name=player,
+                faction=faction,
+                success=success,
+            )
+            reactions.append({"scholar": observer.name, "quote": quote})
+            ctx = GossipContext(
+                scholar=observer.name,
+                quote=quote,
+                trigger=f"Recruitment of {scholar.name}",
+            )
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay,
+                    type="academic_gossip",
+                    generator=academic_gossip,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        safe_long = [delay for delay in self.long_layer_delays if delay > 0]
+        if safe_long:
+            outcome_text = "accepts" if success else "declines"
+            summary_body = (
+                f"Observers weigh in after {scholar.name} {outcome_text} {player}'s "
+                f"{faction} overtures (chance {chance:.0%}).\n"
+            )
+            if reactions:
+                reaction_lines = " | ".join(
+                    f"{item['scholar']}: {item['quote']}" for item in reactions
+                )
+                summary_body += f"Voices: {reaction_lines}"
+            metadata = {
+                "scholar": scholar.id,
+                "player": player,
+                "success": success,
+                "chance": chance,
+                "faction": faction,
+                "reactions": reactions,
+            }
+            ctx = {
+                "headline": f"Recruitment Round-Up: {scholar.name}",
+                "body": summary_body,
+                "metadata": metadata,
+                "persona": player,
+                "type": "recruitment_followup",
+            }
+            layers.append(
+                PressLayer(
+                    delay_minutes=safe_long[0],
+                    type="recruitment_followup",
+                    generator=recruitment_followup,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        return layers
+
+    def generate_table_talk_layers(
+        self,
+        *,
+        speaker: str,
+        message: str,
+        scholars: List[Scholar],
+    ) -> List[PressLayer]:
+        """Generate layered reactions to a table-talk post."""
+
+        layers: List[PressLayer] = []
+        tone_seed = self._tone_seed("table_talk_followup")
+        safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
+        safe_long = [delay for delay in self.long_layer_delays if delay > 0]
+
+        audience = scholars[:]
+        random.shuffle(audience)
+        reactions: List[Dict[str, str]] = []
+
+        for delay, observer in zip(safe_fast, audience[:3]):
+            quote = self._generate_table_talk_reaction(
+                commentator=observer.name,
+                speaker=speaker,
+                message=message,
+            )
+            reactions.append({"scholar": observer.name, "quote": quote})
+            ctx = GossipContext(
+                scholar=observer.name,
+                quote=quote,
+                trigger=f"Table talk from {speaker}",
+            )
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay,
+                    type="academic_gossip",
+                    generator=academic_gossip,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        if safe_long:
+            snippet = message if len(message) <= 120 else message[:117] + "..."
+            digest_lines = [
+                f"- {item['scholar']}: {item['quote']}" for item in reactions
+            ]
+            digest_body = (
+                f"{speaker}'s note '{snippet}' keeps the lounges buzzing.\n"
+                + "\n".join(digest_lines)
+            )
+            metadata = {
+                "speaker": speaker,
+                "message": snippet,
+                "reactions": reactions,
+            }
+            ctx = {
+                "headline": f"Table Talk Digest — {speaker}",
+                "body": digest_body,
+                "metadata": metadata,
+                "persona": speaker,
+                "type": "table_talk_digest",
+            }
+            layers.append(
+                PressLayer(
+                    delay_minutes=safe_long[0],
+                    type="table_talk_digest",
+                    generator=table_talk_digest,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        return layers
+
     def generate_admin_layers(
         self,
         *,
@@ -721,6 +899,59 @@ class MultiPressGenerator:
             return f"The evidence for '{theory}' is circumstantial at best."
         else:  # Other participants
             return "We must consider alternative interpretations of the data."
+
+    def _generate_recruitment_quote(
+        self,
+        *,
+        commentator: str,
+        scholar_name: str,
+        player_name: str,
+        faction: str,
+        success: bool,
+    ) -> str:
+        """Generate a follow-up quote reacting to recruitment news."""
+
+        if success:
+            options = [
+                f"{scholar_name} joining {player_name} will tilt {faction} politics for months.",
+                f"Rumour has it {player_name} promised prime {faction} resources to {scholar_name}.",
+                f"{commentator} notes the halls are already rearranging to welcome {scholar_name}.",
+                f"Everyone wonders if {player_name} can keep {scholar_name} inspired under {faction}'s banner.",
+            ]
+        else:
+            options = [
+                f"{scholar_name} spurning {player_name} leaves {faction} strategists rattled.",
+                f"Some say {player_name} overplayed their hand trying to woo {scholar_name}.",
+                f"{commentator} hears {scholar_name} demanded more than {faction} could promise.",
+                f"The lab gossip is that {scholar_name} never intended to leave their current patron.",
+            ]
+        return random.choice(options)
+
+    def _generate_table_talk_reaction(
+        self,
+        *,
+        commentator: str,
+        speaker: str,
+        message: str,
+    ) -> str:
+        """Generate a fast reaction to a table-talk post."""
+
+        sentiments = [
+            f"{commentator} riffs on {speaker}'s note, calling it 'exactly the spark we needed'.",
+            f"{commentator} wonders if {speaker}'s message hints at deeper symposium intrigue.",
+            f"{commentator} challenges {speaker} to bring that table-talk energy to the next digest.",
+            f"{commentator} shares the post with their lab, saying it captures the mood perfectly.",
+            f"{commentator} jokes that {speaker}'s aside belongs in the Gazette proper.",
+        ]
+        if "?" in message:
+            sentiments.append(
+                f"{commentator} opens a thread to unpack the question {speaker} raised."
+            )
+        if len(message) > 120:
+            sentiments.append(
+                f"{commentator} summarises the lengthy missive from {speaker} for the busy scholars."
+            )
+        return random.choice(sentiments)
 
     def _find_colleagues(
         self,

@@ -681,6 +681,17 @@ class GameService:
                 },
             )
         )
+        table_layers = self._multi_press.generate_table_talk_layers(
+            speaker=player.display_name,
+            message=message,
+            scholars=list(self.state.all_scholars()),
+        )
+        self._apply_multi_press_layers(
+            table_layers,
+            skip_types={press.type},
+            timestamp=now,
+            event_type="table_talk",
+        )
         return press
 
     def queue_expedition(
@@ -1023,6 +1034,21 @@ class GameService:
                     "success": success,
                 },
             )
+        )
+        observers = list(self.state.all_scholars())
+        recruitment_layers = self._multi_press.generate_recruitment_layers(
+            player=player.display_name,
+            scholar=scholar,
+            success=success,
+            faction=faction,
+            chance=chance,
+            observers=observers,
+        )
+        self._apply_multi_press_layers(
+            recruitment_layers,
+            skip_types={press.type},
+            timestamp=now,
+            event_type="recruitment",
         )
         return success, press
 
