@@ -29,6 +29,12 @@ symposium:
     reprisal_threshold: 6
     reprisal_penalty: 2
     reprisal_cooldown_days: 7
+contracts:
+  upkeep_per_scholar: 1
+  debt:
+    reprisal_threshold: 0
+    reprisal_penalty: 0
+    reprisal_cooldown_days: 7
 confidence_wagers:
   suspect:
     reward: 2

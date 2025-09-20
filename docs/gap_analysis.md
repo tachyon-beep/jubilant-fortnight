@@ -11,8 +11,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
 
 - **Design intent:** Confidence wagers must follow the tuned reward/penalty table, clamp reputation within bounds, and impose recruitment cooldowns on high-stakes wagers while recruitment odds reflect cooldowns, faction influence, and unlock thresholds.【F:docs/HLD.md†L44-L138】
-- **Implementation status:** Theory and expedition commands require explicit confidence levels; resolutions apply wager tables, clamp reputation, enforce cooldowns, and recruitment odds include influence bonuses plus cooldown penalties, all surfaced through `/status` and `/wager`.【F:great_work/service.py†L125-L318】【F:great_work/service.py†L320-L418】【F:great_work/discord_bot.py†L123-L210】【F:great_work/discord_bot.py†L523-L571】
-- **Gap:** Recruitment odds are calculated server-side but not exposed ahead of confirmation, leaving players without the comparative odds table promised in the UX guidelines.【F:docs/HLD.md†L100-L138】【F:great_work/discord_bot.py†L209-L247】
+- **Implementation status:** Theory and expedition commands require explicit confidence levels; resolutions apply wager tables, clamp reputation, enforce cooldowns, and recruitment odds include influence bonuses plus cooldown penalties, all surfaced through `/status`, `/wager`, and the new `/recruit_odds` preview table.【F:great_work/service.py†L1009-L1110】【F:great_work/discord_bot.py†L317-L381】
+- **Gap:** None – players can review comparative recruitment odds before committing via `/recruit_odds`.
 
 ## 3. Expedition Structure and Outcomes
 
@@ -29,8 +29,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 ## 4. Influence Economy and Faction Mechanics
 
 - **Design intent:** Influence should operate as a five-dimensional economy with soft caps tied to reputation and faction requirements across key actions, supported by additional sinks such as symposium commitments and contracts.【F:docs/HLD.md†L90-L213】
-- **Implementation status:** Influence is stored per faction, clamps to reputation-derived caps, and is spent/earned by expeditions, recruitment, and poach/counter offers with escrow and sideways effects adjusting totals. `/status` exposes the caps and thresholds.【F:great_work/state.py†L18-L170】【F:great_work/service.py†L677-L835】【F:great_work/service.py†L520-L760】【F:great_work/discord_bot.py†L523-L600】
-- **Gap:** Symposium participation and long-term contract upkeep still cost nothing, so the broader economy lacks the sustained sinks highlighted in the design (e.g., symposium pledges, seasonal commitments).【F:docs/HLD.md†L126-L213】【F:great_work/service.py†L1295-L1448】
+- **Implementation status:** Influence is stored per faction, clamps to reputation-derived caps, and is spent/earned by expeditions, recruitment, poach/counter offers, symposium pledges, and contract upkeep; `/status` now lists ongoing contract costs alongside caps and thresholds.【F:great_work/state.py†L18-L520】【F:great_work/service.py†L677-L1110】【F:great_work/service.py†L3200-L3470】【F:great_work/discord_bot.py†L780-L820】
+- **Gap:** Seasonal commitments and other long-tail sinks (e.g., faction projects) still need to be wired up so players make broader economic trade-offs beyond scholar contracts.【F:docs/HLD.md†L126-L213】
 
 ## 5. Press Artefacts and Public Record
 

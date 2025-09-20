@@ -5,7 +5,7 @@ import logging
 import os
 import random
 import time
-from collections import deque
+from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -1027,9 +1027,12 @@ class GameService:
             raise ValueError("Unknown player or scholar")
 
         self._require_reputation(player, "recruitment")
-        influence_bonus = max(0, player.influence.get(faction, 0)) * 0.05
-        cooldown_penalty = 0.5 if player.cooldowns.get("recruitment", 0) else 1.0
-        chance = max(0.05, min(0.95, base_chance * cooldown_penalty + influence_bonus))
+        chance_payload = self._compute_recruitment_chance(
+            player=player,
+            faction=faction,
+            base_chance=base_chance,
+        )
+        chance = chance_payload["chance"]
         roll = self._rng.uniform(0.0, 1.0)
         success = roll < chance
         now = datetime.now(timezone.utc)
@@ -1080,6 +1083,8 @@ class GameService:
                     "faction": faction,
                     "chance": chance,
                     "success": success,
+                    "cooldown_penalty": chance_payload["cooldown_penalty"],
+                    "influence_bonus": chance_payload["influence_bonus"],
                 },
             )
         )
@@ -1099,6 +1104,67 @@ class GameService:
             event_type="recruitment",
         )
         return success, press
+
+    def recruitment_odds(
+        self,
+        player_id: str,
+        scholar_id: str,
+        base_chance: float = 0.6,
+    ) -> List[Dict[str, object]]:
+        """Return recruitment odds per faction without mutating state."""
+
+        self._ensure_not_paused()
+        self.ensure_player(player_id)
+        player = self.state.get_player(player_id)
+        scholar = self.state.get_scholar(scholar_id)
+        if not player or not scholar:
+            raise ValueError("Unknown player or scholar")
+
+        self._require_reputation(player, "recruitment")
+
+        odds: List[Dict[str, object]] = []
+        for faction in self._FACTIONS:
+            data = self._compute_recruitment_chance(
+                player=player,
+                faction=faction,
+                base_chance=base_chance,
+            )
+            odds.append(
+                {
+                    "faction": faction,
+                    "chance": data["chance"],
+                    "influence_bonus": data["influence_bonus"],
+                    "cooldown_penalty": data["cooldown_penalty"],
+                    "cooldown_active": data["cooldown_active"],
+                    "cooldown_remaining": data["cooldown_remaining"],
+                    "influence": data["influence"],
+                }
+            )
+        odds.sort(key=lambda item: item["chance"], reverse=True)
+        return odds
+
+    def _compute_recruitment_chance(
+        self,
+        *,
+        player: Player,
+        faction: str,
+        base_chance: float,
+    ) -> Dict[str, float | int | bool]:
+        """Calculate recruitment odds modifiers for the given faction."""
+
+        raw_influence = player.influence.get(faction, 0)
+        influence_bonus = max(0, raw_influence) * 0.05
+        cooldown_remaining = int(player.cooldowns.get("recruitment", 0) or 0)
+        cooldown_penalty = 0.5 if cooldown_remaining else 1.0
+        chance = max(0.05, min(0.95, base_chance * cooldown_penalty + influence_bonus))
+        return {
+            "chance": chance,
+            "influence_bonus": influence_bonus,
+            "cooldown_penalty": cooldown_penalty,
+            "cooldown_active": bool(cooldown_remaining),
+            "cooldown_remaining": cooldown_remaining,
+            "influence": raw_influence,
+        }
 
     def evaluate_defection_offer(
         self,
@@ -1714,6 +1780,7 @@ class GameService:
         thresholds = {
             action: value for action, value in self.settings.action_thresholds.items()
         }
+        contracts = self._contract_summary_for_player(player)
         return {
             "id": player.id,
             "display_name": player.display_name,
@@ -1723,6 +1790,7 @@ class GameService:
             "influence_cap": cap,
             "cooldowns": dict(player.cooldowns),
             "thresholds": thresholds,
+            "contracts": contracts,
         }
 
     def roster_status(self) -> List[Dict[str, object]]:
@@ -3165,16 +3233,21 @@ class GameService:
         self.state.upsert_player(player)
         return {"deducted": deducted, "faction": faction}
 
-    def _apply_symposium_debt_reprisal(
+    def _apply_influence_debt_reprisal(
         self,
         *,
         player: Player,
         debt_details: List[Dict[str, object]],
         now: datetime,
+        source: str,
+        threshold: int,
+        penalty: int,
+        cooldown_days: int,
+        telemetry_event: str,
     ) -> List[Dict[str, object]]:
-        threshold = self.settings.symposium_debt_reprisal_threshold
-        penalty = self.settings.symposium_debt_reprisal_penalty
-        cooldown = timedelta(days=self.settings.symposium_debt_reprisal_cooldown_days)
+        if threshold <= 0 or penalty < 0:
+            return []
+        cooldown = timedelta(days=cooldown_days)
         reprisals: List[Dict[str, object]] = []
         for debt in debt_details:
             remaining = debt.get("remaining", 0)
@@ -3183,14 +3256,16 @@ class GameService:
             faction = debt.get("faction")
             if not faction:
                 continue
-            debt_record = self.state.get_symposium_debt_record(
+            debt_record = self.state.get_influence_debt_record(
                 player_id=player.id,
                 faction=faction,
+                source=source,
             )
-            last_reprisal = debt_record.get("last_reprisal_at") if debt_record else None
-            if last_reprisal and isinstance(last_reprisal, datetime):
-                if last_reprisal + cooldown > now:
-                    continue
+            if not debt_record or debt_record.get("source") != source:
+                continue
+            last_reprisal = debt_record.get("last_reprisal_at")
+            if isinstance(last_reprisal, datetime) and last_reprisal + cooldown > now:
+                continue
             influence_before = player.influence.get(faction, 0)
             penalty_applied = min(influence_before, penalty)
             reputation_penalty = 0
@@ -3205,12 +3280,13 @@ class GameService:
                     self.settings.reputation_bounds["max"],
                 )
                 self.state.upsert_player(player)
-            reprisal_level = (debt_record.get("reprisal_level", 0) + 1) if debt_record else 1
-            self.state.update_symposium_debt_reprisal(
+            reprisal_level = (debt_record.get("reprisal_level", 0) + 1)
+            self.state.update_influence_debt_reprisal(
                 player_id=player.id,
                 faction=faction,
                 reprisal_level=reprisal_level,
                 now=now,
+                source=source,
             )
             message = {
                 "player_id": player.id,
@@ -3221,16 +3297,21 @@ class GameService:
                 "reprisal_level": reprisal_level,
                 "remaining": remaining,
             }
+            if isinstance(last_reprisal, datetime):
+                message["last_reprisal_at"] = last_reprisal.isoformat()
+            elif last_reprisal:
+                message["last_reprisal_at"] = str(last_reprisal)
             reprisals.append(message)
             try:
                 self._telemetry.track_game_progression(
-                    "symposium_debt_reprisal",
+                    telemetry_event,
                     float(penalty_applied or -reputation_penalty),
                     player_id=player.id,
                     details={
                         "faction": faction,
                         "reprisal_level": reprisal_level,
                         "remaining": remaining,
+                        "source": source,
                     },
                 )
             except Exception:  # pragma: no cover
@@ -3273,23 +3354,200 @@ class GameService:
                     "faction": faction,
                     "remaining": amount,
                     "reprisal_level": debt.get("reprisal_level", 0),
-                    "last_reprisal_at": debt.get("last_reprisal_at"),
+                    "last_reprisal_at": (
+                        debt.get("last_reprisal_at").isoformat()
+                        if isinstance(debt.get("last_reprisal_at"), datetime)
+                        else debt.get("last_reprisal_at")
+                    ),
                 }
             )
         if updated:
             self.state.upsert_player(player)
         if details:
-            reprisal_events = self._apply_symposium_debt_reprisal(
+            reprisal_events = self._apply_influence_debt_reprisal(
                 player=player,
                 debt_details=details,
                 now=now,
+                source="symposium",
+                threshold=self.settings.symposium_debt_reprisal_threshold,
+                penalty=self.settings.symposium_debt_reprisal_penalty,
+                cooldown_days=self.settings.symposium_debt_reprisal_cooldown_days,
+                telemetry_event="symposium_debt_reprisal",
             )
+            for detail in details:
+                record = self.state.get_symposium_debt_record(
+                    player_id=player.id,
+                    faction=detail["faction"],
+                )
+                if record:
+                    detail["reprisal_level"] = record.get("reprisal_level", 0)
+                    last_reprisal = record.get("last_reprisal_at")
+                    if isinstance(last_reprisal, datetime):
+                        detail["last_reprisal_at"] = last_reprisal.isoformat()
+                    else:
+                        detail["last_reprisal_at"] = last_reprisal
         return {
             "settled": settled_total,
             "outstanding": outstanding_total,
             "details": details,
             "reprisals": reprisal_events,
         }
+
+    def _contract_commitments(self) -> Dict[str, Dict[str, int]]:
+        commitments: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for scholar in self.state.all_scholars():
+            contract = getattr(scholar, "contract", {}) or {}
+            employer = contract.get("employer")
+            faction = contract.get("faction")
+            if employer and faction:
+                commitments[employer][faction] += 1
+        return {player: dict(factions) for player, factions in commitments.items()}
+
+    def _apply_contract_upkeep(self, now: datetime) -> None:
+        upkeep = max(0, self.settings.contract_upkeep_per_scholar)
+        if upkeep == 0:
+            return
+        commitments = self._contract_commitments()
+        if not commitments:
+            return
+        for player_id, faction_counts in commitments.items():
+            player = self.state.get_player(player_id)
+            if not player:
+                continue
+            debt_details: List[Dict[str, object]] = []
+            for faction, count in faction_counts.items():
+                total_cost = upkeep * count
+                if total_cost <= 0:
+                    continue
+                self._ensure_influence_structure(player)
+                available = player.influence.get(faction, 0)
+                existing_record = self.state.get_influence_debt_record(
+                    player_id=player_id,
+                    faction=faction,
+                    source="contract",
+                )
+                existing_debt = existing_record.get("amount", 0) if existing_record else 0
+                paid_toward_debt = 0
+                if existing_debt and available > 0:
+                    paid_toward_debt = min(available, existing_debt)
+                    available -= paid_toward_debt
+                    self.state.apply_influence_debt_payment(
+                        player_id=player_id,
+                        faction=faction,
+                        amount=paid_toward_debt,
+                        now=now,
+                        source="contract",
+                    )
+                    self._apply_influence_change(player, faction, -paid_toward_debt)
+
+                payment_for_current = min(available, total_cost)
+                if payment_for_current > 0:
+                    self._apply_influence_change(player, faction, -payment_for_current)
+                    available -= payment_for_current
+                debt = total_cost - payment_for_current
+                if debt > 0:
+                    self.state.record_influence_debt(
+                        player_id=player_id,
+                        faction=faction,
+                        amount=debt,
+                        now=now,
+                        source="contract",
+                    )
+                    self._queue_admin_notification(
+                        f"⚖️ Contract upkeep shortfall: {player.display_name} owes {debt} {faction} influence."
+                    )
+                record = self.state.get_influence_debt_record(
+                    player_id=player_id,
+                    faction=faction,
+                    source="contract",
+                )
+                remaining = record.get("amount", 0) if record else 0
+                reprisal_level = record.get("reprisal_level", 0) if record else 0
+                last_reprisal = record.get("last_reprisal_at") if record else None
+                debt_details.append(
+                    {
+                        "faction": faction,
+                        "remaining": remaining,
+                        "reprisal_level": reprisal_level,
+                        "last_reprisal_at": last_reprisal.isoformat()
+                        if isinstance(last_reprisal, datetime)
+                        else last_reprisal,
+                    }
+                )
+                try:
+                    self._telemetry.track_game_progression(
+                        "contract_upkeep",
+                        float(total_cost),
+                        player_id=player_id,
+                        details={
+                            "faction": faction,
+                            "paid": payment_for_current + paid_toward_debt,
+                            "debt": debt,
+                            "contracts": count,
+                        },
+                    )
+                except Exception:  # pragma: no cover
+                    logger.debug("Failed to record contract upkeep telemetry", exc_info=True)
+            self.state.upsert_player(player)
+            if debt_details:
+                reprisal_events = self._apply_influence_debt_reprisal(
+                    player=player,
+                    debt_details=debt_details,
+                    now=now,
+                    source="contract",
+                    threshold=self.settings.contract_debt_reprisal_threshold,
+                    penalty=self.settings.contract_debt_reprisal_penalty,
+                    cooldown_days=self.settings.contract_debt_reprisal_cooldown_days,
+                    telemetry_event="contract_debt_reprisal",
+                )
+                for detail in debt_details:
+                    record = self.state.get_influence_debt_record(
+                        player_id=player.id,
+                        faction=detail["faction"],
+                        source="contract",
+                    )
+                    if record:
+                        detail["reprisal_level"] = record.get("reprisal_level", 0)
+                        last_reprisal = record.get("last_reprisal_at")
+                        if isinstance(last_reprisal, datetime):
+                            detail["last_reprisal_at"] = last_reprisal.isoformat()
+                        else:
+                            detail["last_reprisal_at"] = last_reprisal
+                if reprisal_events:
+                    for event in reprisal_events:
+                        if event.get("penalty_influence"):
+                            note = (
+                                f"⚖️ Contract reprisal: {event['display_name']} loses {event['penalty_influence']} "
+                                f"{event['faction']} influence for unpaid upkeep."
+                            )
+                        else:
+                            note = (
+                                f"⚠️ Contract reprisal: {event['display_name']} takes a reputation hit for "
+                                f"unpaid upkeep ({event['faction']})."
+                            )
+                        self._queue_admin_notification(note)
+
+    def _contract_summary_for_player(self, player: Player) -> Dict[str, Dict[str, object]]:
+        commitments = self._contract_commitments().get(player.id, {})
+        summary: Dict[str, Dict[str, object]] = {}
+        for faction, count in commitments.items():
+            total_cost = count * self.settings.contract_upkeep_per_scholar
+            debt_record = self.state.get_influence_debt_record(
+                player_id=player.id,
+                faction=faction,
+                source="contract",
+            )
+            outstanding = (
+                debt_record.get("amount", 0)
+                if debt_record and debt_record.get("source") == "contract"
+                else 0
+            )
+            summary[faction] = {
+                "scholars": count,
+                "upkeep": total_cost,
+                "outstanding": outstanding,
+            }
+        return summary
 
     # Admin tools ---------------------------------------------------
     def admin_adjust_reputation(
@@ -3750,6 +4008,7 @@ class GameService:
         releases.extend(self._progress_careers())
         releases.extend(self._resolve_followups())
         releases.extend(self._process_symposium_reminders())
+        self._apply_contract_upkeep(now)
         releases.extend(self.resolve_conferences())
         return releases
 

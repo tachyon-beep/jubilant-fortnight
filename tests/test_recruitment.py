@@ -1,0 +1,57 @@
+"""Tests for recruitment odds preview and calculations."""
+import os
+from pathlib import Path
+import tempfile
+
+from great_work.service import GameService
+
+
+def _first_scholar_id(service: GameService) -> str:
+    for scholar in service.state.all_scholars():
+        return scholar.id
+    raise AssertionError("Expected seeded scholars to exist")
+
+
+def test_recruitment_odds_reflect_influence_and_cooldown() -> None:
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = GameService(db_path)
+        service.ensure_player("p1", "Player One")
+
+        player = service.state.get_player("p1")
+        assert player is not None
+        player.influence["academia"] = 4  # +20% bonus
+        player.cooldowns["recruitment"] = 2
+        service.state.upsert_player(player)
+
+        scholar_id = _first_scholar_id(service)
+        odds = service.recruitment_odds("p1", scholar_id)
+
+        academia = next(entry for entry in odds if entry["faction"] == "academia")
+        expected_bonus = 4 * 0.05
+        expected_chance = max(0.05, min(0.95, 0.6 * 0.5 + expected_bonus))
+
+        assert academia["cooldown_active"] is True
+        assert academia["cooldown_penalty"] == 0.5
+        assert academia["influence_bonus"] == expected_bonus
+        assert academia["influence"] == 4
+        assert abs(academia["chance"] - expected_chance) < 1e-9
+
+
+def test_recruitment_odds_sorted_by_chance() -> None:
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = GameService(db_path)
+        service.ensure_player("p1", "Player One")
+
+        player = service.state.get_player("p1")
+        assert player is not None
+        player.influence.update({"academia": 3, "industry": 1})
+        service.state.upsert_player(player)
+
+        scholar_id = _first_scholar_id(service)
+        odds = service.recruitment_odds("p1", scholar_id)
+        chances = [entry["chance"] for entry in odds]
+        assert chances == sorted(chances, reverse=True)

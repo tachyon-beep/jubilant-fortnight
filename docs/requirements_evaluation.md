@@ -36,7 +36,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Notes:** Confidence levels gate actions, wager tables clamp reputation, and high-stakes wagers impose recruitment cooldowns surfaced to players via `/status` and `/wager`.【F:great_work/service.py†L125-L392】【F:great_work/discord_bot.py†L523-L571】
+**Notes:** Confidence levels gate actions, wager tables clamp reputation, and high-stakes wagers impose recruitment cooldowns surfaced to players via `/status`, `/wager`, and the new `/recruit_odds` preview table.【F:great_work/service.py†L1009-L1110】【F:great_work/discord_bot.py†L317-L381】
 
 ### Expeditions and Outcomes (10 requirements)
 
@@ -52,7 +52,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 3 | 100% |
 
-**Notes:** Five-dimensional influence vectors persist per player, clamp to reputation-derived caps, and adjust through expeditions, recruitment, and offers with escrow tracking.【F:great_work/service.py†L677-L835】【F:great_work/state.py†L18-L170】
+**Notes:** Five-dimensional influence vectors persist per player, clamp to reputation-derived caps, and adjust through expeditions, recruitment, symposium pledges, and contract upkeep with debt/repraisal tracking surfaced in `/status` and telemetry.【F:great_work/service.py†L677-L1110】【F:great_work/state.py†L18-L520】
 
 ### Press Artefacts and Gazette Cadence (6 requirements)
 

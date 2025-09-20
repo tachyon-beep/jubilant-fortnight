@@ -8,6 +8,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 - LLM-enhanced multi-layer press now powers expeditions, defection negotiations, symposium calls, mentorship beats, and admin interventions while maintaining template fallbacks.
 - Mentorship lifecycles and admin pause/resume flows schedule layered follow-ups, deliver dual-paced fast/long drops, surface “upcoming highlights” to opt-in channels, and publish digest highlight blurbs drawn from the scheduled press queue alongside admin notifications.
 - Telemetry dashboards (Discord report + bundled FastAPI dashboard) and containerised archive hosting are in place; queue depth and digest health now land in `/telemetry_report`, and remaining polish focuses on alert thresholds, operator runbooks, and external publish options.
+- Recruitment odds are now exposed via `/recruit_odds`, listing faction modifiers, cooldown penalties, and influence bonuses so players can compare bids before committing.
+- Contract upkeep now drains influence every digest, automatically recording contract debt and reprisals when players fall behind; `/status` surfaces per-faction upkeep and outstanding balances.
 
 ## Infrastructure Utilization
 

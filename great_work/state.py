@@ -203,7 +203,8 @@ CREATE TABLE IF NOT EXISTS symposium_debts (
     updated_at TEXT NOT NULL,
     reprisal_level INTEGER NOT NULL DEFAULT 0,
     last_reprisal_at TEXT,
-    PRIMARY KEY (player_id, faction)
+    source TEXT NOT NULL DEFAULT 'symposium',
+    PRIMARY KEY (player_id, faction, source)
 );
 CREATE TABLE IF NOT EXISTS queued_press (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,10 +245,8 @@ class GameState:
                 conn.execute(
                     "ALTER TABLE symposium_proposals ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
                 )
-            debt_columns = {
-                row[1]
-                for row in conn.execute("PRAGMA table_info('symposium_debts')").fetchall()
-            }
+            debt_info = conn.execute("PRAGMA table_info('symposium_debts')").fetchall()
+            debt_columns = {row[1] for row in debt_info}
             if "reprisal_level" not in debt_columns:
                 conn.execute(
                     "ALTER TABLE symposium_debts ADD COLUMN reprisal_level INTEGER NOT NULL DEFAULT 0"
@@ -255,6 +254,35 @@ class GameState:
             if "last_reprisal_at" not in debt_columns:
                 conn.execute(
                     "ALTER TABLE symposium_debts ADD COLUMN last_reprisal_at TEXT"
+                )
+            if "source" not in debt_columns:
+                conn.execute(
+                    "ALTER TABLE symposium_debts ADD COLUMN source TEXT NOT NULL DEFAULT 'symposium'"
+                )
+            pk_columns = [row[1] for row in debt_info if row[5]]
+            if pk_columns and pk_columns != ["player_id", "faction", "source"]:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS symposium_debts_migrate (
+                        player_id TEXT NOT NULL,
+                        faction TEXT NOT NULL,
+                        amount INTEGER NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        reprisal_level INTEGER NOT NULL DEFAULT 0,
+                        last_reprisal_at TEXT,
+                        source TEXT NOT NULL DEFAULT 'symposium',
+                        PRIMARY KEY (player_id, faction, source)
+                    );
+                    INSERT OR IGNORE INTO symposium_debts_migrate
+                        (player_id, faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at, source)
+                    SELECT player_id, faction, amount, created_at, updated_at,
+                           COALESCE(reprisal_level, 0), last_reprisal_at,
+                           COALESCE(source, 'symposium')
+                    FROM symposium_debts;
+                    DROP TABLE symposium_debts;
+                    ALTER TABLE symposium_debts_migrate RENAME TO symposium_debts;
+                    """
                 )
             conn.commit()
 
@@ -1648,15 +1676,18 @@ class GameState:
             )
         return pledges
 
-    def list_symposium_debts(
+    def list_influence_debts(
         self,
         player_id: str,
+        *,
+        source: str,
     ) -> List[Dict[str, object]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
                 """SELECT faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at
-                       FROM symposium_debts WHERE player_id = ?""",
-                (player_id,),
+                       FROM symposium_debts
+                       WHERE player_id = ? AND source = ?""",
+                (player_id, source),
             ).fetchall()
         debts: List[Dict[str, object]] = []
         for row in rows:
@@ -1673,6 +1704,35 @@ class GameState:
             )
         return debts
 
+    def list_symposium_debts(
+        self,
+        player_id: str,
+    ) -> List[Dict[str, object]]:
+        return self.list_influence_debts(player_id, source="symposium")
+
+    def record_influence_debt(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        now: Optional[datetime] = None,
+        source: str,
+    ) -> None:
+        if amount <= 0:
+            return
+        timestamp = (now or datetime.now(timezone.utc)).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                """INSERT INTO symposium_debts (player_id, faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at, source)
+                       VALUES (?, ?, ?, ?, ?, 0, NULL, ?)
+                       ON CONFLICT(player_id, faction, source) DO UPDATE SET
+                           amount = symposium_debts.amount + excluded.amount,
+                           updated_at = excluded.updated_at""",
+                (player_id, faction, amount, timestamp, timestamp, source),
+            )
+            conn.commit()
+
     def record_symposium_debt(
         self,
         *,
@@ -1681,19 +1741,55 @@ class GameState:
         amount: int,
         now: Optional[datetime] = None,
     ) -> None:
+        self.record_influence_debt(
+            player_id=player_id,
+            faction=faction,
+            amount=amount,
+            now=now,
+            source="symposium",
+        )
+
+    def apply_influence_debt_payment(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        amount: int,
+        now: Optional[datetime] = None,
+        source: str,
+    ) -> int:
         if amount <= 0:
-            return
-        timestamp = (now or datetime.now(timezone.utc)).isoformat()
+            return 0
         with closing(sqlite3.connect(self._db_path)) as conn:
-            conn.execute(
-                """INSERT INTO symposium_debts (player_id, faction, amount, created_at, updated_at, reprisal_level, last_reprisal_at)
-                       VALUES (?, ?, ?, ?, ?, 0, NULL)
-                       ON CONFLICT(player_id, faction) DO UPDATE SET
-                           amount = symposium_debts.amount + excluded.amount,
-                           updated_at = excluded.updated_at""",
-                (player_id, faction, amount, timestamp, timestamp),
-            )
+            row = conn.execute(
+                "SELECT amount FROM symposium_debts WHERE player_id = ? AND faction = ? AND source = ?",
+                (player_id, faction, source),
+            ).fetchone()
+            if not row:
+                return 0
+            current = int(row[0])
+            paid = min(current, amount)
+            remaining = current - paid
+            if remaining == 0:
+                conn.execute(
+                    "DELETE FROM symposium_debts WHERE player_id = ? AND faction = ? AND source = ?",
+                    (player_id, faction, source),
+                )
+            else:
+                conn.execute(
+                    """UPDATE symposium_debts
+                           SET amount = ?, updated_at = ?
+                           WHERE player_id = ? AND faction = ? AND source = ?""",
+                    (
+                        remaining,
+                        (now or datetime.now(timezone.utc)).isoformat(),
+                        player_id,
+                        faction,
+                        source,
+                    ),
+                )
             conn.commit()
+            return paid
 
     def apply_symposium_debt_payment(
         self,
@@ -1703,37 +1799,38 @@ class GameState:
         amount: int,
         now: Optional[datetime] = None,
     ) -> int:
-        if amount <= 0:
-            return 0
+        return self.apply_influence_debt_payment(
+            player_id=player_id,
+            faction=faction,
+            amount=amount,
+            now=now,
+            source="symposium",
+        )
+
+    def update_influence_debt_reprisal(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        reprisal_level: int,
+        now: datetime,
+        source: str,
+    ) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
-            row = conn.execute(
-                "SELECT amount FROM symposium_debts WHERE player_id = ? AND faction = ?",
-                (player_id, faction),
-            ).fetchone()
-            if not row:
-                return 0
-            current = int(row[0])
-            paid = min(current, amount)
-            remaining = current - paid
-            if remaining == 0:
-                conn.execute(
-                    "DELETE FROM symposium_debts WHERE player_id = ? AND faction = ?",
-                    (player_id, faction),
-                )
-            else:
-                conn.execute(
-                    """UPDATE symposium_debts
-                           SET amount = ?, updated_at = ?
-                           WHERE player_id = ? AND faction = ?""",
-                    (
-                        remaining,
-                        (now or datetime.now(timezone.utc)).isoformat(),
-                        player_id,
-                        faction,
-                    ),
-                )
+            conn.execute(
+                """UPDATE symposium_debts
+                       SET reprisal_level = ?, last_reprisal_at = ?, updated_at = ?
+                       WHERE player_id = ? AND faction = ? AND source = ?""",
+                (
+                    reprisal_level,
+                    now.isoformat(),
+                    now.isoformat(),
+                    player_id,
+                    faction,
+                    source,
+                ),
+            )
             conn.commit()
-            return paid
 
     def update_symposium_debt_reprisal(
         self,
@@ -1743,33 +1840,27 @@ class GameState:
         reprisal_level: int,
         now: datetime,
     ) -> None:
-        with closing(sqlite3.connect(self._db_path)) as conn:
-            conn.execute(
-                """UPDATE symposium_debts
-                       SET reprisal_level = ?, last_reprisal_at = ?, updated_at = ?
-                       WHERE player_id = ? AND faction = ?""",
-                (
-                    reprisal_level,
-                    now.isoformat(),
-                    now.isoformat(),
-                    player_id,
-                    faction,
-                ),
-            )
-            conn.commit()
+        self.update_influence_debt_reprisal(
+            player_id=player_id,
+            faction=faction,
+            reprisal_level=reprisal_level,
+            now=now,
+            source="symposium",
+        )
 
-    def get_symposium_debt_record(
+    def get_influence_debt_record(
         self,
         *,
         player_id: str,
         faction: str,
+        source: str,
     ) -> Optional[Dict[str, object]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
-                """SELECT amount, created_at, updated_at, reprisal_level, last_reprisal_at
+                """SELECT amount, created_at, updated_at, reprisal_level, last_reprisal_at, source
                        FROM symposium_debts
-                       WHERE player_id = ? AND faction = ?""",
-                (player_id, faction),
+                       WHERE player_id = ? AND faction = ? AND source = ?""",
+                (player_id, faction, source),
             ).fetchone()
         if not row:
             return None
@@ -1781,15 +1872,32 @@ class GameState:
             "updated_at": datetime.fromisoformat(row[2]) if row[2] else None,
             "reprisal_level": int(row[3]) if row[3] is not None else 0,
             "last_reprisal_at": datetime.fromisoformat(row[4]) if row[4] else None,
+            "source": row[5],
         }
 
-    def total_symposium_debt(self, player_id: str) -> int:
+    def get_symposium_debt_record(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+    ) -> Optional[Dict[str, object]]:
+        record = self.get_influence_debt_record(
+            player_id=player_id,
+            faction=faction,
+            source="symposium",
+        )
+        return record
+
+    def total_influence_debt(self, player_id: str, *, source: str) -> int:
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
-                "SELECT SUM(amount) FROM symposium_debts WHERE player_id = ?",
-                (player_id,),
+                "SELECT SUM(amount) FROM symposium_debts WHERE player_id = ? AND source = ?",
+                (player_id, source),
             ).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
+
+    def total_symposium_debt(self, player_id: str) -> int:
+        return self.total_influence_debt(player_id, source="symposium")
 
     def get_symposium_participation(
         self,

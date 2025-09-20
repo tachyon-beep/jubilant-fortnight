@@ -310,6 +310,61 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await _post_to_channel(bot, router.orders, text, purpose="orders")
         await _flush_admin_notifications()
 
+    @app_commands.command(name="recruit_odds", description="Preview recruitment odds for each faction")
+    @track_command
+    @app_commands.describe(
+        scholar_id="Scholar identifier",
+        base_chance="Base success chance before modifiers (default 0.6)",
+    )
+    async def recruit_odds(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        base_chance: app_commands.Range[float, 0.0, 1.0] = 0.6,
+    ) -> None:
+        player_id = str(interaction.user.display_name)
+        service.ensure_player(player_id, interaction.user.display_name)
+        try:
+            odds = service.recruitment_odds(
+                player_id=player_id,
+                scholar_id=scholar_id,
+                base_chance=base_chance,
+            )
+        except PermissionError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        lines = [f"**Recruitment odds for {scholar_id}**"]
+        lines.append(f"Base chance before modifiers: {base_chance * 100:.1f}%")
+        cooldown_info = odds[0]["cooldown_remaining"] if odds else 0
+        if cooldown_info:
+            lines.append(
+                f"Recruitment cooldown active — penalties apply for the next {cooldown_info} digests."
+            )
+        lines.append("")
+        for entry in odds:
+            faction = entry["faction"].capitalize()
+            chance_pct = entry["chance"] * 100
+            influence_bonus = entry["influence_bonus"] * 100
+            influence_value = entry["influence"]
+            cooldown_text = "halved" if entry["cooldown_active"] else "normal"
+            lines.append(
+                "• {faction}: {chance:.1f}% (influence {influence} ➜ +{bonus:.1f}%, cooldown {cooldown})".format(
+                    faction=faction,
+                    chance=chance_pct,
+                    influence=influence_value,
+                    bonus=influence_bonus,
+                    cooldown=cooldown_text,
+                )
+            )
+
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await _flush_admin_notifications()
+
     @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
     @track_command
     @app_commands.describe(
@@ -831,6 +886,19 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             lines.append("Action thresholds:")
             for action, value in sorted(data["thresholds"].items()):
                 lines.append(f" - {action}: requires reputation {value}")
+        contracts = data.get("contracts", {})
+        if contracts:
+            lines.append("")
+            lines.append("Contract upkeep:")
+            for faction, payload in sorted(contracts.items()):
+                lines.append(
+                    " - {faction}: {count} scholar(s), upkeep {upkeep}, debt {debt}".format(
+                        faction=faction.capitalize(),
+                        count=payload.get("scholars", 0),
+                        upkeep=payload.get("upkeep", 0),
+                        debt=payload.get("outstanding", 0),
+                    )
+                )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
@@ -1347,6 +1415,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)
+    bot.tree.add_command(recruit_odds)
     bot.tree.add_command(recruit)
     bot.tree.add_command(mentor)
     bot.tree.add_command(assign_lab)

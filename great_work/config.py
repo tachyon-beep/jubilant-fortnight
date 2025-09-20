@@ -36,6 +36,10 @@ class Settings:
     symposium_debt_reprisal_threshold: int
     symposium_debt_reprisal_penalty: int
     symposium_debt_reprisal_cooldown_days: int
+    contract_upkeep_per_scholar: int
+    contract_debt_reprisal_threshold: int
+    contract_debt_reprisal_penalty: int
+    contract_debt_reprisal_cooldown_days: int
     confidence_wagers: Dict[str, Dict[str, int]]
     reputation_bounds: Dict[str, int]
     action_thresholds: Dict[str, int]
@@ -67,6 +71,8 @@ class Settings:
         reprisal_threshold = int(debt_cfg.get("reprisal_threshold", 6))
         reprisal_penalty = int(debt_cfg.get("reprisal_penalty", 2))
         reprisal_cooldown = int(debt_cfg.get("reprisal_cooldown_days", 7))
+        contract_cfg = data.get("contracts", {})
+        contract_debt_cfg = contract_cfg.get("debt", {})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
             timeline_start_year=int(data["time_scale"].get("start_year", 1920)),
@@ -89,6 +95,10 @@ class Settings:
             symposium_debt_reprisal_threshold=reprisal_threshold,
             symposium_debt_reprisal_penalty=reprisal_penalty,
             symposium_debt_reprisal_cooldown_days=reprisal_cooldown,
+            contract_upkeep_per_scholar=int(contract_cfg.get("upkeep_per_scholar", 1)),
+            contract_debt_reprisal_threshold=int(contract_debt_cfg.get("reprisal_threshold", 0)),
+            contract_debt_reprisal_penalty=int(contract_debt_cfg.get("reprisal_penalty", 0)),
+            contract_debt_reprisal_cooldown_days=int(contract_debt_cfg.get("reprisal_cooldown_days", 7)),
             confidence_wagers=data["confidence_wagers"],
             reputation_bounds=reputation,
             action_thresholds={k: int(v) for k, v in thresholds.items()},
