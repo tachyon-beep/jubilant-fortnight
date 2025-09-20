@@ -6,6 +6,7 @@ import logging
 import os
 import sqlite3
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -985,6 +986,7 @@ class TelemetryCollector:
             "queue_depth_24h": self.get_queue_depth_summary(24),
             "order_backlog_24h": self.get_order_backlog_summary(24),
             "symposium": self.get_symposium_metrics(24),
+            "economy": self.get_economy_metrics(24),
         }
 
         # Add overall statistics
@@ -1025,6 +1027,9 @@ class TelemetryCollector:
             "llm_failure_rate": _get_env_float("GREAT_WORK_ALERT_LLM_FAILURE_RATE", 0.2),
             "order_pending": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_PENDING", 6.0),
             "order_age_hours": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0),
+            "symposium_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT", 30.0),
+            "symposium_reprisal": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS", 3.0),
+            "investment_share": _get_env_float("GREAT_WORK_ALERT_INVESTMENT_SHARE", 0.6),
         }
 
         checks: List[Dict[str, Any]] = []
@@ -1176,10 +1181,225 @@ class TelemetryCollector:
                 threshold=thresholds["order_age_hours"],
             )
 
+        symposium_summary = data.get("symposium") or self.get_symposium_metrics(24)
+        if symposium_summary:
+            total_debt = sum(
+                entry.get("debt", 0.0) for entry in symposium_summary.get("debts", [])
+            )
+            debt_status = _status_upper(total_debt, thresholds["symposium_debt"])
+            _register(
+                "symposium_debt",
+                "Symposium outstanding debt",
+                debt_status,
+                f"Total debt {total_debt:.1f} influence",
+                observed=total_debt,
+                threshold=thresholds["symposium_debt"],
+            )
+
+            reprisals = symposium_summary.get("reprisals", [])
+            if reprisals:
+                worst = reprisals[0]
+                reprisal_status = _status_upper(worst.get("count", 0.0), thresholds["symposium_reprisal"])
+                factions = ", ".join(worst.get("factions", [])) or "multiple"
+                _register(
+                    "symposium_reprisal",
+                    "Symposium reprisal frequency",
+                    reprisal_status,
+                    (
+                        f"Player {worst.get('player_id')} reprised {worst.get('count', 0)} times "
+                        f"(factions: {factions})"
+                    ),
+                    observed=float(worst.get("count", 0)),
+                    threshold=thresholds["symposium_reprisal"],
+                )
+
+        economy_summary = data.get("economy") or self.get_economy_metrics(24)
+        investments = economy_summary.get("investments", {})
+        top_share = investments.get("top_share", 0.0)
+        if top_share and thresholds["investment_share"] > 0:
+            share_status = _status_upper(top_share, thresholds["investment_share"])
+            top_player = None
+            top_players = investments.get("top_players", [])
+            if top_players:
+                top_player = top_players[0].get("player_id")
+            detail = f"Top investor share {top_share:.0%}"
+            if top_player:
+                detail += f" (player {top_player})"
+            _register(
+                "investment_concentration",
+                "Investment concentration",
+                share_status,
+                detail,
+                observed=top_share,
+                threshold=thresholds["investment_share"],
+            )
+
         return {
             "checks": checks,
             "status_counts": counts,
             "thresholds": thresholds,
+        }
+
+    def get_economy_metrics(self, hours: int = 24) -> Dict[str, Any]:
+        """Summarise long-tail economy telemetry (investments/endowments)."""
+
+        start_time = time.time() - (hours * 3600)
+        investment_totals: Dict[str, float] = defaultdict(float)
+        investment_players: Dict[str, Dict[str, Any]] = {}
+        investment_factions: Dict[str, float] = defaultdict(float)
+        latest_investments: List[Dict[str, Any]] = []
+        total_investment_amount = 0.0
+
+        endowment_players: Dict[str, Dict[str, Any]] = {}
+        total_endowment_amount = 0.0
+        total_debt_paid = 0.0
+        total_reputation_gain = 0.0
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.faction') AS faction,
+                               json_extract(metadata, '$.program') AS program,
+                               json_extract(metadata, '$.total') AS total_contribution,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                        ORDER BY timestamp DESC""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "faction_investment",
+                    start_time,
+                ),
+            )
+            for value, player_id, faction, program, total_contribution, ts in cursor.fetchall():
+                amount = float(value or 0.0)
+                if amount <= 0:
+                    continue
+                total_investment_amount += amount
+                display_faction = (faction or "unaligned").lower()
+                investment_factions[display_faction] += amount
+                if player_id:
+                    record = investment_players.setdefault(
+                        player_id,
+                        {
+                            "total": 0.0,
+                            "last_program": None,
+                            "last_faction": display_faction,
+                            "last_amount": 0.0,
+                            "last_timestamp": None,
+                        },
+                    )
+                    record["total"] += amount
+                    record["last_program"] = program
+                    record["last_faction"] = display_faction
+                    record["last_amount"] = amount
+                    record["last_timestamp"] = datetime.fromtimestamp(ts).isoformat()
+                    investment_totals[player_id] += amount
+                    latest_investments.append(
+                        {
+                            "player_id": player_id,
+                            "amount": amount,
+                            "faction": display_faction,
+                            "program": program,
+                            "recorded_at": datetime.fromtimestamp(ts).isoformat(),
+                        }
+                    )
+
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.faction') AS faction,
+                               json_extract(metadata, '$.program') AS program,
+                               json_extract(metadata, '$.paid_debt') AS paid_debt,
+                               json_extract(metadata, '$.reputation_gain') AS reputation_gain,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                        ORDER BY timestamp DESC""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "archive_endowment",
+                    start_time,
+                ),
+            )
+            for value, player_id, faction, program, paid_debt, reputation_gain, ts in cursor.fetchall():
+                amount = float(value or 0.0)
+                if amount <= 0:
+                    continue
+                total_endowment_amount += amount
+                total_debt_paid += float(paid_debt or 0.0)
+                total_reputation_gain += float(reputation_gain or 0.0)
+                if player_id:
+                    record = endowment_players.setdefault(
+                        player_id,
+                        {
+                            "total": 0.0,
+                            "last_program": None,
+                            "last_faction": faction,
+                            "last_amount": 0.0,
+                            "last_timestamp": None,
+                        },
+                    )
+                    record["total"] += amount
+                    record["last_program"] = program
+                    record["last_faction"] = faction
+                    record["last_amount"] = amount
+                    record["last_timestamp"] = datetime.fromtimestamp(ts).isoformat()
+
+        investment_leaderboard = [
+            {
+                "player_id": player_id,
+                "total": details["total"],
+                "last_program": details["last_program"],
+                "last_faction": details["last_faction"],
+                "last_amount": details["last_amount"],
+                "last_timestamp": details["last_timestamp"],
+            }
+            for player_id, details in investment_players.items()
+        ]
+        investment_leaderboard.sort(key=lambda item: item["total"], reverse=True)
+
+        investment_top_share = 0.0
+        if total_investment_amount > 0 and investment_leaderboard:
+            investment_top_share = (
+                investment_leaderboard[0]["total"] / total_investment_amount
+            )
+
+        endowment_leaderboard = [
+            {
+                "player_id": player_id,
+                "total": details["total"],
+                "last_program": details["last_program"],
+                "last_faction": details["last_faction"],
+                "last_amount": details["last_amount"],
+                "last_timestamp": details["last_timestamp"],
+            }
+            for player_id, details in endowment_players.items()
+        ]
+        endowment_leaderboard.sort(key=lambda item: item["total"], reverse=True)
+
+        latest_investments.sort(
+            key=lambda item: item.get("recorded_at", ""), reverse=True
+        )
+
+        return {
+            "window_hours": hours,
+            "investments": {
+                "total_amount": total_investment_amount,
+                "unique_players": len(investment_players),
+                "by_faction": dict(investment_factions),
+                "top_players": investment_leaderboard[:5],
+                "latest": latest_investments[:5],
+                "top_share": investment_top_share,
+            },
+            "endowments": {
+                "total_amount": total_endowment_amount,
+                "unique_players": len(endowment_players),
+                "top_players": endowment_leaderboard[:5],
+                "total_debt_paid": total_debt_paid,
+                "total_reputation_gain": total_reputation_gain,
+            },
         }
 
     def get_symposium_metrics(self, hours: int = 24) -> Dict[str, Any]:

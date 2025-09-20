@@ -2748,19 +2748,34 @@ class GameService:
         )
         last_voted_at = participation.get("last_voted_at") if participation else None
         raw_debts = self.state.list_symposium_debts(player_id)
-        debts_payload = [
-            {
-                "faction": entry["faction"],
-                "amount": entry["amount"],
-                "created_at": entry["created_at"].isoformat()
-                if entry.get("created_at")
-                else None,
-                "updated_at": entry["updated_at"].isoformat()
-                if entry.get("updated_at")
-                else None,
-            }
-            for entry in raw_debts
-        ]
+        cooldown_days = self.settings.symposium_debt_reprisal_cooldown_days
+        cooldown_delta = timedelta(days=cooldown_days)
+        debts_payload = []
+        for entry in raw_debts:
+            last_reprisal_at = entry.get("last_reprisal_at")
+            next_reprisal_at = None
+            if isinstance(last_reprisal_at, datetime):
+                next_reprisal_at = last_reprisal_at + cooldown_delta
+            debts_payload.append(
+                {
+                    "faction": entry.get("faction"),
+                    "amount": entry.get("amount", 0),
+                    "reprisal_level": entry.get("reprisal_level", 0),
+                    "created_at": entry.get("created_at").isoformat()
+                    if isinstance(entry.get("created_at"), datetime)
+                    else None,
+                    "updated_at": entry.get("updated_at").isoformat()
+                    if isinstance(entry.get("updated_at"), datetime)
+                    else None,
+                    "last_reprisal_at": last_reprisal_at.isoformat()
+                    if isinstance(last_reprisal_at, datetime)
+                    else None,
+                    "next_reprisal_at": next_reprisal_at.isoformat()
+                    if isinstance(next_reprisal_at, datetime)
+                    else None,
+                    "cooldown_days": cooldown_days,
+                }
+            )
 
         current_topic = self.state.get_current_symposium_topic()
         current_summary: Optional[Dict[str, object]] = None
@@ -2835,19 +2850,23 @@ class GameService:
         now = datetime.now(timezone.utc)
         proposals = self.state.list_pending_symposium_proposals(now=now)
         backlog_cap = self.settings.symposium_max_backlog
-        score_snapshot = [
-            {
-                "proposal_id": entry["proposal_id"],
-                "topic": entry["topic"],
-                "player_id": entry["player_id"],
-                "score": entry["score"],
-                "age_days": entry["age_days"],
-                "created_at": entry["created_at"].isoformat()
-                if isinstance(entry.get("created_at"), datetime)
-                else None,
-            }
-            for entry in self._latest_symposium_scoring
-        ]
+        score_snapshot = []
+        for entry in self._latest_symposium_scoring:
+            created_at = entry.get("created_at")
+            score_snapshot.append(
+                {
+                    "proposal_id": entry.get("proposal_id"),
+                    "topic": entry.get("topic"),
+                    "player_id": entry.get("player_id"),
+                    "score": entry.get("score"),
+                    "age_days": entry.get("age_days"),
+                    "age_contribution": entry.get("age_contribution"),
+                    "fresh_bonus": entry.get("fresh_bonus"),
+                    "repeat_penalty": entry.get("repeat_penalty"),
+                    "recent_proposer": entry.get("recent_proposer", False),
+                    "created_at": created_at.isoformat() if isinstance(created_at, datetime) else None,
+                }
+            )
         player_names: Dict[str, str] = {}
         for proposal in proposals:
             player = self.state.get_player(proposal["player_id"])
@@ -2865,21 +2884,62 @@ class GameService:
             entry["display_name"] = _display_name(entry["player_id"])
         slots_remaining = max(0, backlog_cap - len(proposals))
         debt_summary: Dict[str, int] = {}
+        debt_rows: List[Dict[str, object]] = []
+        cooldown_days = self.settings.symposium_debt_reprisal_cooldown_days
+        cooldown_delta = timedelta(days=cooldown_days)
+        total_outstanding = 0
         for player in self.state.all_players():
-            outstanding = self.state.total_symposium_debt(player.id)
-            if outstanding:
-                debt_summary[player.display_name] = outstanding
+            debts = self.state.list_symposium_debts(player.id)
+            if not debts:
+                continue
+            for debt in debts:
+                amount = debt.get("amount", 0)
+                faction = debt.get("faction")
+                created_at = debt.get("created_at")
+                updated_at = debt.get("updated_at")
+                last_reprisal_at = debt.get("last_reprisal_at")
+                next_reprisal_at = None
+                if isinstance(last_reprisal_at, datetime):
+                    next_reprisal_at = last_reprisal_at + cooldown_delta
+                debt_rows.append(
+                    {
+                        "player_id": player.id,
+                        "display_name": player.display_name,
+                        "faction": faction,
+                        "amount": amount,
+                        "reprisal_level": debt.get("reprisal_level", 0),
+                        "last_reprisal_at": last_reprisal_at.isoformat()
+                        if isinstance(last_reprisal_at, datetime)
+                        else None,
+                        "next_reprisal_at": next_reprisal_at.isoformat()
+                        if isinstance(next_reprisal_at, datetime)
+                        else None,
+                        "cooldown_days": cooldown_days,
+                        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else None,
+                        "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+                    }
+                )
+                debt_summary[player.display_name] = (
+                    debt_summary.get(player.display_name, 0) + amount
+                )
+                total_outstanding += amount
         return {
             "backlog_size": len(proposals),
             "slots_remaining": slots_remaining,
             "scoring": score_snapshot,
+            "debts": debt_rows,
             "debt_summary": debt_summary,
+            "debt_totals": {
+                "total_outstanding": total_outstanding,
+                "players_in_debt": len(debt_summary),
+            },
             "config": {
                 "max_backlog": backlog_cap,
                 "recent_window": self.settings.symposium_recent_window,
                 "fresh_bonus": self.settings.symposium_scoring_fresh_bonus,
                 "repeat_penalty": self.settings.symposium_scoring_repeat_penalty,
                 "age_weight": self.settings.symposium_scoring_age_weight,
+                "max_age_days": self.settings.symposium_scoring_max_age_days,
             },
         }
 
@@ -3473,11 +3533,18 @@ class GameService:
                 (now - created_at).total_seconds() / 86400.0,
             )
             age_decay = max(0.0, (max_age_days - age_days) / max_age_days)
-            score = age_decay * self.settings.symposium_scoring_age_weight
-            if proposal["player_id"] not in recent_proposers:
-                score += self.settings.symposium_scoring_fresh_bonus
-            else:
-                score -= self.settings.symposium_scoring_repeat_penalty
+            age_contribution = age_decay * self.settings.symposium_scoring_age_weight
+            fresh_bonus = (
+                self.settings.symposium_scoring_fresh_bonus
+                if proposal["player_id"] not in recent_proposers
+                else 0.0
+            )
+            repeat_penalty = (
+                self.settings.symposium_scoring_repeat_penalty
+                if proposal["player_id"] in recent_proposers
+                else 0.0
+            )
+            score = age_contribution + fresh_bonus - repeat_penalty
             entry = {
                 "proposal_id": proposal["id"],
                 "player_id": proposal["player_id"],
@@ -3485,6 +3552,10 @@ class GameService:
                 "score": score,
                 "age_days": age_days,
                 "created_at": created_at,
+                "age_contribution": age_contribution,
+                "fresh_bonus": fresh_bonus,
+                "repeat_penalty": repeat_penalty,
+                "recent_proposer": proposal["player_id"] in recent_proposers,
             }
             scored_entries.append(entry)
             try:
@@ -3495,6 +3566,9 @@ class GameService:
                     details={
                         "proposal_id": proposal["id"],
                         "age_days": age_days,
+                        "age_contribution": age_contribution,
+                        "fresh_bonus": fresh_bonus,
+                        "repeat_penalty": repeat_penalty,
                         "recent_proposer": str(proposal["player_id"] in recent_proposers),
                     },
                 )

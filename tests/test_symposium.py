@@ -425,10 +425,15 @@ def test_symposium_backlog_report_scores():
 
         report = service.symposium_backlog_report()
         assert report["backlog_size"] >= 0
+        assert "debts" in report
+        assert "config" in report and "max_age_days" in report["config"]
         scoring = report["scoring"]
         if scoring:
             top = scoring[0]
             assert top["display_name"] == "Player Two"
+            assert "age_contribution" in top
+            assert "fresh_bonus" in top
+            assert "repeat_penalty" in top
 
 
 def test_symposium_debt_reprisal_triggers_penalty():
@@ -453,6 +458,72 @@ def test_symposium_debt_reprisal_triggers_penalty():
         service.start_symposium(topic="Week One", description="Reprisal")
         service.vote_symposium("p2", 1)
         service.resolve_symposium()
+
+
+def test_symposium_backlog_report_includes_debt_metadata():
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = GameService(db_path)
+        service.ensure_player("p1", "Player One")
+        service.ensure_player("p2", "Player Two")
+
+        player_one = service.state.get_player("p1")
+        assert player_one is not None
+        player_one.influence["academia"] = 0
+        service.state.upsert_player(player_one)
+
+        # First miss consumes grace
+        service.start_symposium(topic="Debt Week", description="Transparency")
+        service.vote_symposium("p2", 1)
+        service.resolve_symposium()
+
+        # Second miss creates debt
+        service.start_symposium(topic="Debt Week 2", description="Transparency")
+        service.vote_symposium("p2", 1)
+        service.resolve_symposium()
+
+        report = service.symposium_backlog_report()
+        debts = report.get("debts") or []
+        assert isinstance(debts, list)
+        assert report.get("debt_totals", {}).get("total_outstanding", 0) >= 0
+        if debts:
+            debt_row = debts[0]
+            assert "reprisal_level" in debt_row
+            assert "next_reprisal_at" in debt_row
+            assert "cooldown_days" in debt_row
+
+
+def test_symposium_status_reports_debt_details():
+    os.environ["LLM_MODE"] = "mock"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        service = GameService(db_path)
+        service.ensure_player("p1", "Player One")
+        service.ensure_player("p2", "Player Two")
+
+        player_one = service.state.get_player("p1")
+        assert player_one is not None
+        player_one.influence["academia"] = 0
+        service.state.upsert_player(player_one)
+
+        # First miss uses grace window
+        service.start_symposium(topic="Debt Detail", description="Status command")
+        service.vote_symposium("p2", 1)
+        service.resolve_symposium()
+
+        # Second miss triggers debt
+        service.start_symposium(topic="Debt Detail 2", description="Status command")
+        service.vote_symposium("p2", 1)
+        service.resolve_symposium()
+
+        status = service.symposium_pledge_status("p1")
+        debts = status.get("debts") or []
+        assert debts, "Expected symposium debt entry"
+        debt_info = debts[0]
+        assert "next_reprisal_at" in debt_info
+        assert "reprisal_level" in debt_info
+        assert "cooldown_days" in debt_info
 
         # Second symposium to accrue debt
         service.start_symposium(topic="Week Two", description="Reprisal")

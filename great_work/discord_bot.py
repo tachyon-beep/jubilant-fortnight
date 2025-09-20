@@ -790,29 +790,85 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @track_command
     async def symposium_backlog(interaction: discord.Interaction) -> None:
         report = service.symposium_backlog_report()
+        cfg = report.get("config", {})
         lines = [
-            f"**Symposium Backlog** ({report['backlog_size']}/{report['config']['max_backlog']} slots, {report['slots_remaining']} free)",
-            "Scoring weights: "
-            f"fresh +{report['config']['fresh_bonus']}, repeat −{report['config']['repeat_penalty']}, age weight {report['config']['age_weight']}"
+            (
+                f"**Symposium Backlog** "
+                f"({report['backlog_size']}/{cfg.get('max_backlog')} slots; {report['slots_remaining']} free)"
+            ),
+            (
+                "Scoring: "
+                f"age weight {cfg.get('age_weight')}, max age {cfg.get('max_age_days')}d, "
+                f"fresh bonus +{cfg.get('fresh_bonus')}, repeat penalty −{cfg.get('repeat_penalty')}"
+            ),
         ]
         scoring = report.get("scoring") or []
         if scoring:
             lines.append("")
             lines.append("**Current Ranking**")
             for entry in scoring:
+                components: list[str] = []
+                age_contrib = entry.get("age_contribution")
+                if age_contrib is not None:
+                    components.append(f"{age_contrib:+.2f} age")
+                fresh_bonus = entry.get("fresh_bonus")
+                if fresh_bonus:
+                    components.append(f"{fresh_bonus:+.2f} fresh")
+                repeat_penalty = entry.get("repeat_penalty")
+                if repeat_penalty:
+                    components.append(f"-{repeat_penalty:.2f} repeat")
+                if not components:
+                    components.append("0.00 neutral")
+                component_text = ", ".join(components)
+                recent_flag = " (recent proposer)" if entry.get("recent_proposer") else ""
                 lines.append(
-                    f"• {entry['topic']} — {entry['display_name']} (score {entry['score']:.2f}, age {entry['age_days']:.1f}d)"
+                    "• {topic} — {name}: score {score:.2f} "
+                    "[{components}; age {age:.1f}d]{flag}".format(
+                        topic=entry.get("topic"),
+                        name=entry.get("display_name"),
+                        score=entry.get("score", 0.0),
+                        components=component_text,
+                        age=entry.get("age_days", 0.0),
+                        flag=recent_flag,
+                    )
                 )
         else:
             lines.append("")
             lines.append("No proposals scored yet.")
 
-        debts = report.get("debt_summary") or {}
-        if debts:
+        debt_rows = report.get("debts") or []
+        if debt_rows:
+            totals = report.get("debt_totals", {})
             lines.append("")
-            lines.append("**Outstanding Debts**")
-            for display_name, amount in debts.items():
-                lines.append(f"• {display_name}: {amount} influence")
+            lines.append(
+                "**Outstanding Debts** (total {total} across {count} player(s))".format(
+                    total=totals.get("total_outstanding", 0),
+                    count=totals.get("players_in_debt", len(debt_rows)),
+                )
+            )
+            sorted_rows = sorted(
+                debt_rows,
+                key=lambda row: (row.get("amount", 0), row.get("display_name", "")),
+                reverse=True,
+            )
+            for row in sorted_rows:
+                next_reprisal = row.get("next_reprisal_at") or "pending"
+                lines.append(
+                    "• {name} owes {amount} ({faction}) — reprisal lvl {level}, next reprisal {next_reprisal}".format(
+                        name=row.get("display_name"),
+                        amount=row.get("amount", 0),
+                        faction=(row.get("faction") or "Unaligned").capitalize(),
+                        level=row.get("reprisal_level", 0),
+                        next_reprisal=next_reprisal,
+                    )
+                )
+                if row.get("last_reprisal_at"):
+                    lines.append(
+                        "   Last reprisal {last} (cooldown {cooldown}d)".format(
+                            last=row.get("last_reprisal_at"),
+                            cooldown=row.get("cooldown_days", "?"),
+                        )
+                    )
 
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
         await _flush_admin_notifications()
@@ -852,9 +908,22 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             lines.append("")
             lines.append("**Outstanding Debts**")
             for debt in debts:
-                lines.append(
-                    f"• {debt['amount']} influence ({debt['faction']}) — last updated {debt.get('updated_at') or 'recently'}"
+                faction = (debt.get("faction") or "Unaligned").capitalize()
+                next_reprisal = debt.get("next_reprisal_at") or "pending"
+                line = (
+                    f"• {debt.get('amount', 0)} influence ({faction}) — "
+                    f"reprisal lvl {debt.get('reprisal_level', 0)}, next reprisal {next_reprisal}"
                 )
+                lines.append(line)
+                extra_bits: list[str] = []
+                if debt.get("last_reprisal_at"):
+                    extra_bits.append(f"last reprisal {debt['last_reprisal_at']}")
+                if debt.get("updated_at"):
+                    extra_bits.append(f"updated {debt['updated_at']}")
+                if debt.get("cooldown_days") is not None:
+                    extra_bits.append(f"cooldown {debt['cooldown_days']}d")
+                if extra_bits:
+                    lines.append("   " + "; ".join(extra_bits))
 
         history = status.get("history") or []
         if history:
@@ -1446,11 +1515,15 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     player_name = entry.get('player_id') or 'unknown'
                     player_obj = service.state.get_player(player_name)
                     display = player_obj.display_name if player_obj else player_name
+                    detail_parts = [f"{entry.get('debt', 0.0):.1f} influence"]
+                    faction = entry.get('faction') or 'mixed'
+                    detail_parts.append(f"faction {faction}")
+                    if entry.get('recorded_at'):
+                        detail_parts.append(f"recorded {entry['recorded_at']}")
                     lines.append(
-                        "• {player}: {debt:.1f} influence ({faction})".format(
+                        "• {player}: {detail}".format(
                             player=display,
-                            debt=entry.get('debt', 0.0),
-                            faction=entry.get('faction') or 'mixed',
+                            detail=", ".join(detail_parts),
                         )
                     )
 
@@ -1466,6 +1539,48 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                             player=display,
                             count=entry.get('count', 0),
                             penalty=entry.get('total_penalty', 0.0),
+                        )
+                    )
+
+            economy_metrics = report.get('economy', {})
+            if economy_metrics:
+                invest = economy_metrics.get('investments', {})
+                endow = economy_metrics.get('endowments', {})
+                lines.append("\n**Long-tail Economy (24 hours):**")
+                lines.append(
+                    "• Investments: {total:.1f} influence across {players} player(s)".format(
+                        total=invest.get('total_amount', 0.0),
+                        players=invest.get('unique_players', 0),
+                    )
+                )
+                if invest.get('top_players'):
+                    top_investor = invest['top_players'][0]
+                    lines.append(
+                        "• Top investor {player} — {amount:.1f} influence (share {share:.0%})".format(
+                            player=top_investor.get('player_id', 'unknown'),
+                            amount=top_investor.get('total', 0.0),
+                            share=invest.get('top_share', 0.0),
+                        )
+                    )
+                if invest.get('by_faction'):
+                    faction_parts = [
+                        f"{f}:{amount:.1f}"
+                        for f, amount in sorted(invest['by_faction'].items(), key=lambda item: item[1], reverse=True)[:3]
+                    ]
+                    lines.append("• By faction: " + ", ".join(faction_parts))
+                lines.append(
+                    "• Archive endowments: {total:.1f} influence (debt paid {debt:.1f}, reputation +{rep:.1f})".format(
+                        total=endow.get('total_amount', 0.0),
+                        debt=endow.get('total_debt_paid', 0.0),
+                        rep=endow.get('total_reputation_gain', 0.0),
+                    )
+                )
+                if endow.get('top_players'):
+                    top_endower = endow['top_players'][0]
+                    lines.append(
+                        "• Largest endowment {player}: {amount:.1f} influence".format(
+                            player=top_endower.get('player_id', 'unknown'),
+                            amount=top_endower.get('total', 0.0),
                         )
                     )
 

@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, archive, admin, and new long-tail economy artefacts (faction investments/endowments) layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Mentorship activations/progression/completions now log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, recruitment odds incorporate the relationship modifier, and seasonal commitments/faction projects/investments/endowments use the same signals for costs, progress, or reputation rewards with admin overrides. Remaining work targets propagating those deltas into poach loyalty plus automated tone/safety guardrails beyond the writer-facing guide.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4490】【F:great_work/telemetry.py†L788-L1110】【F:great_work/discord_bot.py†L317-L1607】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L160】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, archive, admin, and new long-tail economy artefacts (faction investments/endowments) layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, component breakdowns (age decay, fresh bonus, repeat penalty), and debt reprisal schedules with faction reprisals. Mentorship activations/progression/completions now log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, recruitment odds incorporate the relationship modifier, and seasonal commitments/faction projects/investments/endowments use the same signals for costs, progress, or reputation rewards with admin overrides. Remaining work targets propagating those deltas into poach loyalty plus automated tone/safety guardrails beyond the writer-facing guide.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4490】【F:great_work/telemetry.py†L788-L1110】【F:great_work/discord_bot.py†L317-L1607】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L160】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -116,7 +116,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Partially Implemented | 1 | 25% |
 | Not Implemented | 2 | 50% |
 
-**Notes:** Scheduler-based maintenance exists with pause/resume automation, configurable retry schedules, and admin notifications, yet LLM guard-rail batching/length controls are pending and posting frequency is not rate-limited beyond the digest cadence.【F:great_work/scheduler.py†L20-L180】【F:great_work/service.py†L90-L320】【F:great_work/llm_client.py†L1-L200】
+**Notes:** Scheduler-based maintenance exists with pause/resume automation, configurable retry schedules, and admin notifications; telemetry guardrails and the published runbook now surface symposium debt, investment concentration, queue depth, and digest health for on-call operators. Remaining gaps: LLM batching/length controls and automated external alert routing so ops are paged without checking Discord manually.【F:great_work/scheduler.py†L20-L180】【F:great_work/service.py†L90-L320】【F:great_work/telemetry.py†L920-L1330】【F:docs/TELEMETRY_RUNBOOK.md†L1-L120】
 
 ### Licensing and Safety (5 requirements)
 
@@ -155,6 +155,6 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 
 ## Key Follow-ups
 
-1. Capture telemetry/alert thresholds for the tuned seasonal commitment and faction project loops, fold the new `/gw_admin` workflows into operator docs, and schedule a balance review post-playtest.
+1. Exercise the new telemetry guardrails (symposium debt, investment share, queue depth) during playtests and iterate on thresholds/runbook guidance based on observed load.
 2. Design and document additional influence sinks (faction investments, archive programs) that pair with symposium debt escalation.
 3. Ship external alert routing plus dispatcher backlog exports/dashboards, and document external archive hosting for production.

@@ -399,9 +399,47 @@ def test_generate_report():
         assert "feature_engagement_7d" in report
         assert "errors_24h" in report
         assert "performance_1h" in report
+        assert "economy" in report
         assert report["overall"]["total_events"] == 4
         assert "health" in report
         assert isinstance(report["health"].get("checks"), list)
+
+
+def test_economy_metrics_summary():
+    """Economy metrics should aggregate investments and endowments."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "economy.db")
+
+        collector.track_game_progression(
+            "faction_investment",
+            5.0,
+            player_id="p1",
+            details={"faction": "academia", "program": "museum", "total": 5.0},
+        )
+        collector.track_game_progression(
+            "faction_investment",
+            3.0,
+            player_id="p2",
+            details={"faction": "industry", "total": 3.0},
+        )
+        collector.track_game_progression(
+            "archive_endowment",
+            4.0,
+            player_id="p1",
+            details={"faction": "academia", "program": "archive", "paid_debt": 2.0, "reputation_gain": 1.0},
+        )
+        collector.flush()
+
+        economy = collector.get_economy_metrics(24)
+        invest = economy["investments"]
+        endow = economy["endowments"]
+
+        assert invest["total_amount"] == pytest.approx(8.0)
+        assert invest["unique_players"] == 2
+        assert invest["top_share"] == pytest.approx(5.0 / 8.0)
+        assert endow["total_amount"] == pytest.approx(4.0)
+        assert endow["total_debt_paid"] == pytest.approx(2.0)
+        assert endow["total_reputation_gain"] == pytest.approx(1.0)
 
 
 def test_health_evaluation_thresholds(monkeypatch):
@@ -413,6 +451,9 @@ def test_health_evaluation_thresholds(monkeypatch):
     monkeypatch.setenv("GREAT_WORK_ALERT_LLM_FAILURE_RATE", "0.25")
     monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_PENDING", "2")
     monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", "0.5")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT", "1")
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS", "0.5")
+    monkeypatch.setenv("GREAT_WORK_ALERT_INVESTMENT_SHARE", "0.5")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         collector = TelemetryCollector(Path(tmpdir) / "health.db")
@@ -440,6 +481,36 @@ def test_health_evaluation_thresholds(monkeypatch):
             event="poll",
             pending_count=3,
             oldest_pending_seconds=3600.0,
+        )
+        collector.track_game_progression(
+            "symposium_debt_outstanding",
+            5.0,
+            player_id="p1",
+            details={"faction": "academia"},
+        )
+        collector.track_game_progression(
+            "symposium_debt_reprisal",
+            1.0,
+            player_id="p1",
+            details={"faction": "academia", "reprisal_level": 1},
+        )
+        collector.track_game_progression(
+            "faction_investment",
+            10.0,
+            player_id="p1",
+            details={"faction": "academia", "total": 10.0},
+        )
+        collector.track_game_progression(
+            "faction_investment",
+            1.0,
+            player_id="p2",
+            details={"faction": "industry", "total": 1.0},
+        )
+        collector.track_game_progression(
+            "archive_endowment",
+            4.0,
+            player_id="p2",
+            details={"faction": "industry", "paid_debt": 1.0, "reputation_gain": 1.0},
         )
         collector.flush()
 
@@ -487,6 +558,27 @@ def test_health_evaluation_thresholds(monkeypatch):
         )
         assert order_stale_alert is not None
         assert order_stale_alert["status"] == "alert"
+
+        symposium_debt_alert = next(
+            (check for check in checks if check["metric"] == "symposium_debt"),
+            None,
+        )
+        assert symposium_debt_alert is not None
+        assert symposium_debt_alert["status"] == "alert"
+
+        reprisal_alert = next(
+            (check for check in checks if check["metric"] == "symposium_reprisal"),
+            None,
+        )
+        assert reprisal_alert is not None
+        assert reprisal_alert["status"] == "alert"
+
+        investment_alert = next(
+            (check for check in checks if check["metric"] == "investment_concentration"),
+            None,
+        )
+        assert investment_alert is not None
+        assert investment_alert["status"] == "alert"
 
 
 def test_cleanup_old_data():

@@ -13,6 +13,7 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 - Recruitment odds are now exposed via `/recruit_odds`, listing faction modifiers, cooldown penalties, and influence bonuses so players can compare bids before committing.
 - Contract upkeep now drains influence every digest, automatically recording contract debt and reprisals when players fall behind; `/status` surfaces per-faction upkeep and outstanding balances.
 - Faction investments (`/invest`) and archive endowments (`/endow_archive`) provide player-facing long-tail influence sinks that feed relationship boosts, debt relief, and reputation rewards while logging telemetry/press for operations review.【F:great_work/service.py†L1160-L4490】【F:great_work/discord_bot.py†L883-L1607】【F:tests/test_influence_sinks.py†L1-L88】
+- Symposium backlog/status commands now expose scoring breakdowns (age decay, fresh bonus, repeat penalty) and debt reprisal schedules so players and operators can audit the weekly loop; telemetry mirrors the same components for tuning.【F:great_work/service.py†L3350-L3590】【F:great_work/discord_bot.py†L789-L904】【F:tests/test_symposium.py†L400-L470】
 
 ## Infrastructure Utilization
 
@@ -136,8 +137,8 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
    - Manual resume and notification flows verified via tests and Discord command wiring.
 
 5. **Telemetry Expansion** – ⚠️ Partial
-   - Decorator shares the bot's `GameService`, emitting command usage with player context, channel metrics, LLM latency/failure telemetry, layered-press cadence, digest health, and queue depth samples.
-   - `/telemetry_report` now includes queue depth summaries and alert thresholds; next, integrate dispatcher/order metrics, finish the dashboard container workflow, and agree on product-facing success KPIs.
+   - Decorator shares the bot's `GameService`, emitting command usage with player context, channel metrics, LLM latency/failure telemetry, layered-press cadence, digest health, queue depth, and the new symposium/economy guardrails.
+   - `/telemetry_report` highlights health checks, symposium scoring/debt, and long-tail economy summaries; the `docs/TELEMETRY_RUNBOOK.md` runbook documents remediation steps. Remaining work: external alert routing, richer dispatcher dashboards, and product-facing KPIs.
 
 6. **Archive Automation & Docs** – ⚠️ Partial
    - Digest scheduler now exports the web archive automatically, syncs the output into the containerised static host, posts a timestamped ZIP to the admin channel, and prunes old snapshots.
@@ -175,7 +176,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 ## Upcoming Focus
 
-1. Collect telemetry on the newly tuned seasonal commitments, faction projects, investments, and archive endowments (alerts, dashboards) and fold the operator workflows into the public runbook before the 1.0 playtests.
+1. Use the new guardrails to collect telemetry on seasonal commitments, faction projects, investments, and archive endowments; feed real-world observations back into the runbook and dashboard tuning ahead of 1.0 playtests.
 2. Design the next tier of influence sinks (faction investments, archival endowments) and tie symposium debt escalations into those systems.
 3. Finalise telemetry/ops guardrails: external alert routing, dispatcher backlog exports, and moderator dashboards with filtering/search.
 4. Publish external archive hosting guidance for GitHub Pages (chosen deployment target) and expand deployment notes for tone/LLM safety configuration.

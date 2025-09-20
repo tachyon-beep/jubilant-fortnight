@@ -1,0 +1,78 @@
+# Telemetry & Alerting Runbook
+
+## Purpose
+
+This runbook explains how to interpret the `/telemetry_report`, respond to alert thresholds, and tune the guardrails that protect live ops. Operators should consult this document whenever the health summary shows ⚠️/🛑 or when preparing patch notes after major tuning passes.
+
+## Key Commands & Dashboards
+
+- `/telemetry_report` – one-shot health snapshot inside Discord (admin only).
+- `ops/telemetry-dashboard` – historical charts for digests, queue depth, and command usage (run via `make telemetry-dashboard`).
+- `sqlite3 telemetry.db` – direct access if you need to export raw metrics.
+
+## Health Checks & Thresholds
+
+| Metric | Default Threshold (env var) | Description | Response |
+| --- | --- | --- | --- |
+| Digest runtime | 5000 ms (`GREAT_WORK_ALERT_MAX_DIGEST_MS`) | Maximum duration of the last 24h digests | If alert, inspect LLM latency + queued press; consider pausing digest automation. |
+| Digest release floor | ≥ 1 item (`GREAT_WORK_ALERT_MIN_RELEASES`) | Lowest item count published in 24h | Alert usually means Gazette starved – check press queue + LLM. |
+| Press queue depth | 12 items (`GREAT_WORK_ALERT_MAX_QUEUE`) | Max scheduled press backlog | Investigate stuck follow-ups or manual edits; consider cancelling obsolete orders. |
+| LLM latency | 4000 ms (`GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS`) | Weighted average call latency | Check `/gw_admin pause_game` triggers, failover LLM, or reduce batch sizes. |
+| LLM failure rate | 20 % (`GREAT_WORK_ALERT_LLM_FAILURE_RATE`) | Error ratio by call volume | Inspect `errors_24h` section for root cause; pause high-cost features until clear. |
+| Dispatcher pending | 6 orders (`GREAT_WORK_ALERT_MAX_ORDER_PENDING`) | Highest pending count per order type | Cancel or fast-track the offending order type. |
+| Dispatcher staleness | 8 h (`GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`) | Oldest order age | If repeated, escalate to narrative ops for manual resolution. |
+| Symposium debt | 30 influence (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT`) | Sum of outstanding symposium debt | Alert indicates players falling behind – consider rescheduling pledges or lowering penalties. |
+| Symposium reprisals | 3 per player (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS`) | Highest reprisal count in 24 h | Reach out to the affected player; consider waiving upcoming penalties. |
+| Investment concentration | 60 % share (`GREAT_WORK_ALERT_INVESTMENT_SHARE`) | Share of investments attributed to a single player | If alert, encourage rival factions or seed new long-tail sinks. |
+
+### Adjusting Thresholds
+
+Set environment variables in the Discord bot environment and restart the service. Example for a tighter queue limit:
+
+```bash
+export GREAT_WORK_ALERT_MAX_QUEUE=8
+```
+
+All thresholds are evaluated as warnings at 75 % of the configured value before escalating to alerts.
+
+## Economy & Long-Tail Signals
+
+The telemetry report now includes:
+
+- **Investments:** total influence invested over 24 h, top investors, and faction distribution. Use this to gauge whether sponsorship loops are active.
+- **Archive endowments:** amount donated, symposium debt repaid, and total reputation bonuses awarded.
+- **Symposium debt:** per-player debt with timestamps to monitor escalation windows.
+
+If investments concentrate on one player, consider introducing temporary incentives (e.g., discounted programs) for other factions.
+
+## Symposium Monitoring Workflow
+
+1. Check "Symposium Signals" in `/telemetry_report`.
+2. If debt exceeds threshold, ping the affected players and consider adding a catch-up grant.
+3. For repeated reprisals, verify pledge settings in `settings.yaml` and adjust `reprisal_threshold`/`penalty` if the cadence is too aggressive.
+4. Document follow-up actions in the ops log.
+
+## Incident Response Checklist
+
+1. Capture the relevant `/telemetry_report` output.
+2. Identify which health checks tripped and gather supporting metrics (LLM, queue, economy).
+3. Apply mitigations (pause digests, cancel orders, issue manual refunds) and note them in the ops channel.
+4. After mitigation, re-run `/telemetry_report` to confirm recovery.
+5. File an issue if configuration or code changes are needed.
+
+## Data Retention
+
+- Telemetry samples are retained for 30 days by default (see `TelemetryCollector.cleanup_old_data`).
+- Run `python -m great_work.telemetry --prune` (or call `cleanup_old_data`) monthly to keep the DB compact.
+
+## Quick Reference
+
+| Action | Command |
+| --- | --- |
+| Force telemetry flush | `/telemetry_report` (auto flush) |
+| View dispatcher backlog | `/gw_admin list_orders` |
+| Cancel stuck order | `/gw_admin cancel_order order_id:<id>` |
+| Pause game due to alerts | `/gw_admin pause_game reason:"telemetry alert"` |
+| Resume after fix | `/gw_admin resume_game` |
+
+Keep this runbook with the other ops docs so every on-call operator understands the guardrails and remediation steps.
