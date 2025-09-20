@@ -1326,6 +1326,21 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 lines.append(f"\n...and {len(matches) - 5} more matches")
             message = "\n".join(lines)
 
+        telemetry = get_telemetry()
+        try:
+            telemetry.track_game_progression(
+                "archive_lookup",
+                1.0,
+                player_id=str(interaction.user.id),
+                details={
+                    "search": headline_search,
+                    "matches": len(matches),
+                    "single_match": len(matches) == 1,
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry must not block responses
+            logger.debug("Failed to record archive lookup telemetry", exc_info=True)
+
         await interaction.response.send_message(message, ephemeral=True)
         await _flush_admin_notifications()
 
@@ -1370,6 +1385,54 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     lines.append(f"{icon} {label}: {detail}")
                 if len(checks) > 6:
                     lines.append(f"…plus {len(checks) - 6} more checks")
+
+            product = report.get('product_kpis', {})
+            if product:
+                engagement = product.get('engagement', {})
+                manifestos = product.get('manifestos', {})
+                archive = product.get('archive', {})
+                lines.append("\n**Product KPIs:**")
+                lines.append(
+                    "• Active players (24h): {players:.0f} | Avg cmds/player {avg:.1f}".format(
+                        players=engagement.get('active_players_24h', 0.0) or 0.0,
+                        avg=engagement.get('avg_commands_per_player_24h', 0.0) or 0.0,
+                    )
+                )
+                lines.append(
+                    "• Active players (7d): {players:.0f} | Avg cmds/player {avg:.1f}".format(
+                        players=engagement.get('active_players_7d', 0.0) or 0.0,
+                        avg=engagement.get('avg_commands_per_player_7d', 0.0) or 0.0,
+                    )
+                )
+                adoption_rate = manifestos.get('adoption_rate_7d', 0.0) or 0.0
+                lines.append(
+                    "• Manifesto adoption (7d): {rate:.0%} — {players:.0f} player(s), {events:.0f} events".format(
+                        rate=adoption_rate,
+                        players=manifestos.get('manifesto_players_7d', 0.0) or 0.0,
+                        events=manifestos.get('manifesto_events_7d', 0.0) or 0.0,
+                    )
+                )
+                archive_share = archive.get('engaged_share_7d', 0.0) or 0.0
+                lines.append(
+                    "• Archive lookups (7d): {events:.0f} — {players:.0f} player(s), reach {share:.0%}".format(
+                        events=archive.get('lookup_events_7d', 0.0) or 0.0,
+                        players=archive.get('lookup_players_7d', 0.0) or 0.0,
+                        share=archive_share,
+                    )
+                )
+
+            history_block = report.get('product_kpi_history', {}).get('daily', [])
+            if history_block:
+                lines.append("\n**KPI Trend (last 7 days):**")
+                for entry in history_block[-7:]:
+                    lines.append(
+                        "• {date}: players {players:.0f}, manifestos {m_events:.0f}, archive {a_events:.0f}".format(
+                            date=entry.get('date', '—'),
+                            players=entry.get('active_players', 0.0) or 0.0,
+                            m_events=entry.get('manifesto_events', 0.0) or 0.0,
+                            a_events=entry.get('archive_events', 0.0) or 0.0,
+                        )
+                    )
 
             # Command usage
             if report['command_stats']:

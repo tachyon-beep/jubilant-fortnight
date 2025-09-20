@@ -50,7 +50,7 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ### Implementation Plan
 1. **Done:** Instrument digest runtimes and layered press metrics (queue depth, scheduled release counts) in telemetry and surface them via `/telemetry_report`.
-2. **Next:** Expose the aggregates to the FastAPI dashboard container and finalise success KPI targets with product.
+2. **Done:** Exposed the aggregates to the FastAPI dashboard container and added CLI helpers for KPI/seasonal calibration; next calibrate success KPI targets with product observers.
 3. Introduce alert evaluation during command execution (error rate thresholds) and document escalation workflows.
 4. Document the workflow in `docs/implementation_plan.md` and operator guides.
 

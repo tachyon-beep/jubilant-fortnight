@@ -1,6 +1,6 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console)
+Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 
 ## 1. Scholar Lifecycle and Memory
 
@@ -18,7 +18,7 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 
 - **Design intent:** Each expedition type should apply tailored costs, prep modifiers, and depth-aware failure tables that yield sideways discoveries with gameplay repercussions such as faction swings, gossip, or queued orders.【F:docs/HLD.md†L57-L138】
 - **Implementation status:** Expedition launches deduct faction influence, persist preparation details, and an `ExpeditionResolver` rolls d100, applies modifiers, consults depth-specific failure tables, and now draws from a data-driven sideways catalogue to emit faction shifts, theories, queued orders, and tagged follow-ups that the dispatcher applies downstream.【F:great_work/service.py†L170-L392】【F:great_work/expeditions.py†L60-L213】【F:great_work/models.py†L122-L206】【F:great_work/data/sideways_effects.yaml†L1-L214】【F:great_work/service.py†L4734-L4999】
-- **Gap:** Landmark preparation still collapses into a single block of text and the sideways effect catalogue, while broader, lacks mechanical variety (e.g., faction/tag consequences) tied to the new vignette tags; extend prep copy and hook vignette metadata into faction, theory, or mentorship follow-ons to meet the design’s "adjacent unlock" expectations.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L120-L320】【F:great_work/data/sideways_vignettes.yaml†L1-L180】
+- **Gap:** Landmark preparation still collapses into a single block of text and the sideways effect catalogue, while broader, needs richer prep copy; the vignette tag system now emits faction shifts, theories, and opportunities, so the remaining work is bespoke landmark prep text plus tuning the new tag-driven mechanics.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L120-L340】【F:great_work/data/sideways_vignettes.yaml†L1-L180】
 
 ### 3.1 Great Projects - Status
 
@@ -36,7 +36,7 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 
 - **Design intent:** Every move should produce persona-driven press artefacts that persist in a public archive—bulletins, manifestos, discoveries, retractions, gossip, recruitment notes, defection wires—and stay publicly accessible.【F:docs/HLD.md†L86-L354】
 - **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, symposium, mentorship, recruitment, table-talk, sidecast, and admin flows now queue delayed follow-ups via `MultiPressGenerator`, with staggered fast/long cadences delivering gossip, faction briefings, commons roundups, mentorship bulletins, sidecast spotlights, defection epilogues, and administrative updates alongside the primary artefact; tone packs support rotating headlines/blurbs per setting, YAML libraries drive recruitment/table-talk/sidecast copy, deep-prep sideways vignettes now dispatch layered press, and digest ticks mint highlight blurbs from the scheduled press queue.【F:great_work/service.py†L170-L392】【F:great_work/service.py†L680-L744】【F:great_work/service.py†L1013-L1106】【F:great_work/service.py†L1996-L2470】【F:great_work/multi_press.py†L620-L960】【F:great_work/data/recruitment_press.yaml†L1-L48】【F:great_work/data/table_talk_press.yaml†L1-L24】【F:great_work/data/sidecast_arcs.yaml†L1-L60】【F:great_work/data/defection_epilogues.yaml†L1-L32】【F:great_work/data/sideways_vignettes.yaml†L1-L36】【F:great_work/press_tone.py†L1-L102】【F:great_work/state.py†L1-L520】【F:great_work/discord_bot.py†L562-L940】【F:great_work/web_archive.py†L416-L520】
-- **Gap:** The new YAML libraries and writing guide broaden coverage, yet we still lack automated tone/safety guardrails (secondary LLM or moderation review) and an explicit process to validate new packs before deployment; the new sidecar plan (`docs/SAFETY_PLAN.md`) captures the Guardian moderation architecture, but implementation remains outstanding.【F:great_work/llm_client.py†L40-L180】【F:docs/WRITING_GUIDE.md†L1-L120】【F:docs/internal/PHASE3_POLISH_DESIGN.md†L80-L110】【F:docs/SAFETY_PLAN.md†L1-L140】
+- **Gap:** The new YAML libraries and writing guide broaden coverage, and Guardian moderation now guards both player input and generated press; the remaining work is a validation workflow for new tone packs and turning informational commands into public artefacts so everything lands in shared channels.【F:great_work/moderation.py†L1-L240】【F:great_work/llm_client.py†L40-L180】【F:docs/WRITING_GUIDE.md†L1-L120】
 
 ### 5.1 Public archive availability
 
@@ -78,12 +78,12 @@ Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console
 
 - **Design intent:** Generate press and reactions through persona-driven LLM prompts with batching and safety controls.【F:docs/HLD.md†L318-L369】
 - **Implementation status:** The LLM client now drives expeditions, defection negotiations, symposium updates, mentorship beats, theory submissions, table-talk posts, and admin notices with persona metadata, retry scheduling, and blocklist safeguards; layered press metrics feed telemetry and tests run in mock mode to verify prompts and pause behaviour.【F:great_work/service.py†L300-L1080】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/llm_client.py†L1-L240】【F:tests/test_game_service.py†L80-L196】【F:tests/test_symposium.py†L20-L69】
-- **Gap:** The moderation layer is still limited to a static word list, there's no secondary guard-LLM or redaction workflow, and deeper operator guidance for pause/resume escalation still lives in internal notes pending publication.【F:great_work/llm_client.py†L40-L140】【F:docs/HLD.md†L318-L369】
+- **Gap:** Guardian moderation now runs pre/post passes via the sidecar/local pipeline and the safety plan documents the workflow; next steps are calibrating category thresholds, capturing allowlist/override tooling, and extending operator runbooks for incident response.【F:great_work/moderation.py†L1-L240】【F:great_work/service.py†L320-L520】【F:docs/SAFETY_PLAN.md†L20-L80】
 
 ## Summary of Major Gaps
 
 1. Seasonal commitments, faction projects, faction investments, and archive endowments now anchor long-tail pressure; next quantify balance via telemetry (alert thresholds, dashboards) and decide how relationship deltas unlock additional late-game content.
 2. Validate new faction investment/endowment knobs against live telemetry so late-game influence pressure stays meaningful without overwhelming players; fold findings into the economy playbook.
-3. Symposium scoring now surfaces weighting math and reprisal cadence; keep tuning heuristics with the new telemetry guardrails and iterate on the published runbook as playtests surface edge cases.【F:docs/TELEMETRY_RUNBOOK.md†L1-L120】
-4. Telemetry guardrails now emit webhook alerts and the dashboard exposes dispatcher filters + CSV export; remaining follow-up is product-facing KPIs and tying alerts into broader ops tooling before pilots.
+3. Symposium scoring now surfaces weighting math and reprisal cadence; keep tuning heuristics with the new telemetry guardrails and iterate on the published runbook as playtests surface edge cases.【F:docs/TELEMETRY_RUNBOOK.md†L1-L140】
+4. Telemetry guardrails (including seasonal commitment alerts) now emit webhook/email notifications, support multi-webhook fan-out for on-call channels, surface product KPIs (active player counts, manifesto adoption, archive reach), and chart daily history in `/telemetry_report` + the dashboard. Operators can run `python -m great_work.tools.recommend_kpi_thresholds` for alert calibration and `python -m great_work.tools.recommend_seasonal_settings` to size seasonal defaults; remaining follow-up is richer visualisation (sparklines/percentiles) before pilots.
 5. Static archives now auto-export, mirror into GitHub Pages, prune old snapshots, and alert operators when disk usage crosses the configured threshold.

@@ -24,7 +24,12 @@ GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS=4000    # alert if average LLM latency excee
 GREAT_WORK_ALERT_LLM_FAILURE_RATE=0.25      # alert if LLM failures exceed 25%
 GREAT_WORK_ALERT_MAX_ORDER_PENDING=6        # alert if dispatcher backlog exceeds 6 orders
 GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS=8      # alert if any pending order ages past 8h
+GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS=3       # alert if fewer than 3 players issue commands in 24h
+GREAT_WORK_ALERT_MIN_MANIFESTO_RATE=0.5     # alert if <50% of active players publish manifestos over 7d
+GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS=1      # alert if the archive sees no lookups within 7d
+GREAT_WORK_ALERT_MAX_SEASONAL_DEBT=25       # alert if seasonal commitments exceed 25 influence outstanding
 # Optional outbound routing (leave blank to disable)
+# GREAT_WORK_ALERT_WEBHOOK_URLS=https://ops.example/webhook,https://oncall.example/webhook
 # GREAT_WORK_ALERT_WEBHOOK_URL=
 # GREAT_WORK_ALERT_COOLDOWN_SECONDS=300
 # GREAT_WORK_ALERT_MUTED_EVENTS=
@@ -108,6 +113,9 @@ The `/telemetry_report` command now opens with a **Health Summary**, mapping key
 - **Order staleness** – If any pending order ages past the staleness threshold, investigate why it has
   not resolved (e.g., missing data, paused scheduler) and consider canceling/re-queuing. Admins receive a
   reminder once the stale age threshold is crossed.
+- **Seasonal debt** – When outstanding seasonal commitments exceed the alert ceiling, review current pledges,
+  encourage manual repayments, or lower the base cost/reprisal penalties via the new calibration helper before
+  reprisals cascade.
 
 ### Dispatcher Moderation
 
@@ -117,6 +125,32 @@ The `/telemetry_report` command now opens with a **Health Summary**, mapping key
   emits telemetry, and notifies the admin channel. Cancelled orders no longer execute during the digest tick.
 
 Update the environment variables to tune when alerts trigger, and capture any operator-specific playbook additions in your internal notes.
+Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS` to 2–3 for tiny playtests or temporarily mute manifesto/archive checks while onboarding new groups.
+
+### KPI Calibration Workflow
+
+1. Export recent telemetry (or run the server with `telemetry.db` mounted) and execute:
+
+   ```bash
+   python -m great_work.tools.recommend_kpi_thresholds --db telemetry.db
+   ```
+
+   The script samples command usage, manifesto adoption, and archive lookups and prints recommended environment variables (scaled from recent activity). Use the `--engagement-days`, `--manifesto-days`, and `--archive-days` flags to widen or narrow the analysis window.
+2. Copy the suggested values into your deployment environment (`GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS`, etc.) and redeploy or reload the bot.
+3. Configure multiple alert targets (e.g., Discord plus on-call) by setting `GREAT_WORK_ALERT_WEBHOOK_URLS` with a comma-separated list. The router fans out to each endpoint while keeping the legacy `GREAT_WORK_ALERT_WEBHOOK_URL` for single-target setups.
+4. Send a smoke test once the environment variables are live (`python -m great_work.tools.simple_alert_webhook` locally or a curl POST) to confirm alerts land in both channels.
+
+### Seasonal Commitment Tuning
+
+1. Analyse recent seasonal debt with:
+
+   ```bash
+   python -m great_work.tools.recommend_seasonal_settings --db telemetry.db --days 30
+   ```
+
+   Review the average/median outstanding debt and the suggested knobs (base cost, reprisal threshold, `GREAT_WORK_ALERT_MAX_SEASONAL_DEBT`).
+2. Update `settings.yaml` (or environment overrides) with the recommended values so seasonal pledges clear on schedule without generating runaway debt.
+3. Adjust `GREAT_WORK_ALERT_MAX_SEASONAL_DEBT` to match the suggested ceiling so the new health check triggers before reprisals spiral.
 
 ## 4. Archive Publishing
 

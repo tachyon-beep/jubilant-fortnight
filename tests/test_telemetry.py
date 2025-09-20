@@ -13,6 +13,7 @@ from great_work.telemetry import (
     get_telemetry,
     track_duration
 )
+from great_work.tools.recommend_seasonal_settings import recommend_settings as recommend_seasonal_settings
 
 
 def test_metric_event_creation():
@@ -351,6 +352,23 @@ def test_alert_router_email_delivery(monkeypatch):
     assert DummySMTP.logged_in is True
 
 
+def test_alert_router_multiple_webhooks(monkeypatch):
+    """Router should fan out to every configured webhook URL."""
+
+    urls_called = []
+
+    def fake_post(self, payload, url):
+        urls_called.append(url)
+        return True
+
+    monkeypatch.setattr(AlertRouter, "_post_webhook", fake_post, raising=False)
+
+    router = AlertRouter(webhook_urls=["https://ops.example", "https://alerts.example"])
+    router.notify(event="test", message="Hello", severity="warning")
+
+    assert urls_called == ["https://ops.example", "https://alerts.example"]
+
+
 def test_digest_summary():
     """Digest summaries should surface runtime and queue size."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -397,6 +415,257 @@ def test_flush_metrics():
         stats = collector.get_command_stats()
         assert len(stats) == 5
         assert "command_0" in stats
+
+
+def test_product_kpis_and_health(monkeypatch):
+    """Product KPI aggregation should inform health checks."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "kpi.db")
+
+        # Two active players issue commands within the window.
+        collector.track_command(
+            command_name="expedition",
+            player_id="player_a",
+            guild_id="guild",
+            success=True,
+        )
+        collector.track_command(
+            command_name="symposium",
+            player_id="player_b",
+            guild_id="guild",
+            success=True,
+        )
+
+        # Only one of them publishes a manifesto, and one archive lookup occurs.
+        collector.track_game_progression(
+            event_name="manifesto_generated",
+            value=1.0,
+            player_id="player_a",
+            details={"expedition_type": "field"},
+        )
+        collector.track_game_progression(
+            event_name="archive_lookup",
+            value=1.0,
+            player_id="player_b",
+            details={"search": "Code"},
+        )
+
+        collector.flush()
+
+        kpis = collector.get_product_kpis()
+        engagement = kpis["engagement"]
+        assert engagement["active_players_24h"] == 2.0
+        assert engagement["command_count_24h"] == 2.0
+        manifestos = kpis["manifestos"]
+        assert manifestos["manifesto_players_7d"] == 1.0
+        archive = kpis["archive"]
+        assert archive["lookup_players_7d"] == 1.0
+
+        # Configure thresholds high enough to trigger alerts for the sample data.
+        monkeypatch.setenv("GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS", "4")
+        monkeypatch.setenv("GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", "0.9")
+        monkeypatch.setenv("GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", "3")
+
+        report_stub = {
+            "digest_health_24h": {"total_digests": 0},
+            "queue_depth_24h": {},
+            "llm_activity_24h": {},
+            "order_backlog_24h": {},
+            "symposium": {"scoring": {}, "debts": [], "reprisals": []},
+            "economy": {"investments": {}, "endowments": {}, "commitments": {}},
+            "product_kpis": kpis,
+        }
+
+        health = collector.evaluate_health(report_stub)
+        metrics = {entry["metric"]: entry["status"] for entry in health["checks"]}
+
+        assert metrics.get("active_players") == "alert"
+    assert metrics.get("manifesto_adoption") == "alert"
+    assert metrics.get("archive_usage") == "alert"
+
+
+def test_product_kpi_history():
+    """Daily KPI history should capture per-day trends."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "history.db"
+        collector = TelemetryCollector(db_path)
+        collector.flush()
+
+        import sqlite3
+        import time
+
+        now = time.time()
+
+        with sqlite3.connect(db_path) as conn:
+            for day_offset in range(3):
+                ts = now - day_offset * 86400
+                conn.execute(
+                    """
+                        INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ts,
+                        MetricType.COMMAND_USAGE.value,
+                        "command",
+                        1.0,
+                        json.dumps({"player_id": f"player_{day_offset}"}),
+                        json.dumps({}),
+                    ),
+                )
+                conn.execute(
+                    """
+                        INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ts,
+                        MetricType.GAME_PROGRESSION.value,
+                        "manifesto_generated",
+                        1.0,
+                        json.dumps({"player_id": f"player_{day_offset}"}),
+                        json.dumps({}),
+                    ),
+                )
+                conn.execute(
+                    """
+                        INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ts,
+                        MetricType.GAME_PROGRESSION.value,
+                        "archive_lookup",
+                        1.0,
+                        json.dumps({"player_id": f"player_{day_offset}"}),
+                        json.dumps({}),
+                    ),
+                )
+            conn.commit()
+
+        history = collector.get_product_kpi_history(days=7)
+        daily = history["daily"]
+        assert len(daily) == 3
+        assert daily[-1]["active_players"] == 1
+        assert daily[-1]["manifesto_events"] == 1
+        assert daily[-1]["archive_events"] == 1
+
+
+def test_recommend_kpi_thresholds(tmp_path):
+    """Threshold recommendation script should reflect recorded telemetry."""
+    db_path = tmp_path / "telemetry.db"
+    collector = TelemetryCollector(db_path)
+    collector.flush()
+
+    import sqlite3
+    import time
+    from great_work.tools.recommend_kpi_thresholds import recommend_thresholds
+
+    now = time.time()
+
+    def _insert(ts, metric_type, name, value, tags, metadata):
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (ts, metric_type, name, value, json.dumps(tags), json.dumps(metadata)),
+            )
+            conn.commit()
+
+    # Three days of command usage across varying player counts.
+    daily_players = [
+        ["alice", "bob", "carol"],
+        ["alice", "bob"],
+        ["alice", "dave", "eve"],
+    ]
+
+    for offset, players in enumerate(daily_players):
+        ts = now - offset * 86400 + 5
+        for player in players:
+            _insert(
+                ts,
+                MetricType.COMMAND_USAGE.value,
+                "command_test",
+                1.0,
+                {"player_id": player},
+                {},
+            )
+
+    # Manifesto adoption for two players.
+    for player in ("alice", "carol"):
+        _insert(
+            now - 3600,
+            MetricType.GAME_PROGRESSION.value,
+            "manifesto_generated",
+            1.0,
+            {"player_id": player},
+            {},
+        )
+
+    # Six archive lookups over the window.
+    for idx in range(6):
+        _insert(
+            now - idx * 3600,
+            MetricType.GAME_PROGRESSION.value,
+            "archive_lookup",
+            1.0,
+            {"player_id": "alice"},
+            {},
+        )
+
+    recommendations = recommend_thresholds(
+        db_path,
+        engagement_days=7,
+        manifesto_days=14,
+        archive_days=14,
+    )
+
+    assert recommendations["GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS"] == pytest.approx(1.87, rel=0.01)
+    assert recommendations["GREAT_WORK_ALERT_MIN_MANIFESTO_RATE"] == 0.32
+    assert recommendations["GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS"] == 1.0
+
+
+def test_recommend_seasonal_settings(tmp_path):
+    """Seasonal recommendation helper summarises debts and thresholds."""
+    db_path = tmp_path / "telemetry.db"
+    collector = TelemetryCollector(db_path)
+    collector.flush()
+
+    import sqlite3
+    import time
+
+    now = time.time()
+    with sqlite3.connect(db_path) as conn:
+        for idx, debt in enumerate((6.0, 4.0, 2.0)):
+            conn.execute(
+                """
+                    INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    now - idx * 86400,
+                    MetricType.GAME_PROGRESSION.value,
+                    "seasonal_commitment_status",
+                    debt,
+                    json.dumps({"player_id": f"player_{idx}"}),
+                    json.dumps(
+                        {
+                            "remaining_debt": debt,
+                            "threshold": 4 + idx,
+                            "days_remaining": 14 - idx,
+                        }
+                    ),
+                ),
+            )
+        conn.commit()
+
+    summary = recommend_seasonal_settings(db_path, days=14)
+    assert summary["players_sampled"] == 3
+    assert summary["average_debt"] == pytest.approx(4.0, rel=0.1)
+    assert summary["suggested_base_cost"] >= 1.0
+    assert summary["suggested_alert"] >= 10.0
 
 
 def test_auto_flush():

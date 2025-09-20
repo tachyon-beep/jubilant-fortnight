@@ -1064,6 +1064,254 @@ class TelemetryCollector:
                 )
         return records
 
+    def get_product_kpis(
+        self,
+        *,
+        engagement_hours: int = 24,
+        engagement_long_days: int = 7,
+        manifesto_window_days: int = 7,
+        archive_window_days: int = 7,
+    ) -> Dict[str, Any]:
+        """Compute product-facing KPIs for engagement, manifestos, and archive usage."""
+
+        now = time.time()
+        engagement_start = now - (engagement_hours * 3600)
+        engagement_long_start = now - (engagement_long_days * 86400)
+        manifesto_start = now - (manifesto_window_days * 86400)
+        archive_start = now - (archive_window_days * 86400)
+
+        def _ts_to_iso(ts: Optional[float]) -> Optional[str]:
+            if ts is None:
+                return None
+            try:
+                return datetime.fromtimestamp(ts).isoformat()
+            except (TypeError, ValueError, OSError):
+                return None
+
+        with sqlite3.connect(self.db_path) as conn:
+            engagement_short_row = conn.execute(
+                """
+                    SELECT
+                        COUNT(*) AS command_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.COMMAND_USAGE.value,
+                    engagement_start,
+                ),
+            ).fetchone()
+
+            engagement_long_row = conn.execute(
+                """
+                    SELECT
+                        COUNT(*) AS command_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.COMMAND_USAGE.value,
+                    engagement_long_start,
+                ),
+            ).fetchone()
+
+            manifesto_row = conn.execute(
+                """
+                    SELECT
+                        COALESCE(SUM(value), 0) AS total_value,
+                        COUNT(*) AS event_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "manifesto_generated",
+                    manifesto_start,
+                ),
+            ).fetchone()
+
+            archive_row = conn.execute(
+                """
+                    SELECT
+                        COALESCE(SUM(value), 0) AS total_value,
+                        COUNT(*) AS event_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "archive_lookup",
+                    archive_start,
+                ),
+            ).fetchone()
+
+        engagement_short_commands = float(engagement_short_row[0] or 0.0)
+        engagement_short_players = float(engagement_short_row[1] or 0.0)
+        engagement_short_last = _ts_to_iso(engagement_short_row[2])
+
+        engagement_long_commands = float(engagement_long_row[0] or 0.0)
+        engagement_long_players = float(engagement_long_row[1] or 0.0)
+        engagement_long_last = _ts_to_iso(engagement_long_row[2])
+
+        manifesto_total = float(manifesto_row[0] or 0.0)
+        manifesto_events = float(manifesto_row[1] or 0.0)
+        manifesto_unique_players = float(manifesto_row[2] or 0.0)
+        manifesto_last = _ts_to_iso(manifesto_row[3])
+
+        archive_total = float(archive_row[0] or 0.0)
+        archive_events = float(archive_row[1] or 0.0)
+        archive_unique_players = float(archive_row[2] or 0.0)
+        archive_last = _ts_to_iso(archive_row[3])
+
+        avg_cmds_short = (
+            engagement_short_commands / engagement_short_players
+            if engagement_short_players > 0
+            else 0.0
+        )
+        avg_cmds_long = (
+            engagement_long_commands / engagement_long_players
+            if engagement_long_players > 0
+            else 0.0
+        )
+
+        adoption_rate = (
+            manifesto_unique_players / engagement_long_players
+            if engagement_long_players > 0
+            else 0.0
+        )
+
+        archive_share = (
+            archive_unique_players / engagement_long_players
+            if engagement_long_players > 0
+            else 0.0
+        )
+
+        return {
+            "engagement": {
+                "window_hours": engagement_hours,
+                "long_window_days": engagement_long_days,
+                "active_players_24h": engagement_short_players,
+                "command_count_24h": engagement_short_commands,
+                "avg_commands_per_player_24h": avg_cmds_short,
+                "active_players_7d": engagement_long_players,
+                "command_count_7d": engagement_long_commands,
+                "avg_commands_per_player_7d": avg_cmds_long,
+                "last_command_at": engagement_short_last or engagement_long_last,
+            },
+            "manifestos": {
+                "window_days": manifesto_window_days,
+                "manifesto_events_7d": manifesto_events,
+                "manifesto_value_7d": manifesto_total,
+                "manifesto_players_7d": manifesto_unique_players,
+                "adoption_rate_7d": adoption_rate,
+                "last_manifesto_at": manifesto_last,
+            },
+            "archive": {
+                "window_days": archive_window_days,
+                "lookup_events_7d": archive_events,
+                "lookup_value_7d": archive_total,
+                "lookup_players_7d": archive_unique_players,
+                "engaged_share_7d": archive_share,
+                "last_lookup_at": archive_last,
+            },
+        }
+
+    def get_product_kpi_history(self, days: int = 30) -> Dict[str, Any]:
+        """Return daily KPI history for the given window (UTC)."""
+
+        import sqlite3
+        import time
+
+        now = time.time()
+        start_time = now - (days * 86400)
+
+        def _day(ts: float) -> Optional[str]:
+            from datetime import datetime, timezone
+
+            try:
+                return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+            except (TypeError, ValueError, OSError):
+                return None
+
+        with sqlite3.connect(self.db_path) as conn:
+            engagement_rows = list(
+                conn.execute(
+                    """
+                        SELECT timestamp, json_extract(tags, '$.player_id')
+                        FROM metrics
+                        WHERE metric_type = ? AND timestamp >= ?
+                    """,
+                    (MetricType.COMMAND_USAGE.value, start_time),
+                )
+            )
+            manifesto_rows = list(
+                conn.execute(
+                    """
+                        SELECT timestamp, json_extract(tags, '$.player_id')
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                    """,
+                    (MetricType.GAME_PROGRESSION.value, "manifesto_generated", start_time),
+                )
+            )
+            archive_rows = list(
+                conn.execute(
+                    """
+                        SELECT timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                    """,
+                    (MetricType.GAME_PROGRESSION.value, "archive_lookup", start_time),
+                )
+            )
+
+        daily_players: Dict[str, set[str]] = defaultdict(set)
+        for ts, player in engagement_rows:
+            day = _day(ts)
+            if day and player:
+                daily_players[day].add(str(player))
+
+        daily_manifesto_players: Dict[str, set[str]] = defaultdict(set)
+        daily_manifesto_events: Dict[str, int] = defaultdict(int)
+        for ts, player in manifesto_rows:
+            day = _day(ts)
+            if day:
+                daily_manifesto_events[day] += 1
+                if player:
+                    daily_manifesto_players[day].add(str(player))
+
+        daily_archive_events: Dict[str, int] = defaultdict(int)
+        for (ts,) in archive_rows:
+            day = _day(ts)
+            if day:
+                daily_archive_events[day] += 1
+
+        all_days = sorted({*daily_players.keys(), *daily_manifesto_events.keys(), *daily_archive_events.keys()})
+        history = []
+        for day in all_days:
+            history.append(
+                {
+                    "date": day,
+                    "active_players": float(len(daily_players.get(day, set()))),
+                    "manifesto_players": float(len(daily_manifesto_players.get(day, set()))),
+                    "manifesto_events": float(daily_manifesto_events.get(day, 0)),
+                    "archive_events": float(daily_archive_events.get(day, 0)),
+                }
+            )
+
+        return {
+            "window_days": days,
+            "daily": history,
+        }
+
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
         report = {
@@ -1082,6 +1330,8 @@ class TelemetryCollector:
             "order_backlog_24h": self.get_order_backlog_summary(24),
             "symposium": self.get_symposium_metrics(24),
             "economy": self.get_economy_metrics(24),
+            "product_kpis": self.get_product_kpis(),
+            "product_kpi_history": self.get_product_kpi_history(),
         }
 
         # Add overall statistics
@@ -1125,6 +1375,10 @@ class TelemetryCollector:
             "symposium_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT", 30.0),
             "symposium_reprisal": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS", 3.0),
             "investment_share": _get_env_float("GREAT_WORK_ALERT_INVESTMENT_SHARE", 0.6),
+            "active_players": _get_env_float("GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS", 3.0),
+            "manifesto_rate": _get_env_float("GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", 0.5),
+            "archive_lookups": _get_env_float("GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", 1.0),
+            "seasonal_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SEASONAL_DEBT", 25.0),
         }
 
         checks: List[Dict[str, Any]] = []
@@ -1155,6 +1409,20 @@ class TelemetryCollector:
                     source="health_check",
                     reason=detail,
                 )
+
+        def _status_lower_buffer(
+            value: Optional[float],
+            threshold: float,
+            *,
+            warning_scale: float = 1.2,
+        ) -> Optional[str]:
+            if value is None or threshold <= 0:
+                return None
+            if value < threshold:
+                return "alert"
+            if value < threshold * warning_scale:
+                return "warning"
+            return "ok"
 
         if digest_stats.get("total_digests", 0) > 0:
             max_runtime = digest_stats.get("max_duration_ms") or 0.0
@@ -1335,6 +1603,78 @@ class TelemetryCollector:
                 observed=top_share,
                 threshold=thresholds["investment_share"],
             )
+
+        product_kpis = data.get("product_kpis") or self.get_product_kpis()
+        if product_kpis:
+            engagement = product_kpis.get("engagement", {})
+            active_players_24h = float(engagement.get("active_players_24h", 0.0) or 0.0)
+            window_hours = int(engagement.get("window_hours", 24))
+            active_status = _status_lower_buffer(
+                active_players_24h,
+                thresholds["active_players"],
+                warning_scale=1.15,
+            )
+            _register(
+                "active_players",
+                f"Active players ({window_hours}h)",
+                active_status,
+                f"{active_players_24h:.0f} unique players issued commands",
+                observed=active_players_24h,
+                threshold=thresholds["active_players"],
+                window=f"{window_hours}h",
+            )
+
+            manifesto = product_kpis.get("manifestos", {})
+            adoption_rate = manifesto.get("adoption_rate_7d")
+            if adoption_rate is not None:
+                adoption_rate = float(adoption_rate or 0.0)
+                adoption_status = _status_lower_buffer(
+                    adoption_rate,
+                    thresholds["manifesto_rate"],
+                    warning_scale=1.1,
+                )
+                _register(
+                    "manifesto_adoption",
+                    "Manifesto adoption (7d)",
+                    adoption_status,
+                    f"{adoption_rate:.0%} of active players published manifestos",
+                    observed=adoption_rate,
+                    threshold=thresholds["manifesto_rate"],
+                    window=f"{int(manifesto.get('window_days', 7))}d",
+                )
+
+            archive = product_kpis.get("archive", {})
+            lookup_events = float(archive.get("lookup_events_7d", 0.0) or 0.0)
+            archive_status = _status_lower_buffer(
+                lookup_events,
+                thresholds["archive_lookups"],
+                warning_scale=1.3,
+            )
+            detail = f"{lookup_events:.0f} archive permalink lookups"
+            engaged_share = archive.get("engaged_share_7d")
+            if engaged_share is not None:
+                detail += f" ({float(engaged_share or 0.0):.0%} of active players)"
+            _register(
+                "archive_usage",
+                "Archive lookups (7d)",
+                archive_status,
+                detail,
+                observed=lookup_events,
+                threshold=thresholds["archive_lookups"],
+                window=f"{int(archive.get('window_days', 7))}d",
+            )
+
+        commitments = economy_summary.get("commitments", {})
+        seasonal_debt_total = float(commitments.get("total_outstanding", 0.0) or 0.0)
+        seasonal_status = _status_upper(seasonal_debt_total, thresholds["seasonal_debt"])
+        _register(
+            "seasonal_debt",
+            "Seasonal commitments outstanding",
+            seasonal_status,
+            f"Total outstanding {seasonal_debt_total:.1f} influence",
+            observed=seasonal_debt_total,
+            threshold=thresholds["seasonal_debt"],
+        )
 
         return {
             "checks": checks,

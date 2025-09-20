@@ -67,6 +67,11 @@ def build_context(report: dict) -> dict:
     scoring_top = symposium_scoring.get("top", [])
     symposium_debts = symposium.get("debts", [])
     symposium_reprisal = symposium.get("reprisals", [])
+    product_kpis = report.get("product_kpis", {})
+    engagement = product_kpis.get("engagement", {})
+    manifestos = product_kpis.get("manifestos", {})
+    archive = product_kpis.get("archive", {})
+    product_history = report.get("product_kpi_history", {})
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
@@ -81,6 +86,11 @@ def build_context(report: dict) -> dict:
         "symposium_debts": symposium_debts,
         "symposium_reprisal": symposium_reprisal,
         "order_types": order_types,
+        "product_engagement": engagement,
+        "product_manifestos": manifestos,
+        "product_archive": archive,
+        "product_history": product_history.get("daily", []),
+        "product_history_window": product_history.get("window_days", 0),
     }
     return context
 

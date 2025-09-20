@@ -32,6 +32,7 @@ class AlertRouter:
 
     def __init__(
         self,
+        webhook_urls: Optional[List[str]] = None,
         webhook_url: Optional[str] = None,
         *,
         timeout: float = 5.0,
@@ -44,7 +45,10 @@ class AlertRouter:
         email_recipients: Optional[List[str]] = None,
         email_use_tls: bool = True,
     ) -> None:
-        self._webhook_url = webhook_url
+        urls = webhook_urls or []
+        if webhook_url:
+            urls.append(webhook_url)
+        self._webhook_urls = [value for value in urls if value]
         self._timeout = timeout
         self._muted_events = muted_events or set()
         self._lock = threading.Lock()
@@ -81,8 +85,8 @@ class AlertRouter:
 
         sent = False
 
-        if self._webhook_url:
-            sent = self._post_webhook(payload)
+        for webhook in self._webhook_urls:
+            sent = self._post_webhook(payload, webhook) or sent
 
         if self._email_host:
             try:
@@ -97,7 +101,7 @@ class AlertRouter:
             )
         return sent
 
-    def _post_webhook(self, payload: AlertPayload) -> bool:
+    def _post_webhook(self, payload: AlertPayload, webhook_url: str) -> bool:
         """Send the alert payload to the configured webhook endpoint."""
 
         body = {
@@ -118,7 +122,7 @@ class AlertRouter:
         data = json.dumps(body).encode("utf-8")
 
         request = urllib.request.Request(
-            self._webhook_url,
+            webhook_url,
             data=data,
             headers={"Content-Type": "application/json"},
         )
@@ -181,7 +185,9 @@ def get_alert_router() -> AlertRouter:
 
     global _alert_router
     if _alert_router is None:
-        webhook_url = os.getenv("GREAT_WORK_ALERT_WEBHOOK_URL")
+        webhook_urls_env = os.getenv("GREAT_WORK_ALERT_WEBHOOK_URLS", "")
+        webhook_urls = [value.strip() for value in webhook_urls_env.split(",") if value.strip()]
+        fallback_webhook = os.getenv("GREAT_WORK_ALERT_WEBHOOK_URL")
         timeout = float(os.getenv("GREAT_WORK_ALERT_TIMEOUT", "5") or 5)
         muted = {
             value.strip()
@@ -197,7 +203,8 @@ def get_alert_router() -> AlertRouter:
         email_recipients = [value.strip() for value in recipients_raw.split(",") if value.strip()]
         email_use_tls = os.getenv("GREAT_WORK_ALERT_EMAIL_STARTTLS", "true").lower() not in {"false", "0", "off"}
         _alert_router = AlertRouter(
-            webhook_url=webhook_url,
+            webhook_urls=webhook_urls,
+            webhook_url=fallback_webhook,
             timeout=timeout,
             muted_events=muted,
             email_host=email_host,

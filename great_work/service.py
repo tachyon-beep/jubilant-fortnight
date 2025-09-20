@@ -990,6 +990,18 @@ class GameService:
             extra_context=context_payload,
         )
         self._archive_press(press, order.timestamp)
+        try:
+            self._telemetry.track_game_progression(
+                "manifesto_generated",
+                1.0,
+                player_id=player_id,
+                details={
+                    "expedition_type": expedition_type,
+                    "prep_depth": prep_depth,
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry must not block gameplay
+            logger.debug("Failed to record manifesto telemetry", exc_info=True)
         return press
 
     def launch_expedition(
