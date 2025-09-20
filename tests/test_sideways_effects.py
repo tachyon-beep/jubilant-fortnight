@@ -1,4 +1,5 @@
 """Tests for sideways discovery mechanical effects."""
+import os
 import pytest
 from datetime import datetime, timezone
 from typing import List
@@ -12,7 +13,7 @@ from great_work.models import (
     SidewaysEffectType,
 )
 from great_work.rng import DeterministicRNG
-from great_work.service import GameService
+from great_work.service import GameService, ExpeditionOrder
 from great_work.state import GameState
 
 
@@ -27,6 +28,7 @@ def test_state(tmp_path):
 def test_service(tmp_path):
     """Create a test game service."""
     db_path = tmp_path / "test.db"
+    os.environ.setdefault("LLM_MODE", "mock")
     return GameService(db_path)
 
 
@@ -381,3 +383,58 @@ class TestIntegrationWithExpeditions:
         assert player is not None
         assert player.reputation >= -50
         assert player.reputation <= 50
+
+def test_schedule_sideways_followups_enqueue_press_and_order(test_service):
+    """Scheduling sideways followups should queue press and dispatcher orders."""
+
+    test_service.ensure_player("eve")
+    order = ExpeditionOrder(
+        code="EXP-FOLLOW",
+        player_id="eve",
+        expedition_type="think_tank",
+        objective="Test followups",
+        team=[],
+        funding=[],
+        preparation=ExpeditionPreparation(),
+        prep_depth="shallow",
+        confidence=ConfidenceLevel.SUSPECT,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    followups = {
+        "press": [
+            {
+                "delay_minutes": 15,
+                "type": "academic_bulletin",
+                "headline": "Follow-up bulletin",
+                "body": "Additional notes will circulate via the archive.",
+            }
+        ],
+        "orders": [
+            {
+                "type": "press_highlight",
+                "delay_minutes": 30,
+                "payload": {"note": "Sideways follow-up"},
+            }
+        ],
+    }
+
+    initial_press = test_service.state.count_queued_press()
+    initial_orders = test_service.state.list_orders(order_type="press_highlight")
+
+    test_service._schedule_sideways_followups(
+        order=order,
+        followups=followups,
+        timestamp=datetime.now(timezone.utc),
+        tags=["archives"],
+    )
+
+    assert test_service.state.count_queued_press() == initial_press + 1
+    queued_payload = test_service.state.list_queued_press()[-1][2]
+    assert queued_payload["metadata"]["tags"] == ["archives"]
+
+    orders = test_service.state.list_orders(order_type="press_highlight")
+    assert len(orders) == len(initial_orders) + 1
+    latest_order = orders[-1]
+    assert latest_order["payload"]["tags"] == ["archives"]
+    assert latest_order["payload"]["source"] == "sideways_followup"

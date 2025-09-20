@@ -1,0 +1,220 @@
+sideways_effects:
+  - id: forgotten_thesis
+    match:
+      contains: "forgotten thesis"
+    applies_to:
+      expedition_types: ["think_tank"]
+      depths: ["shallow", "standard"]
+    tags: ["archives", "gossip"]
+    effects:
+      - type: spawn_theory
+        description: "Coffeehouse gossip spawns new theory"
+        theory: "A forgotten thesis resurfaces: hidden harmonics govern the archive's catalogue"
+        confidence: suspect
+      - type: reputation_change
+        description: "Academic circles take notice"
+        amount: 1
+    followups:
+      press:
+        - delay_minutes: 180
+          type: academic_bulletin
+          headline: "Archivists revive a forgotten thesis"
+          body: "Rumours swirl through the reading rooms after the thesis resurfaced."
+
+  - id: symposium_colloquium
+    match:
+      contains: "follow-up colloquium"
+    applies_to:
+      expedition_types: ["think_tank", "field"]
+      depths: ["deep"]
+    tags: ["symposium", "politics"]
+    effects:
+      - type: faction_shift
+        description: "Symposium demands rally the Academic faction"
+        faction: Academic
+        amount: 2
+      - type: queue_order
+        description: "Emergency colloquium scheduled"
+        order_type: conference
+        order_data:
+          topic: "Emergency colloquium on the symposium fallout"
+    followups:
+      orders:
+        - type: press_highlight
+          delay_minutes: 45
+          payload:
+            channel: "admin"
+            note: "Symposium follow-up scheduled"
+
+  - id: dignitary_interest
+    match:
+      contains: "local dignitaries"
+    applies_to:
+      expedition_types: ["field"]
+      depths: ["shallow", "standard"]
+    tags: ["government", "opportunity"]
+    effects:
+      - type: faction_shift
+        description: "Local dignitaries show interest"
+        faction: Government
+        amount: 1
+      - type: unlock_opportunity
+        description: "Provisional support contract available"
+        opportunity_type: dignitary_contract
+        details:
+          expires_in_days: 3
+          influence_reward: 3
+
+  - id: joint_stewardship
+    match:
+      contains: "joint stewardship"
+    applies_to:
+      expedition_types: ["field", "great_project"]
+      depths: ["deep"]
+    tags: ["alliances", "factions"]
+    effects:
+      - type: faction_shift
+        description: "{faction} extends a quiet invitation"
+        faction_random:
+          - Industry
+          - Religious
+          - Foreign
+        amount: 2
+      - type: create_grudge
+        description: "Opposing scholars decry the collaboration"
+        target: random
+        intensity: 0.5
+
+  - id: innovation_review
+    match:
+      contains: "innovation council review"
+    applies_to:
+      expedition_types: ["think_tank", "great_project"]
+      depths: ["standard", "deep"]
+    tags: ["oversight", "reputation"]
+    effects:
+      - type: reputation_change
+        description: "Auditors raise concerns"
+        amount: -1
+      - type: unlock_opportunity
+        description: "Innovation council review scheduled"
+        opportunity_type: innovation_review
+        details:
+          deadline_days: 5
+          success_reputation: 3
+
+  - id: transnational_summit
+    match:
+      contains: "transnational summit"
+    applies_to:
+      expedition_types: ["great_project", "field"]
+      depths: ["deep"]
+    tags: ["diplomacy"]
+    effects:
+      - type: faction_shift
+        description: "International attention gained"
+        faction: Foreign
+        amount: 3
+      - type: queue_order
+        description: "Transnational summit proposed"
+        order_type: summit
+        order_data:
+          scope: transnational
+          prestige: high
+
+  - id: new_domain
+    match:
+      contains: "new domain unlocked"
+    applies_to:
+      expedition_types: ["great_project", "field", "think_tank"]
+      depths: ["deep"]
+    tags: ["landmark", "domain"]
+    effects:
+      - type: faction_shift
+        description: "Landmark discovery resonates with {faction}"
+        faction_random:
+          - Academic
+          - Government
+          - Industry
+          - Religious
+          - Foreign
+        amount: 5
+      - type: reputation_change
+        description: "Landmark achievement recognized"
+        amount: 3
+      - type: spawn_theory
+        description: "Landmark spawns confident theory"
+        theory: "New domain principles reshape {expedition_type} research"
+        confidence: certain
+    followups:
+      press:
+        - delay_minutes: 60
+          type: discovery_report
+          headline: "Domain unlocked reshapes research order"
+          body: "Archivists rush to catalogue the domain unlocked by the latest expedition."
+
+  - id: relic_interference
+    match:
+      contains: "relic interference"
+    applies_to:
+      expedition_types: ["field", "great_project"]
+      depths: ["shallow", "standard"]
+    tags: ["mystic", "setback"]
+    effects:
+      - type: faction_shift
+        description: "Religious orders question the methods"
+        faction: Religious
+        amount: -1
+      - type: reputation_change
+        description: "Scholars debate the superstitious overtones"
+        amount: -1
+      - type: queue_order
+        description: "Ritual cleansing recommended"
+        order_type: ritual_cleansing
+        order_data:
+          duration_days: 2
+          facilitator: "Order of Lanterns"
+
+  - id: supply_cache
+    match:
+      contains: "hidden supply cache"
+    applies_to:
+      expedition_types: ["field"]
+      depths: ["shallow", "standard"]
+    tags: ["logistics", "resources"]
+    effects:
+      - type: faction_shift
+        description: "Industry faction impressed by recovered cache"
+        faction: Industry
+        amount: 2
+      - type: unlock_opportunity
+        description: "Recovered cache opens expedition resupply"
+        opportunity_type: resupply_window
+        details:
+          expires_in_days: 4
+          influence_gain: 2
+
+  - id: scholar_manifesto
+    match:
+      contains: "manifesto draft"
+    applies_to:
+      expedition_types: ["think_tank", "great_project"]
+      depths: ["standard", "deep"]
+    tags: ["press", "scholar"]
+    effects:
+      - type: spawn_theory
+        description: "Scholar manifesto demands publication"
+        theory: "Manifesto from lead scholar reframes the programme"
+        confidence: certain
+      - type: queue_order
+        description: "Dispatch manifesto for Commons review"
+        order_type: publish_manifesto
+        order_data:
+          review_deadline_days: 2
+          channel: "commons"
+    followups:
+      press:
+        - delay_minutes: 240
+          type: research_manifesto
+          headline: "Manifesto draft circulates"
+          body: "Senior scholars debate the thrust of the new manifesto." 

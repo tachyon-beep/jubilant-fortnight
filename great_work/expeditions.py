@@ -1,16 +1,41 @@
 """Expedition resolution rules and failure tables."""
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
-from .models import ExpeditionOutcome, ExpeditionPreparation, ExpeditionResult, SidewaysEffect
+from .models import (
+    ExpeditionOutcome,
+    ExpeditionPreparation,
+    ExpeditionResult,
+    SidewaysEffect,
+    SidewaysEffectType,
+)
 from .rng import DeterministicRNG
 
 _DATA_PATH = Path(__file__).parent / "data"
+_SIDEWAYS_EFFECT_ENTRIES: Optional[List[Dict[str, Any]]] = None
+
+
+def _load_yaml_resource(filename: str) -> Dict[str, Any]:
+    path = _DATA_PATH / filename
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def _load_sideways_effect_entries() -> List[Dict[str, Any]]:
+    global _SIDEWAYS_EFFECT_ENTRIES
+    if _SIDEWAYS_EFFECT_ENTRIES is None:
+        data = _load_yaml_resource("sideways_effects.yaml")
+        entries = data.get("sideways_effects", [])
+        _SIDEWAYS_EFFECT_ENTRIES = entries if isinstance(entries, list) else []
+    return _SIDEWAYS_EFFECT_ENTRIES
 
 
 @dataclass
@@ -83,7 +108,7 @@ class ExpeditionResolver:
                 failure_detail=failure.description,
             )
         if 40 <= final <= 64:
-            discovery = self._sideways_discovery(expedition_type, prep_depth)
+            discovery = self._sideways_discovery(rng, expedition_type, prep_depth)
             effects = self._generate_sideways_effects(rng, discovery, expedition_type, prep_depth, False)
             return ExpeditionResult(
                 roll=roll,
@@ -100,7 +125,7 @@ class ExpeditionResolver:
                 final_score=final,
                 outcome=ExpeditionOutcome.SUCCESS,
             )
-        discovery = self._sideways_discovery(expedition_type, prep_depth, landmark=True)
+        discovery = self._sideways_discovery(rng, expedition_type, prep_depth, landmark=True)
         effects = self._generate_sideways_effects(rng, discovery, expedition_type, prep_depth, True)
         return ExpeditionResult(
             roll=roll,
@@ -112,14 +137,20 @@ class ExpeditionResolver:
         )
 
     def _sideways_discovery(
-        self, expedition_type: str, prep_depth: str, landmark: bool = False
+        self,
+        rng: DeterministicRNG,
+        expedition_type: str,
+        prep_depth: str,
+        landmark: bool = False,
     ) -> str | None:
         options = self._failure_tables.sideways(expedition_type, prep_depth)
         if not options:
             return None if not landmark else "New domain unlocked"
         if landmark:
             return options[-1]
-        return options[0]
+        if len(options) == 1:
+            return options[0]
+        return rng.choice(options)
 
     def _generate_sideways_effects(
         self,
@@ -133,108 +164,192 @@ class ExpeditionResolver:
         if not discovery_text:
             return None
 
-        effects = []
+        effects: List[SidewaysEffect] = []
 
-        # Map discovery texts to specific mechanical effects
-        if "coffeehouse gossip" in discovery_text.lower():
-            # Think tank shallow: Gossip about forgotten thesis spawns theory
-            effects.append(SidewaysEffect.spawn_theory(
-                theory_text="A forgotten thesis resurfaces: The universe operates on hidden principles",
-                confidence="suspect",
-                description="Coffeehouse gossip spawns new theory"
-            ))
-            effects.append(SidewaysEffect.reputation_change(
-                amount=1,
-                description="Academic circles take notice"
-            ))
+        entry = self._match_sideways_entry(discovery_text, expedition_type, prep_depth)
+        if entry is not None:
+            effects.extend(
+                self._build_sideways_effects_from_entry(
+                    entry,
+                    rng,
+                    discovery_text,
+                    expedition_type,
+                    is_landmark,
+                )
+            )
 
-        elif "symposium attendees demand" in discovery_text.lower():
-            # Think tank deep: Follow-up colloquium creates faction opportunities
-            effects.append(SidewaysEffect.faction_shift(
-                faction="Academic",
-                amount=2,
-                description="Symposium demands create academic momentum"
-            ))
-            effects.append(SidewaysEffect.queue_order(
-                order_type="conference",
-                order_data={"topic": "emergency_colloquium", "auto_scheduled": True},
-                description="Emergency colloquium scheduled"
-            ))
-
-        elif "local dignitaries offer" in discovery_text.lower():
-            # Field shallow: Government influence opportunity
-            effects.append(SidewaysEffect.faction_shift(
-                faction="Government",
-                amount=1,
-                description="Local dignitaries show interest"
-            ))
-            effects.append(SidewaysEffect.unlock_opportunity(
-                opportunity_type="dignitary_contract",
-                details={"expires_in_days": 3, "influence_reward": 3},
-                description="Provisional support contract available"
-            ))
-
-        elif "rival faction quietly invites" in discovery_text.lower():
-            # Field deep: Joint stewardship creates complex dynamics
-            faction = rng.choice(["Industry", "Religious", "Foreign"])
-            effects.append(SidewaysEffect.faction_shift(
-                faction=faction,
-                amount=2,
-                description=f"{faction} faction extends invitation"
-            ))
-            # Create a grudge with a random scholar who opposes this faction
-            effects.append(SidewaysEffect.create_grudge(
-                target_scholar_id="random",  # Service will pick a scholar
-                intensity=0.5,
-                description="Scholar opposes faction collaboration"
-            ))
-
-        elif "auditors flag" in discovery_text.lower():
-            # Great project shallow: Innovation council review
-            effects.append(SidewaysEffect.reputation_change(
-                amount=-1,
-                description="Auditors raise concerns"
-            ))
-            effects.append(SidewaysEffect.unlock_opportunity(
-                opportunity_type="innovation_review",
-                details={"deadline_days": 5, "success_reputation": 3},
-                description="Innovation council review scheduled"
-            ))
-
-        elif "foreign observers float" in discovery_text.lower():
-            # Great project deep: Transnational summit
-            effects.append(SidewaysEffect.faction_shift(
-                faction="Foreign",
-                amount=3,
-                description="International attention gained"
-            ))
-            effects.append(SidewaysEffect.queue_order(
-                order_type="summit",
-                order_data={"scope": "transnational", "prestige": "high"},
-                description="Transnational summit proposed"
-            ))
-
-        elif "new domain unlocked" in discovery_text.lower():
-            # Landmark discovery: Major breakthrough
-            if is_landmark:
-                # Landmark discoveries have bigger effects
+        if not effects:
+            text_lower = discovery_text.lower()
+            if "new domain unlocked" in text_lower and is_landmark:
                 primary_faction = rng.choice(["Academic", "Government", "Industry", "Religious", "Foreign"])
-                effects.append(SidewaysEffect.faction_shift(
-                    faction=primary_faction,
-                    amount=5,
-                    description=f"Landmark discovery resonates with {primary_faction}"
-                ))
-                effects.append(SidewaysEffect.reputation_change(
-                    amount=3,
-                    description="Landmark achievement recognized"
-                ))
-                effects.append(SidewaysEffect.spawn_theory(
-                    theory_text=f"New domain principles in {expedition_type} research",
-                    confidence="certain",
-                    description="Landmark spawns confident theory"
-                ))
+                effects.append(
+                    SidewaysEffect.faction_shift(
+                        faction=primary_faction,
+                        amount=5,
+                        description=f"Landmark discovery resonates with {primary_faction}",
+                    )
+                )
+                effects.append(
+                    SidewaysEffect.reputation_change(
+                        amount=3,
+                        description="Landmark achievement recognized",
+                    )
+                )
+                effects.append(
+                    SidewaysEffect.spawn_theory(
+                        theory_text=f"New domain principles in {expedition_type} research",
+                        confidence="certain",
+                        description="Landmark spawns confident theory",
+                    )
+                )
 
         return effects if effects else None
+
+    def _match_sideways_entry(
+        self,
+        discovery_text: str,
+        expedition_type: str,
+        prep_depth: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not discovery_text:
+            return None
+        text_lower = discovery_text.lower()
+        for entry in _load_sideways_effect_entries():
+            if not self._entry_applicable(entry, expedition_type, prep_depth):
+                continue
+            match_cfg = entry.get("match", {})
+            contains = match_cfg.get("contains")
+            if contains:
+                if isinstance(contains, list):
+                    if not all(str(item).lower() in text_lower for item in contains):
+                        continue
+                else:
+                    if str(contains).lower() not in text_lower:
+                        continue
+            equals = match_cfg.get("equals")
+            if equals:
+                candidates = equals if isinstance(equals, list) else [equals]
+                lowered = {str(option).lower() for option in candidates}
+                if text_lower not in lowered:
+                    continue
+            return entry
+        return None
+
+    @staticmethod
+    def _entry_applicable(
+        entry: Dict[str, Any],
+        expedition_type: str,
+        prep_depth: str,
+    ) -> bool:
+        applies = entry.get("applies_to", {})
+        allowed_types = applies.get("expedition_types")
+        if allowed_types and expedition_type not in allowed_types:
+            return False
+        allowed_depths = applies.get("depths")
+        if allowed_depths and prep_depth not in allowed_depths:
+            return False
+        return True
+
+    def _build_sideways_effects_from_entry(
+        self,
+        entry: Dict[str, Any],
+        rng: DeterministicRNG,
+        discovery_text: str,
+        expedition_type: str,
+        is_landmark: bool,
+    ) -> List[SidewaysEffect]:
+        effects: List[SidewaysEffect] = []
+        base_context = {
+            "discovery": discovery_text,
+            "expedition_type": expedition_type.replace("_", " "),
+        }
+        for spec in entry.get("effects", []):
+            effect_type = spec.get("type")
+            if not effect_type:
+                continue
+            try:
+                effect_enum = SidewaysEffectType(effect_type)
+            except ValueError:
+                continue
+
+            effect_context = dict(base_context)
+            description_template = spec.get("description", "")
+
+            if effect_enum == SidewaysEffectType.FACTION_SHIFT:
+                faction = spec.get("faction")
+                faction_choices = spec.get("faction_random")
+                if faction_choices:
+                    faction = rng.choice(faction_choices)
+                if not faction:
+                    continue
+                effect_context["faction"] = faction
+                amount = int(spec.get("amount", 0))
+                description = description_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.faction_shift(faction=faction, amount=amount, description=description)
+                )
+
+            elif effect_enum == SidewaysEffectType.SPAWN_THEORY:
+                theory_template = spec.get("theory")
+                if not theory_template:
+                    continue
+                confidence = spec.get("confidence", "suspect")
+                description = description_template.format(**effect_context)
+                theory_text = theory_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.spawn_theory(theory_text=theory_text, confidence=confidence, description=description)
+                )
+
+            elif effect_enum == SidewaysEffectType.CREATE_GRUDGE:
+                target = spec.get("target", "random")
+                intensity = float(spec.get("intensity", 0.5))
+                description = description_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.create_grudge(target_scholar_id=target, intensity=intensity, description=description)
+                )
+
+            elif effect_enum == SidewaysEffectType.QUEUE_ORDER:
+                order_type = spec.get("order_type")
+                if not order_type:
+                    continue
+                order_data = copy.deepcopy(spec.get("order_data", {}))
+                description = description_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.queue_order(order_type=order_type, order_data=order_data, description=description)
+                )
+
+            elif effect_enum == SidewaysEffectType.REPUTATION_CHANGE:
+                amount = int(spec.get("amount", 0))
+                description = description_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.reputation_change(amount=amount, description=description)
+                )
+
+            elif effect_enum == SidewaysEffectType.UNLOCK_OPPORTUNITY:
+                opportunity_type = spec.get("opportunity_type")
+                if not opportunity_type:
+                    continue
+                details = copy.deepcopy(spec.get("details", {}))
+                description = description_template.format(**effect_context)
+                effects.append(
+                    SidewaysEffect.unlock_opportunity(
+                        opportunity_type=opportunity_type,
+                        details=details,
+                        description=description,
+                    )
+                )
+
+        tags = entry.get("tags")
+        if tags:
+            tag_list = list(tags) if isinstance(tags, list) else [tags]
+            for effect in effects:
+                effect.payload.setdefault("tags", tag_list)
+
+        followups = entry.get("followups")
+        if followups and effects:
+            effects[0].payload.setdefault("followups", followups)
+
+        return effects
 
 
 __all__ = ["ExpeditionResolver", "FailureTables", "FailureResult"]

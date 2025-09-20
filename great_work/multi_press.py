@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import os
 import random
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
+
+import yaml
 
 from .models import PressRelease, Scholar
 from .press import (
@@ -22,6 +25,41 @@ from .press import (
     defection_notice,
 )
 from .press_tone import get_tone_seed
+
+
+_MENTORSHIP_TEMPLATES: Optional[Dict[str, Any]] = None
+_RECRUITMENT_TEMPLATES: Optional[Dict[str, Any]] = None
+_TABLE_TALK_TEMPLATES: Optional[Dict[str, Any]] = None
+
+
+def _load_yaml_resource(filename: str) -> Dict[str, Any]:
+    path = Path(__file__).resolve().parent / "data" / filename
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    return data
+
+
+def _load_mentorship_templates() -> Dict[str, Any]:
+    global _MENTORSHIP_TEMPLATES
+    if _MENTORSHIP_TEMPLATES is None:
+        _MENTORSHIP_TEMPLATES = _load_yaml_resource("mentorship_press.yaml")
+    return _MENTORSHIP_TEMPLATES
+
+
+def _load_recruitment_templates() -> Dict[str, Any]:
+    global _RECRUITMENT_TEMPLATES
+    if _RECRUITMENT_TEMPLATES is None:
+        _RECRUITMENT_TEMPLATES = _load_yaml_resource("recruitment_press.yaml")
+    return _RECRUITMENT_TEMPLATES
+
+
+def _load_table_talk_templates() -> Dict[str, Any]:
+    global _TABLE_TALK_TEMPLATES
+    if _TABLE_TALK_TEMPLATES is None:
+        _TABLE_TALK_TEMPLATES = _load_yaml_resource("table_talk_press.yaml")
+    return _TABLE_TALK_TEMPLATES
 
 
 def mentorship_update(context: Dict[str, Any]) -> PressRelease:
@@ -129,6 +167,9 @@ class MultiPressGenerator:
             default=[720, 1440, 2880],
         )
         self._setting = setting
+        self._mentorship_templates = _load_mentorship_templates()
+        self._recruitment_templates = _load_recruitment_templates()
+        self._table_talk_templates = _load_table_talk_templates()
 
     @staticmethod
     def _load_delays(raw: Optional[str], default: List[int]) -> List[int]:
@@ -141,6 +182,27 @@ class MultiPressGenerator:
             return values or list(default)
         except ValueError:
             return list(default)
+
+    def _resolve_track_descriptor(self, track_name: str) -> str:
+        templates = self._mentorship_templates or {}
+        track_cfg = templates.get("tracks", {})
+        entry = (
+            track_cfg.get(track_name)
+            or track_cfg.get(track_name.title())
+            or track_cfg.get(track_name.lower())
+            or track_cfg.get("Default", {})
+        )
+        return entry.get("descriptor", track_name.lower())
+
+    @staticmethod
+    def _format_delay(delay_minutes: int) -> str:
+        if delay_minutes >= 1440:
+            days = delay_minutes // 1440
+            return f"{days} day{'s' if days != 1 else ''}"
+        if delay_minutes >= 60:
+            hours = delay_minutes // 60
+            return f"{hours} hour{'s' if hours != 1 else ''}"
+        return f"{delay_minutes} minute{'s' if delay_minutes != 1 else ''}"
 
     def determine_depth(
         self,
@@ -178,6 +240,67 @@ class MultiPressGenerator:
         if seed:
             return dict(seed)
         return None
+
+    @staticmethod
+    def _choose_option(
+        options: Optional[Any],
+        *,
+        default: Optional[str] = None,
+    ) -> Optional[str]:
+        """Pick a random option from a string or list of strings."""
+
+        if not options:
+            return default
+        if isinstance(options, str):
+            return options
+        if isinstance(options, list):
+            candidates = [opt for opt in options if opt]
+            if not candidates:
+                return default
+            return random.choice(candidates)
+        return default
+
+    def _render_template(
+        self,
+        templates: Optional[Any],
+        context: Dict[str, Any],
+        fallback: Optional[callable] = None,
+    ) -> Optional[str]:
+        """Render a template list/string with context, falling back if needed."""
+
+        template = self._choose_option(templates)
+        if template:
+            try:
+                return template.format(**context)
+            except (KeyError, ValueError):
+                pass
+        if callable(fallback):
+            return fallback()
+        return fallback
+
+    def _render_callouts(
+        self,
+        templates: Optional[Any],
+        context: Dict[str, Any],
+        limit: int = 2,
+    ) -> List[str]:
+        """Render a subset of callout templates."""
+
+        if not templates:
+            return []
+        if isinstance(templates, str):
+            templates = [templates]
+        unique_templates = [tpl for tpl in templates if tpl]
+        if not unique_templates:
+            return []
+        random.shuffle(unique_templates)
+        rendered: List[str] = []
+        for template in unique_templates[:limit]:
+            try:
+                rendered.append(template.format(**context))
+            except (KeyError, ValueError):
+                continue
+        return rendered
 
     @property
     def setting(self) -> Optional[str]:
@@ -504,6 +627,17 @@ class MultiPressGenerator:
         safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
         safe_long = [delay for delay in self.long_layer_delays if delay > 0]
         track_name = track or scholar.career.get("track", "Academia")
+        templates = self._mentorship_templates or {}
+        phases_cfg = templates.get("phases", {})
+        phase_cfg = phases_cfg.get(phase, {})
+        track_descriptor = self._resolve_track_descriptor(track_name)
+        context_values = {
+            "mentor": mentor,
+            "scholar": scholar.name,
+            "scholar_id": scholar.id,
+            "track": track_name,
+            "track_descriptor": track_descriptor,
+        }
 
         fast_quotes = {
             "queued": [
@@ -540,32 +674,45 @@ class MultiPressGenerator:
         }
 
         tone_seed = self._tone_seed("mentorship_longform")
-        gossip_quotes = fast_quotes.get(phase, [])
-        for delay, quote in zip(safe_fast, gossip_quotes):
-            ctx = GossipContext(
-                scholar=mentor,
-                quote=quote,
-                trigger=f"Mentorship {phase}",
-            )
-            layers.append(
-                PressLayer(
-                    delay_minutes=delay,
-                    type="academic_gossip",
-                    generator=academic_gossip,
-                    context=ctx,
-                    tone_seed=tone_seed,
+        fast_templates = phase_cfg.get("fast") or fast_quotes.get(phase, []) or []
+        if fast_templates and safe_fast:
+            fast_pool = list(fast_templates)
+            random.shuffle(fast_pool)
+            for idx, delay in enumerate(safe_fast):
+                template = fast_pool[idx % len(fast_pool)]
+                quote = template.format(**context_values)
+                ctx = GossipContext(
+                    scholar=mentor,
+                    quote=quote,
+                    trigger=f"Mentorship {phase}",
                 )
-            )
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="academic_gossip",
+                        generator=academic_gossip,
+                        context=ctx,
+                        tone_seed=tone_seed,
+                    )
+                )
 
-        long_summary = long_summaries.get(phase)
-        if long_summary:
-            for delay in safe_long:
+        long_templates = phase_cfg.get("long") or ([] if long_summaries.get(phase) is None else [long_summaries.get(phase)])
+        if long_templates and safe_long:
+            headline_template = phase_cfg.get("headline", "Mentorship Briefing: {scholar}")
+            headline = headline_template.format(**context_values)
+            long_pool = list(long_templates)
+            random.shuffle(long_pool)
+            use_custom_templates = bool(phase_cfg.get("long"))
+            for idx, delay in enumerate(safe_long):
+                template = long_pool[idx % len(long_pool)]
+                duration_text = self._format_delay(delay)
+                if use_custom_templates:
+                    body = template.format(**{**context_values, "duration": duration_text})
+                else:
+                    body = f"After {duration_text}, {template}"
                 ctx = {
-                    "headline": f"Mentorship Briefing: {scholar.name}",
-                    "body": (
-                        f"After {delay // 60 if delay >= 60 else delay} hour(s), "
-                        f"{long_summary}"
-                    ),
+                    "headline": headline,
+                    "body": body,
                     "metadata": {
                         "phase": phase,
                         "mentor": mentor,
@@ -601,20 +748,42 @@ class MultiPressGenerator:
 
         layers: List[PressLayer] = []
         tone_seed = self._tone_seed("recruitment_followup")
+        templates = (self._recruitment_templates or {}).get("recruitment", {})
+        variant_key = "success" if success else "failure"
 
         safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
         audience = [obs for obs in observers if obs.id != scholar.id]
         random.shuffle(audience)
         reactions: List[Dict[str, str]] = []
+        chance_pct = f"{chance:.0%}"
+        outcome_text = "accepts" if success else "declines"
+        outcome_label = "success" if success else "failure"
+
+        reaction_templates = templates.get("reactions", {}).get(variant_key)
 
         for delay, observer in zip(safe_fast, audience[:4]):
-            quote = self._generate_recruitment_quote(
-                commentator=observer.name,
-                scholar_name=scholar.name,
-                player_name=player,
-                faction=faction,
-                success=success,
+            context = {
+                "commentator": observer.name,
+                "scholar": scholar.name,
+                "player": player,
+                "faction": faction,
+                "chance_pct": chance_pct,
+                "outcome": outcome_label,
+                "outcome_verb": outcome_text,
+            }
+            quote = self._render_template(
+                reaction_templates,
+                context,
+                fallback=lambda: self._generate_recruitment_quote(
+                    commentator=observer.name,
+                    scholar_name=scholar.name,
+                    player_name=player,
+                    faction=faction,
+                    success=success,
+                ),
             )
+            if not quote:
+                continue
             reactions.append({"scholar": observer.name, "quote": quote})
             ctx = GossipContext(
                 scholar=observer.name,
@@ -633,16 +802,11 @@ class MultiPressGenerator:
 
         safe_long = [delay for delay in self.long_layer_delays if delay > 0]
         if safe_long:
-            outcome_text = "accepts" if success else "declines"
-            summary_body = (
-                f"Observers weigh in after {scholar.name} {outcome_text} {player}'s "
-                f"{faction} overtures (chance {chance:.0%}).\n"
+            digest_cfg = templates.get("digest", {}).get(variant_key, {})
+            reaction_lines = " | ".join(
+                f"{item['scholar']}: {item['quote']}" for item in reactions
             )
-            if reactions:
-                reaction_lines = " | ".join(
-                    f"{item['scholar']}: {item['quote']}" for item in reactions
-                )
-                summary_body += f"Voices: {reaction_lines}"
+            voices_text = reaction_lines or "No public reactions recorded."
             metadata = {
                 "scholar": scholar.id,
                 "player": player,
@@ -651,8 +815,39 @@ class MultiPressGenerator:
                 "faction": faction,
                 "reactions": reactions,
             }
+            summary_context = {
+                "scholar": scholar.name,
+                "scholar_id": scholar.id,
+                "player": player,
+                "faction": faction,
+                "faction_cap": faction.capitalize(),
+                "chance_pct": chance_pct,
+                "outcome": outcome_label,
+                "outcome_verb": outcome_text,
+                "voices": voices_text,
+                "first_voice": reactions[0]["quote"] if reactions else "No immediate commentary",
+                "callout_lines": "",
+            }
+            digest_headline = self._choose_option(
+                digest_cfg.get("headlines"),
+                default=f"Recruitment Round-Up: {scholar.name}",
+            )
+            digest_body_template = self._choose_option(
+                digest_cfg.get("body_templates"),
+                default=(
+                    "Observers weigh in after {scholar} {outcome_verb} {player}'s "
+                    "{faction} overtures (chance {chance_pct}).\nVoices: {voices}"
+                ),
+            )
+            try:
+                summary_body = digest_body_template.format(**summary_context)
+            except (KeyError, ValueError):
+                summary_body = (
+                    f"Observers weigh in after {scholar.name} {outcome_text} {player}'s "
+                    f"{faction} overtures (chance {chance_pct}).\nVoices: {voices_text}"
+                )
             ctx = {
-                "headline": f"Recruitment Round-Up: {scholar.name}",
+                "headline": digest_headline,
                 "body": summary_body,
                 "metadata": metadata,
                 "persona": player,
@@ -668,14 +863,37 @@ class MultiPressGenerator:
                 )
             )
 
-            faction_headline = f"Faction Briefing: {faction.capitalize()} eyes {scholar.name}"
-            briefing_body = (
-                f"Internal memos recap the approach to {scholar.name}.\n"
-                f"Chance: {chance:.0%}. Outcome: {'success' if success else 'failure'}."
+            briefing_cfg = templates.get("briefing", {}).get(variant_key, {})
+            callouts = self._render_callouts(
+                briefing_cfg.get("callouts"),
+                summary_context,
+                limit=3,
             )
-            briefing_body += "\nKey Reactions:" if reactions else ""
-            for item in reactions[:2]:
-                briefing_body += f"\n- {item['scholar']}: {item['quote']}"
+            if not callouts and reactions:
+                callouts = [reactions[0]["quote"]]
+            if not callouts:
+                callouts = ["Await guidance from faction leads"]
+            callout_lines = "\n".join(f"- {line}" for line in callouts)
+            summary_context["callout_lines"] = callout_lines
+            metadata["callouts"] = callouts
+            faction_headline = self._choose_option(
+                briefing_cfg.get("headlines"),
+                default=f"Faction Briefing: {faction.capitalize()} eyes {scholar.name}",
+            )
+            briefing_body_template = self._choose_option(
+                briefing_cfg.get("body_templates"),
+                default=(
+                    "Internal memos recap the approach to {scholar}.\n"
+                    "Chance: {chance_pct}. Outcome: {outcome}.\nHighlights:\n{callout_lines}"
+                ),
+            )
+            try:
+                briefing_body = briefing_body_template.format(**summary_context)
+            except (KeyError, ValueError):
+                briefing_body = (
+                    f"Internal memos recap the approach to {scholar.name}.\n"
+                    f"Chance: {chance_pct}. Outcome: {outcome_label}.\n{callout_lines}"
+                )
             briefing_metadata = {
                 "scholar": scholar.id,
                 "player": player,
@@ -684,6 +902,7 @@ class MultiPressGenerator:
                 "faction": faction,
                 "reactions": reactions,
                 "briefing": True,
+                "callouts": callouts,
             }
             briefing_ctx = {
                 "headline": faction_headline,
@@ -721,16 +940,33 @@ class MultiPressGenerator:
         tone_seed = self._tone_seed("table_talk_followup")
         safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
         safe_long = [delay for delay in self.long_layer_delays if delay > 0]
+        templates = (self._table_talk_templates or {}).get("table_talk", {})
 
         audience = scholars[:]
         random.shuffle(audience)
         reactions: List[Dict[str, str]] = []
+        snippet = message if len(message) <= 120 else message[:117] + "..."
+        topic_hint = message.splitlines()[0][:60] if message else "table talk"
+        reaction_templates = templates.get("reactions")
         for delay, observer in zip(safe_fast, audience[:4]):
-            quote = self._generate_table_talk_reaction(
-                commentator=observer.name,
-                speaker=speaker,
-                message=message,
+            context = {
+                "commentator": observer.name,
+                "speaker": speaker,
+                "message": message,
+                "snippet": snippet,
+                "topic_hint": topic_hint,
+            }
+            quote = self._render_template(
+                reaction_templates,
+                context,
+                fallback=lambda: self._generate_table_talk_reaction(
+                    commentator=observer.name,
+                    speaker=speaker,
+                    message=message,
+                ),
             )
+            if not quote:
+                continue
             reactions.append({"scholar": observer.name, "quote": quote})
             ctx = GossipContext(
                 scholar=observer.name,
@@ -748,21 +984,42 @@ class MultiPressGenerator:
             )
 
         if safe_long:
-            snippet = message if len(message) <= 120 else message[:117] + "..."
+            digest_cfg = templates.get("digest", {})
             digest_lines = [
                 f"- {item['scholar']}: {item['quote']}" for item in reactions
             ]
-            digest_body = (
-                f"{speaker}'s note '{snippet}' keeps the lounges buzzing.\n"
-                + "\n".join(digest_lines)
+            bullet_lines = "\n".join(digest_lines) if digest_lines else "- No immediate replies"
+            digest_context = {
+                "speaker": speaker,
+                "message": message,
+                "snippet": snippet,
+                "bullet_lines": bullet_lines,
+                "reactions": reactions,
+                "topic_hint": topic_hint,
+            }
+            digest_headline = self._choose_option(
+                digest_cfg.get("headlines"),
+                default=f"Table Talk Digest — {speaker}",
             )
+            digest_body_template = self._choose_option(
+                digest_cfg.get("body_templates"),
+                default=(
+                    "{speaker}'s note '{snippet}' keeps the lounges buzzing.\n{bullet_lines}"
+                ),
+            )
+            try:
+                digest_body = digest_body_template.format(**digest_context)
+            except (KeyError, ValueError):
+                digest_body = (
+                    f"{speaker}'s note '{snippet}' keeps the lounges buzzing.\n{bullet_lines}"
+                )
             metadata = {
                 "speaker": speaker,
                 "message": snippet,
                 "reactions": reactions,
             }
             ctx = {
-                "headline": f"Table Talk Digest — {speaker}",
+                "headline": digest_headline,
                 "body": digest_body,
                 "metadata": metadata,
                 "persona": speaker,
@@ -778,18 +1035,39 @@ class MultiPressGenerator:
                 )
             )
 
-            roundup_body = "Whispers across the faculty warren:"\
-                + "\n" + "\n".join(
-                    f"• {item['scholar']}: {item['quote']}" for item in reactions[:4]
-                )
+            roundup_cfg = templates.get("roundup", {})
+            roundup_lines = "\n".join(
+                f"• {item['scholar']}: {item['quote']}" for item in reactions[:4]
+            ) or "• Commons quiet for now"
+            roundup_context = {
+                "speaker": speaker,
+                "message": message,
+                "snippet": snippet,
+                "bullet_lines": roundup_lines,
+                "topic_hint": topic_hint,
+            }
+            roundup_headline = self._choose_option(
+                roundup_cfg.get("headlines"),
+                default=f"Commons Roundup — Re: {speaker}",
+            )
+            roundup_body_template = self._choose_option(
+                roundup_cfg.get("body_templates"),
+                default="Whispers across the faculty warren:\n{bullet_lines}",
+            )
+            try:
+                roundup_body = roundup_body_template.format(**roundup_context)
+            except (KeyError, ValueError):
+                roundup_body = f"Whispers across the faculty warren:\n{roundup_lines}"
+            callouts = self._render_callouts(roundup_cfg.get("callouts"), roundup_context, limit=2)
             roundup_ctx = {
-                "headline": f"Commons Roundup — Re: {speaker}",
+                "headline": roundup_headline,
                 "body": roundup_body,
                 "metadata": {
                     "speaker": speaker,
                     "message": snippet,
                     "reactions": reactions,
                     "type": "roundup",
+                    "callouts": callouts,
                 },
                 "persona": "Commons Bulletin",
                 "type": "table_talk_roundup",

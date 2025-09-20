@@ -1,6 +1,6 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
+Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 ## 1. Scholar Lifecycle and Memory
 
@@ -17,8 +17,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 ## 3. Expedition Structure and Outcomes
 
 - **Design intent:** Each expedition type should apply tailored costs, prep modifiers, and depth-aware failure tables that yield sideways discoveries with gameplay repercussions such as faction swings, gossip, or queued orders.【F:docs/HLD.md†L57-L138】
-- **Implementation status:** Expedition launches deduct faction influence, persist preparation details, and an `ExpeditionResolver` rolls d100, applies modifiers, consults depth-specific failure tables, and emits sideways effects that can spawn theories, shift factions, or schedule follow-ups.【F:great_work/service.py†L170-L392】【F:great_work/expeditions.py†L60-L135】【F:great_work/models.py†L122-L206】【F:great_work/service.py†L2090-L2248】
-- **Gap:** Landmark preparation still resolves to a single block of text, and sideways effect mappings are hard-coded templates rather than data-driven, limiting variability against the design’s call for bespoke deep-prep vignettes.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L124-L213】
+- **Implementation status:** Expedition launches deduct faction influence, persist preparation details, and an `ExpeditionResolver` rolls d100, applies modifiers, consults depth-specific failure tables, and now draws from a data-driven sideways catalogue to emit faction shifts, theories, queued orders, and tagged follow-ups that the dispatcher applies downstream.【F:great_work/service.py†L170-L392】【F:great_work/expeditions.py†L60-L213】【F:great_work/models.py†L122-L206】【F:great_work/data/sideways_effects.yaml†L1-L214】【F:great_work/service.py†L4734-L4999】
+- **Gap:** Landmark preparation still collapses into a single block of text, and even with the YAML catalogue the sideways library needs bespoke deep-prep copy and sidecast scenes to match the design’s vignette expectations.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L124-L213】【F:great_work/data/sideways_effects.yaml†L1-L214】
 
 ### 3.1 Great Projects - Status
 
@@ -35,8 +35,8 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 ## 5. Press Artefacts and Public Record
 
 - **Design intent:** Every move should produce persona-driven press artefacts that persist in a public archive—bulletins, manifestos, discoveries, retractions, gossip, recruitment notes, defection wires—and stay publicly accessible.【F:docs/HLD.md†L86-L354】
-- **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, symposium, mentorship, and admin flows queue delayed follow-ups via `MultiPressGenerator`, with staggered fast/long cadences delivering gossip, faction statements, mentorship bulletins, and administrative updates alongside the primary artefact; theory submissions and table-talk updates now run through the LLM enhancer before archiving, and digest ticks mint highlight blurbs from the scheduled press queue.【F:great_work/service.py†L170-L1400】【F:great_work/service.py†L220-L340】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/multi_press.py†L1-L680】【F:great_work/state.py†L1-L520】【F:great_work/discord_bot.py†L562-L940】【F:great_work/web_archive.py†L416-L520】
-- **Gap:** Recruitment and table-talk flows still publish only a single beat with no layered follow-ups, layered template variety for long-running mentorship arcs remains thin, and sideways effect mappings stay hard-coded instead of data-driven, limiting narrative diversity against the design brief.【F:great_work/service.py†L900-L1006】【F:great_work/service.py†L2830-L3058】【F:great_work/multi_press.py†L180-L360】【F:docs/HLD.md†L90-L213】
+- **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, symposium, mentorship, recruitment, table-talk, and admin flows now queue delayed follow-ups via `MultiPressGenerator`, with staggered fast/long cadences delivering gossip, faction briefings, commons roundups, mentorship bulletins, and administrative updates alongside the primary artefact; tone packs support rotating headlines/blurbs per setting, YAML libraries drive recruitment and table-talk copy, theory submissions still route through the LLM enhancer before archiving, and digest ticks mint highlight blurbs from the scheduled press queue.【F:great_work/service.py†L170-L392】【F:great_work/service.py†L680-L744】【F:great_work/service.py†L1013-L1106】【F:great_work/service.py†L1996-L2470】【F:great_work/multi_press.py†L737-L930】【F:great_work/data/recruitment_press.yaml†L1-L48】【F:great_work/data/table_talk_press.yaml†L1-L24】【F:great_work/press_tone.py†L1-L102】【F:great_work/state.py†L1-L520】【F:great_work/discord_bot.py†L562-L940】【F:great_work/web_archive.py†L416-L520】
+- **Gap:** Mentorship sidecasts and defection epilogues still land as single beats, sideways follow-up press is queued but not yet summarised in public channels, and the new YAML libraries need broader coverage (e.g., deep-prep vignettes, faction-flavoured table-talk) plus safety guidance for tone-pack randomisation.【F:great_work/service.py†L1996-L2470】【F:great_work/service.py†L4734-L4999】【F:great_work/multi_press.py†L620-L930】【F:great_work/data/recruitment_press.yaml†L1-L48】【F:great_work/data/table_talk_press.yaml†L1-L24】【F:docs/HLD.md†L90-L354】
 
 ### 5.1 Public archive availability
 
@@ -53,20 +53,20 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 ### 6.1 Non-expedition order batching
 
 - **Design intent:** Orders like mentorships, conferences, and other delayed actions should share a generic batching framework handled at digest time.【F:docs/HLD.md†L101-L213】
-- **Implementation status:** A shared `orders` table now feeds dispatcher helpers that activate mentorships and resolve conferences during the digest tick, while the legacy tables persist for history.【F:great_work/state.py†L360-L520】【F:great_work/service.py†L1360-L2060】
-- **Gap:** Follow-up queues and other delayed hooks still bypass the dispatcher, and there is no backfill/migration tooling or telemetry to monitor the shared orders backlog, keeping onboarding for new order types brittle.【F:great_work/state.py†L344-L520】【F:great_work/service.py†L1996-L2059】
+- **Implementation status:** A shared `orders` table now feeds dispatcher helpers that activate mentorships, resolve conferences, send symposium reminders, and handle all narrative follow-ups after auto-migrating any legacy rows from the `followups` table.【F:great_work/state.py†L344-L720】【F:great_work/service.py†L1996-L4360】
+- **Gap:** Provide moderator tooling to browse and cancel dispatcher orders (beyond the telemetry report) so operators can intervene manually when arcs stall.【F:great_work/state.py†L600-L720】【F:docs/internal/PHASE3_POLISH_DESIGN.md†L1-L120】
 
 ## 7. Data Model and Persistence
 
 - **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events with exports available through a bot command.【F:docs/HLD.md†L203-L385】
 - **Implementation status:** SQLite schema covers all major entities including offers, mentorships, conferences, symposium topics/votes, and press; the new `orders` table centralises delayed work (mentorship activations, conference resolutions) consumed by the dispatcher, while exports flow through `/export_log` and archive tooling.【F:great_work/state.py†L18-L520】【F:great_work/service.py†L1402-L1880】【F:great_work/discord_bot.py†L562-L737】
-- **Gap:** Follow-up queues still sit outside the dispatcher, and there is no migration script or index tuning for existing deployments—adopting the shared orders pipeline requires backfill tooling and operational guidance.【F:great_work/state.py†L360-L520】
+- **Gap:** Add lightweight admin utilities to inspect dispatcher orders and export audit trails so operators can validate migrations without touching SQLite directly.【F:great_work/state.py†L600-L720】
 
 ## 8. Discord Command Surface and Admin Tools
 
 - **Design intent:** Provide slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log exports, and admin hotfixes, with telemetry on usage.【F:docs/HLD.md†L248-L386】
 - **Implementation status:** Commands cover the expected surface, including `/poach`, `/counter`, `/view_offers`, `/mentor`, `/assign_lab`, `/conference`, `/export_web_archive`, `/telemetry_report`, and `/gw_admin` subcommands for moderation. All commands now share the telemetry decorator, emitting player, channel, success metrics, layered-press counts, and digest health; operators can review stats via Discord or the bundled telemetry dashboard container.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】【F:great_work/telemetry.py†L72-L660】【F:ops/telemetry-dashboard/app.py†L1-L64】
-- **Gap:** Several information surfaces still return ephemeral responses (table-talk summary, theory references), and success-metric thresholds for alerts are not yet tuned to product expectations.【F:great_work/discord_bot.py†L523-L940】【F:great_work/telemetry.py†L600-L660】
+- **Gap:** Several information surfaces still return ephemeral responses (table-talk summary, theory references), and moderators still lack a Discord workflow to manage dispatcher orders without digging into telemetry or SQL.【F:great_work/discord_bot.py†L523-L940】【F:great_work/state.py†L600-L720】
 
 ### 8.1 Credentials and application configuration
 
@@ -78,12 +78,12 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 
 - **Design intent:** Generate press and reactions through persona-driven LLM prompts with batching and safety controls.【F:docs/HLD.md†L318-L369】
 - **Implementation status:** The LLM client now drives expeditions, defection negotiations, symposium updates, mentorship beats, theory submissions, table-talk posts, and admin notices with persona metadata, retry scheduling, and blocklist safeguards; layered press metrics feed telemetry and tests run in mock mode to verify prompts and pause behaviour.【F:great_work/service.py†L300-L1080】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/llm_client.py†L1-L240】【F:tests/test_game_service.py†L80-L196】【F:tests/test_symposium.py†L20-L69】
-- **Gap:** The moderation layer is still limited to a static word list, there's no secondary guard-LLM or redaction workflow, and operator-facing pause/resume runbooks remain undocumented outside internal planning notes.【F:great_work/llm_client.py†L40-L140】【F:docs/HLD.md†L318-L369】
+- **Gap:** The moderation layer is still limited to a static word list, there's no secondary guard-LLM or redaction workflow, and deeper operator guidance for pause/resume escalation still lives in internal notes pending publication.【F:great_work/llm_client.py†L40-L140】【F:docs/HLD.md†L318-L369】
 
 ## Summary of Major Gaps
 
-1. Recruitment and table-talk now produce layered follow-ups; remaining narrative work is expanding mentorship/sidecast arcs and sideways discovery variety to match the rest of the design cadence.
+1. Recruitment and table-talk now ship layered follow-ups; remaining narrative work is expanding mentorship sidecasts, defection epilogues, and deep-prep sideways vignettes while surfacing queued follow-up press in Gazette highlights.
 2. Symposium pledges and contract upkeep drain influence, but longer-term commitments (seasonal projects, faction contracts) are still pending to keep the economy pressure steady.
 3. Symposium proposals are player-driven with automated expiries, scoring heuristics, and pledge penalties/debt carryover; remaining work is sharper economic escalation (interest, faction projects) and transparent backlog curation reports before launch.
-4. Telemetry dashboards and `/telemetry_report` surface queue depth, scoring, and debt metrics, but success KPI thresholds, escalation routing, and dispatcher instrumentation still need to be defined and documented for operators.
+4. Telemetry dashboards and `/telemetry_report` surface queue depth, scoring, debt metrics, and dispatcher backlog snapshots; next add external escalation routing and a moderator console for dispatcher order management before live pilots.
 5. Static archives auto-export, sync to the container host, and prune snapshots; external hosting adapters and production monitoring guidance for the nginx container remain outstanding.

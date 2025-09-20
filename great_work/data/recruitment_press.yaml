@@ -1,0 +1,48 @@
+recruitment:
+  reactions:
+    success:
+      - "{commentator} applauds {player}'s gravitas in courting {scholar}."
+      - "{commentator} calls {scholar}'s acceptance a coup for {faction}."
+      - "{commentator} wonders what promises sealed {scholar}'s pledge to {player}."
+    failure:
+      - "{commentator} snickers that {player}'s offer to {scholar} lacked teeth."
+      - "{commentator} speculates {scholar} waits for a richer {faction} bid."
+      - "{commentator} hints {player} misread {scholar}'s loyalties."
+  digest:
+    success:
+      headlines:
+        - "Recruitment Round-Up: {scholar}"
+        - "Tenured Triumph: {scholar} joins {player}"
+      body_templates:
+        - "Observers weigh in after {scholar} {outcome_verb} {player}'s {faction} overtures (chance {chance_pct}).\nVoices: {voices}"
+        - "Rumour mills blare as {scholar} {outcome_verb} {player}. Odds were {chance_pct}; reactions: {voices}"
+    failure:
+      headlines:
+        - "Recruitment Round-Up: {scholar}"
+        - "Cooled Prospects: {scholar} declines {player}"
+      body_templates:
+        - "Despite {chance_pct} odds, {scholar} {outcome_verb} {player}'s {faction} bid. Onlookers murmur: {voices}"
+        - "{player}'s {faction} gambit falters; {scholar} {outcome_verb}. Bystanders: {voices}"
+  briefing:
+    success:
+      headlines:
+        - "Faction Briefing: {faction} welcomes {scholar}"
+        - "Internal Memo: {scholar} assigned to {faction} initiatives"
+      body_templates:
+        - "Internal notes recap {player}'s offer. Chance: {chance_pct}. Outcome: {outcome}.\nHighlights:\n{callout_lines}"
+        - "Strategists parse the win: odds {chance_pct}, mood jubilant. Takeaways:\n{callout_lines}"
+      callouts:
+        - "{first_voice}"
+        - "Budget team to reforecast retention after {first_voice}"
+        - "Plan welcoming colloquium featuring {scholar}"
+    failure:
+      headlines:
+        - "Faction Briefing: {faction} reassesses {scholar}"
+        - "Internal Memo: {scholar} remains out-of-reach"
+      body_templates:
+        - "Debrief records {player}'s shortfall at {chance_pct} odds. Counsel highlights:\n{callout_lines}"
+        - "Operatives review the miss: {scholar} {outcome}. Action items:\n{callout_lines}"
+      callouts:
+        - "{first_voice}"
+        - "Renew quiet outreach before cooldown lifts"
+        - "Redirect influence toward alternate prospects"

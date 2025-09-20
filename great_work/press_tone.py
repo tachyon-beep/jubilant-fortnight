@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import os
+import random
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 
 import yaml
 
@@ -17,7 +18,7 @@ class ToneLibrary:
 
     def __init__(self, path: Path | None = None) -> None:
         self._path = path or _TONE_PACK_PATH
-        self._packs: Dict[str, Dict[str, Dict[str, str]]] = {}
+        self._packs: Dict[str, Dict[str, Dict[str, Union[str, List[str]]]]] = {}
         self._load()
 
     def _load(self) -> None:
@@ -29,14 +30,26 @@ class ToneLibrary:
         settings = raw.get("settings", {})
         self._packs = {
             str(setting): {
-                str(event): {key: str(value) for key, value in (template or {}).items()}
+                str(event): {
+                    key: self._normalise_value(value)
+                    for key, value in (template or {}).items()
+                    if value is not None
+                }
                 for event, template in (events or {}).items()
             }
             for setting, events in settings.items()
         }
 
+    @staticmethod
+    def _normalise_value(value: Union[str, List[str], None]) -> Union[str, List[str]]:
+        if isinstance(value, list):
+            return [str(item) for item in value if item is not None]
+        if value is None:
+            return ""
+        return str(value)
+
     @property
-    def available_settings(self) -> Dict[str, Dict[str, Dict[str, str]]]:
+    def available_settings(self) -> Dict[str, Dict[str, Dict[str, Union[str, List[str]]]]]:
         return self._packs
 
     def get_seed(
@@ -52,12 +65,26 @@ class ToneLibrary:
             return None
         seed = pack.get(event_type)
         if seed:
-            return dict(seed)
+            return self._sample_seed(seed)
         # Fallback to default pack if the event is missing
         default_pack = self._packs.get("post_cyberpunk_collapse")
         if default_pack and default_pack.get(event_type):
-            return dict(default_pack[event_type])
+            return self._sample_seed(default_pack[event_type])
         return None
+
+    @staticmethod
+    def _sample_seed(seed: Dict[str, Union[str, List[str]]]) -> Dict[str, str]:
+        resolved: Dict[str, str] = {}
+        for key, value in seed.items():
+            if isinstance(value, list):
+                choices = [item for item in value if item]
+                if not choices:
+                    continue
+                resolved[key] = random.choice(choices)
+            else:
+                if value:
+                    resolved[key] = value
+        return resolved
 
 
 _TONE_LIBRARY: Optional[ToneLibrary] = None

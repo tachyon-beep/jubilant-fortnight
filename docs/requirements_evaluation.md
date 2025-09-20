@@ -1,6 +1,6 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
+Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 ## Executive Summary
 
@@ -9,7 +9,7 @@ Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 - **Not Implemented:** 9 requirements (11.7%)
 - **Not Evaluated:** 2 requirements (2.6%)
 
-Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, and table-talk/theory updates, digest highlights summarise scheduled drops, telemetry reports include queue depth alongside layered-press cadence, and digest exports sync the public archive with ZIP snapshots. Remaining gaps centre on layered coverage for recruitment/table-talk follow-ups, telemetry success thresholds and dispatcher instrumentation, and external archive hardening.
+Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, and table-talk/theory updates; digest highlights summarise scheduled drops, telemetry reports include queue depth alongside layered-press cadence, and digest exports sync the public archive with ZIP snapshots. Remaining gaps centre on mentorship sidecasts/defection epilogues, deeper sideways vignettes plus public surfacing of queued follow-ups, telemetry success thresholds and dispatcher instrumentation, and external archive hardening.
 
 ## Functional Requirements Status
 
@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; digest highlights summarise pending drops, symposium reminders plus `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Remaining narrative work focuses on mentorship sidecasts and sideways discovery variety.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L220-L3525】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L317-L820】【F:great_work/multi_press.py†L520-L820】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and symposium reminders plus `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Remaining narrative work focuses on mentorship sidecasts, defection epilogues, and deep-prep sideways variety alongside public surfacing of dispatcher-queued follow-ups.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L1106】【F:great_work/service.py†L1996-L2470】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L317-L820】【F:great_work/multi_press.py†L620-L930】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -155,6 +155,6 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 
 ## Key Follow-ups
 
-1. Add layered coverage and template variety for recruitment/table-talk follow-ups and sideways discoveries.
-2. Define telemetry success thresholds, dispatcher/order instrumentation, and operator-facing escalation runbooks.
+1. Broaden mentorship sidecasts/defection epilogues, deepen the data-driven sideways catalogue, and surface dispatcher-queued follow-ups in Gazette highlights.
+2. Deliver moderator tooling and alert routing so dispatcher backlog escalations can be actioned without touching SQLite.
 3. Document external archive hosting options and production hardening for the containerised static site.

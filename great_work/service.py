@@ -150,6 +150,7 @@ class GameService:
             db_path,
             repository=self.repository,
             start_year=self.settings.timeline_start_year,
+            admin_notifier=self._queue_admin_notification,
         )
         self.resolver = ExpeditionResolver(failure_tables or FailureTables())
         self._rng = DeterministicRNG(seed=42)
@@ -1436,7 +1437,11 @@ class GameService:
         self.state.update_offer_status(original_offer_id, "countered")
 
         # Reschedule followup for counter evaluation (12 hours for final round)
-        self.state.clear_followup(original_offer_id)  # Clear original followup
+        self.state.clear_followup(
+            original_offer_id,
+            status="cancelled",
+            result={"reason": "counter_offer_supersedes"},
+        )
         resolve_at = timestamp + timedelta(hours=12)
         self.state.schedule_followup(
             original.scholar_id,
@@ -3316,6 +3321,34 @@ class GameService:
                 )
             except Exception:  # pragma: no cover
                 logger.debug("Failed to record debt reprisal telemetry", exc_info=True)
+
+            resolve_at = now
+            self.state.schedule_followup(
+                player.id,
+                "symposium_reprimand",
+                resolve_at,
+                {
+                    "player_id": player.id,
+                    "display_name": player.display_name,
+                    "faction": faction,
+                    "penalty_influence": penalty_applied,
+                    "penalty_reputation": reputation_penalty,
+                    "reprisal_level": reprisal_level,
+                    "remaining": remaining,
+                },
+            )
+            self._queue_admin_notification(
+                (
+                    "🛡️ Symposium reprisal: {name} owes {remaining} influence to {faction} "
+                    "(reprisal level {level}, penalty {penalty})"
+                ).format(
+                    name=player.display_name,
+                    remaining=remaining,
+                    faction=faction,
+                    level=reprisal_level,
+                    penalty=penalty_applied or reputation_penalty,
+                )
+            )
         return reprisals
 
     def _settle_symposium_debts(
@@ -3844,6 +3877,97 @@ class GameService:
 
         return press
 
+    def admin_list_orders(
+        self,
+        *,
+        order_type: str | None = None,
+        status: str | None = "pending",
+        limit: int = 15,
+    ) -> List[Dict[str, object]]:
+        """Return dispatcher orders for moderator review."""
+
+        limit = max(1, min(limit, 50))
+        orders = self.state.list_orders(order_type=order_type, status=status)
+        trimmed = orders[:limit]
+        summaries: List[Dict[str, object]] = []
+        for order in trimmed:
+            summaries.append(
+                {
+                    "id": order["id"],
+                    "order_type": order.get("order_type"),
+                    "status": order.get("status"),
+                    "actor_id": order.get("actor_id"),
+                    "subject_id": order.get("subject_id"),
+                    "scheduled_at": (
+                        order.get("scheduled_at").isoformat()
+                        if isinstance(order.get("scheduled_at"), datetime)
+                        else None
+                    ),
+                    "created_at": (
+                        order.get("created_at").isoformat()
+                        if isinstance(order.get("created_at"), datetime)
+                        else None
+                    ),
+                    "payload": order.get("payload", {}),
+                }
+            )
+        return summaries
+
+    def admin_cancel_order(
+        self,
+        *,
+        order_id: int,
+        reason: str | None = None,
+    ) -> Dict[str, object]:
+        """Cancel a dispatcher order via moderator action."""
+
+        order = self.state.get_order(order_id)
+        if order is None:
+            raise ValueError(f"Order {order_id} not found")
+        status = order.get("status")
+        if status != "pending":
+            raise ValueError(f"Order {order_id} is not pending (status: {status})")
+
+        updated = self.state.update_order_status(
+            order_id,
+            "cancelled",
+            result={"reason": reason} if reason else None,
+        )
+        if not updated:
+            raise ValueError(f"Failed to cancel order {order_id}")
+
+        summary = {
+            "id": order_id,
+            "order_type": order.get("order_type"),
+            "actor_id": order.get("actor_id"),
+            "subject_id": order.get("subject_id"),
+            "reason": reason,
+        }
+
+        notice = (
+            f"🧾 Cancelled order #{order_id} ({summary['order_type']})"
+            + (f" – {reason}" if reason else "")
+        )
+        self._queue_admin_notification(notice)
+        now = datetime.now(timezone.utc)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="admin_cancel_order",
+                payload={**summary, "timestamp": now.isoformat()},
+            )
+        )
+        try:
+            self._telemetry.track_system_event(
+                "dispatcher_order_cancelled",
+                source="admin",
+                reason=notice,
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("Failed to record order cancellation telemetry", exc_info=True)
+
+        return summary
+
     def resume_game(self, admin_id: Optional[str] = None) -> PressRelease:
         """Resume the game after a pause."""
 
@@ -4281,9 +4405,67 @@ class GameService:
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
         for followup_id, scholar_id, kind, payload in self.state.due_followups(now):
+            if kind == "symposium_reprimand":
+                player_record = self.state.get_player(scholar_id)
+                display_name = payload.get("display_name") or (
+                    player_record.display_name if player_record else scholar_id
+                )
+                faction = payload.get("faction", "the Academy")
+                penalty_influence = int(payload.get("penalty_influence", 0))
+                penalty_reputation = int(payload.get("penalty_reputation", 0))
+                reprisal_level = int(payload.get("reprisal_level", 1))
+                remaining = int(payload.get("remaining", 0))
+                headline = f"Symposium Reprimand: {display_name}".rstrip()
+                impacts = []
+                if penalty_influence:
+                    impacts.append(f"{penalty_influence} influence seized by {faction}")
+                if penalty_reputation:
+                    impacts.append(f"{penalty_reputation} reputation deducted")
+                impact_text = "; ".join(impacts) if impacts else "Public reprimand issued"
+                body = (
+                    f"{display_name} faces a symposium reprisal from {faction}. {impact_text}. "
+                    f"Outstanding debt: {remaining}. Reprisal level now {reprisal_level}."
+                )
+                press = PressRelease(
+                    type="symposium_reprimand",
+                    headline=headline,
+                    body=body,
+                    metadata={
+                        "player_id": payload.get("player_id") or scholar_id,
+                        "faction": faction,
+                        "reprisal_level": reprisal_level,
+                        "remaining": remaining,
+                        "penalty_influence": penalty_influence,
+                        "penalty_reputation": penalty_reputation,
+                    },
+                )
+                self._archive_press(press, now)
+                releases.append(press)
+                self.state.append_event(
+                    Event(
+                        timestamp=now,
+                        action="symposium_reprimand",
+                        payload={
+                            "player": payload.get("player_id") or scholar_id,
+                            "faction": faction,
+                            "reprisal_level": reprisal_level,
+                            "remaining": remaining,
+                        },
+                    )
+                )
+                self.state.clear_followup(
+                    followup_id,
+                    result={"resolution": "symposium_reprimand"},
+                )
+                continue
+
             scholar = self.state.get_scholar(scholar_id)
             if not scholar:
-                self.state.clear_followup(followup_id)
+                self.state.clear_followup(
+                    followup_id,
+                    status="cancelled",
+                    result={"reason": "scholar_missing"},
+                )
                 continue
             if kind == "defection_grudge":
                 scholar.memory.adjust_feeling(payload.get("faction", "Unknown"), -1.5)
@@ -4300,7 +4482,10 @@ class GameService:
                 if offer_id:
                     negotiation_press = self.resolve_offer_negotiation(offer_id)
                     releases.extend(negotiation_press)
-                    self.state.clear_followup(followup_id)
+                    self.state.clear_followup(
+                        followup_id,
+                        result={"resolution": "offer_negotiation"},
+                    )
                     continue  # Skip the normal gossip generation
                 quote = "The negotiation deadline has arrived."
             elif kind == "evaluate_counter":
@@ -4309,7 +4494,10 @@ class GameService:
                 if counter_offer_id:
                     negotiation_press = self.resolve_offer_negotiation(counter_offer_id)
                     releases.extend(negotiation_press)
-                    self.state.clear_followup(followup_id)
+                    self.state.clear_followup(
+                        followup_id,
+                        result={"resolution": "counter_negotiation"},
+                    )
                     continue  # Skip the normal gossip generation
                 quote = "The counter-offer awaits final resolution."
             else:
@@ -4327,11 +4515,14 @@ class GameService:
                 Event(
                     timestamp=now,
                     action="followup_resolved",
-                    payload={"scholar": scholar.id, "kind": kind},
+                    payload={"scholar": scholar.id, "kind": kind, "order_id": followup_id},
                 )
             )
             self.state.save_scholar(scholar)
-            self.state.clear_followup(followup_id)
+            self.state.clear_followup(
+                followup_id,
+                result={"resolution": kind},
+            )
         return releases
 
     def _schedule_symposium_reminders(
@@ -4549,8 +4740,20 @@ class GameService:
 
         releases = []
         now = datetime.now(timezone.utc)
+        followups_scheduled = False
 
         for effect in result.sideways_effects:
+            tags = effect.payload.get("tags")
+            followups = effect.payload.get("followups")
+            if followups and not followups_scheduled:
+                self._schedule_sideways_followups(
+                    order=order,
+                    followups=followups,
+                    timestamp=now,
+                    tags=tags,
+                )
+                followups_scheduled = True
+
             if effect.effect_type == SidewaysEffectType.FACTION_SHIFT:
                 # Apply faction influence change
                 faction = effect.payload["faction"]
@@ -4565,6 +4768,7 @@ class GameService:
                         metadata={"player": player.display_name, "faction": faction, "change": amount},
                     )
                 )
+                self._attach_tags_to_release(releases[-1], tags)
 
             elif effect.effect_type == SidewaysEffectType.SPAWN_THEORY:
                 # Create a new theory from the discovery
@@ -4588,6 +4792,7 @@ class GameService:
                         metadata={"player": player.display_name, "theory": theory_text},
                     )
                 )
+                self._attach_tags_to_release(releases[-1], tags)
 
             elif effect.effect_type == SidewaysEffectType.CREATE_GRUDGE:
                 # Create a grudge between scholars
@@ -4613,6 +4818,7 @@ class GameService:
                                 metadata={"scholar": target.name, "player": player.display_name},
                             )
                         )
+                        self._attach_tags_to_release(releases[-1], tags)
 
             elif effect.effect_type == SidewaysEffectType.QUEUE_ORDER:
                 # Queue a follow-up order (conference, summit, etc.)
@@ -4655,6 +4861,7 @@ class GameService:
                                 metadata={"player": player.display_name},
                             )
                         )
+                        self._attach_tags_to_release(releases[-1], tags)
 
             elif effect.effect_type == SidewaysEffectType.REPUTATION_CHANGE:
                 # Change player reputation
@@ -4672,6 +4879,7 @@ class GameService:
                         metadata={"player": player.display_name, "change": amount},
                     )
                 )
+                self._attach_tags_to_release(releases[-1], tags)
 
             elif effect.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY:
                 # Store opportunity in followups table for later resolution
@@ -4699,6 +4907,7 @@ class GameService:
                         metadata={"player": player.display_name, "opportunity": opportunity_type},
                     )
                 )
+                self._attach_tags_to_release(releases[-1], tags)
 
         # Save player changes and archive press releases
         self.state.upsert_player(player)
@@ -4707,6 +4916,101 @@ class GameService:
 
         releases.extend(self.release_scheduled_press(now))
         return releases
+
+    @staticmethod
+    def _attach_tags_to_release(release: PressRelease, tags: Optional[List[str]]) -> None:
+        if not tags:
+            return
+        existing = release.metadata.setdefault("tags", [])
+        for tag in tags:
+            if tag not in existing:
+                existing.append(tag)
+
+    def _schedule_sideways_followups(
+        self,
+        *,
+        order: ExpeditionOrder,
+        followups: Dict[str, object],
+        timestamp: datetime,
+        tags: Optional[List[str]] = None,
+    ) -> None:
+        """Schedule additional press or orders defined by sideways data."""
+
+        press_entries = followups.get("press") if isinstance(followups, dict) else []
+        if isinstance(press_entries, dict):
+            press_entries = [press_entries]
+        for entry in press_entries or []:
+            if not isinstance(entry, dict):
+                continue
+            delay = int(entry.get("delay_minutes", 180))
+            release_at = timestamp + timedelta(minutes=delay)
+            headline = entry.get("headline") or f"Follow-up: Expedition {order.code}"
+            body = entry.get("body") or ""
+            release_type = entry.get("type", "sideways_followup")
+            metadata = {
+                "source": "sideways_followup",
+                "order_code": order.code,
+                "expedition_type": order.expedition_type,
+            }
+            if tags:
+                metadata["tags"] = list(tags)
+            self.state.enqueue_press_release(
+                PressRelease(
+                    type=release_type,
+                    headline=headline,
+                    body=body,
+                    metadata=metadata,
+                ),
+                release_at,
+            )
+            self.state.append_event(
+                Event(
+                    timestamp=timestamp,
+                    action="sideways_press_scheduled",
+                    payload={
+                        "order_code": order.code,
+                        "headline": headline,
+                        "delay_minutes": delay,
+                        "type": release_type,
+                    },
+                )
+            )
+
+        order_entries = followups.get("orders") if isinstance(followups, dict) else []
+        if isinstance(order_entries, dict):
+            order_entries = [order_entries]
+        for entry in order_entries or []:
+            if not isinstance(entry, dict):
+                continue
+            kind = entry.get("type")
+            if not kind:
+                continue
+            delay = int(entry.get("delay_minutes", 0))
+            scheduled_at = timestamp + timedelta(minutes=delay) if delay else None
+            payload = entry.get("payload", {})
+            payload = dict(payload) if isinstance(payload, dict) else {}
+            payload.setdefault("source", "sideways_followup")
+            payload.setdefault("order_code", order.code)
+            if tags and "tags" not in payload:
+                payload["tags"] = list(tags)
+            self.state.enqueue_order(
+                kind,
+                actor_id=order.player_id,
+                subject_id=order.code,
+                payload=payload,
+                scheduled_at=scheduled_at,
+            )
+            self.state.append_event(
+                Event(
+                    timestamp=timestamp,
+                    action="sideways_order_scheduled",
+                    payload={
+                        "order_code": order.code,
+                        "order_type": kind,
+                        "delay_minutes": delay,
+                    },
+                )
+            )
 
     def _apply_multi_press_layers(
         self,

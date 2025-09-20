@@ -1,5 +1,6 @@
 """Tests for multi-layer press generation."""
 import os
+import random
 from unittest.mock import Mock
 
 import pytest
@@ -410,3 +411,71 @@ def test_multi_press_includes_tone_seed(monkeypatch):
     tone_seeds = [layer.tone_seed for layer in layers if layer.type in {"mentorship_update", "academic_gossip"}]
     assert tone_seeds
     assert all(seed is not None for seed in tone_seeds)
+
+def test_generate_recruitment_layers_uses_yaml_templates():
+    """Recruitment coverage should pick headlines and callouts from YAML templates."""
+
+    random.seed(42)
+    generator = MultiPressGenerator()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Prof. Vale"
+    scholar.id = "scholar-001"
+
+    observers = []
+    for idx in range(6):
+        mock_obs = Mock(spec=Scholar)
+        mock_obs.name = f"Observer{idx}"
+        mock_obs.id = f"observer-{idx}"
+        observers.append(mock_obs)
+
+    layers = generator.generate_recruitment_layers(
+        player="Player One",
+        scholar=scholar,
+        success=True,
+        faction="Academic",
+        chance=0.72,
+        observers=observers,
+    )
+
+    digest_layer = next(layer for layer in layers if layer.type == "recruitment_followup")
+    briefing_layer = next(layer for layer in layers if layer.type == "recruitment_brief")
+
+    success_headlines = generator._recruitment_templates["recruitment"]["digest"]["success"]["headlines"]
+    assert digest_layer.context["headline"] in success_headlines
+    assert digest_layer.context["metadata"]["callouts"]
+    assert all(isinstance(item, str) for item in digest_layer.context["metadata"]["callouts"])
+
+    assert briefing_layer.context["metadata"]["callouts"]
+    assert all(isinstance(item, str) for item in briefing_layer.context["metadata"]["callouts"])
+
+
+def test_generate_table_talk_layers_produces_roundup_callouts():
+    """Table-talk coverage should surface roundup callouts from YAML templates."""
+
+    random.seed(24)
+    generator = MultiPressGenerator()
+
+    scholars = []
+    for idx in range(5):
+        mock_scholar = Mock(spec=Scholar)
+        mock_scholar.name = f"Scholar{idx}"
+        mock_scholar.id = f"scholar-{idx}"
+        scholars.append(mock_scholar)
+
+    message = "We should broaden the sideways catalogue and layer our table-talk press."
+    layers = generator.generate_table_talk_layers(
+        speaker="Dr. Echo",
+        message=message,
+        scholars=scholars,
+    )
+
+    digest_layer = next(layer for layer in layers if layer.type == "table_talk_digest")
+    roundup_layer = next(layer for layer in layers if layer.type == "table_talk_roundup")
+
+    digest_headlines = generator._table_talk_templates["table_talk"]["digest"]["headlines"]
+    assert digest_layer.context["headline"] in digest_headlines
+
+    roundup_metadata = roundup_layer.context["metadata"]
+    assert roundup_metadata["callouts"]
+    assert all(isinstance(item, str) for item in roundup_metadata["callouts"])
