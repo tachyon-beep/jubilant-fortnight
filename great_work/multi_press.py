@@ -1,6 +1,7 @@
 """Multi-layer press artifact generation for The Great Work."""
 from __future__ import annotations
 
+import os
 import random
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
@@ -18,8 +19,31 @@ from .press import (
     discovery_report,
     retraction_notice,
     academic_gossip,
-    defection_notice
+    defection_notice,
 )
+from .press_tone import get_tone_seed
+
+
+def mentorship_update(context: Dict[str, Any]) -> PressRelease:
+    """Generate a mentorship-themed press release from context."""
+
+    return PressRelease(
+        type=context.get("type", "mentorship_update"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def admin_update(context: Dict[str, Any]) -> PressRelease:
+    """Generate an administrative status press release."""
+
+    return PressRelease(
+        type=context.get("type", "admin_update"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
 
 
 class PressDepth(Enum):
@@ -37,12 +61,13 @@ class PressLayer:
     type: str          # Type of press release
     generator: callable  # Function to generate the release
     context: Any       # Context for generation
+    tone_seed: Optional[Dict[str, str]] = None
 
 
 class MultiPressGenerator:
     """Generate multi-layer press artifacts for events."""
 
-    def __init__(self):
+    def __init__(self, setting: str | None = None):
         """Initialize the multi-press generator."""
         self.reaction_templates = [
             "{scholar} expresses {emotion} about {event}",
@@ -51,6 +76,27 @@ class MultiPressGenerator:
             "{scholar} praises the boldness of {event}",
             "{scholar} warns of consequences from {event}",
         ]
+        self.fast_layer_delays = self._load_delays(
+            os.getenv("GREAT_WORK_FAST_LAYER_DELAYS"),
+            default=[0, 45, 120],
+        )
+        self.long_layer_delays = self._load_delays(
+            os.getenv("GREAT_WORK_LONG_LAYER_DELAYS"),
+            default=[720, 1440, 2880],
+        )
+        self._setting = setting
+
+    @staticmethod
+    def _load_delays(raw: Optional[str], default: List[int]) -> List[int]:
+        """Parse comma-separated delay minutes with graceful fallback."""
+
+        if not raw:
+            return list(default)
+        try:
+            values = [int(value.strip()) for value in raw.split(",") if value.strip()]
+            return values or list(default)
+        except ValueError:
+            return list(default)
 
     def determine_depth(
         self,
@@ -82,6 +128,16 @@ class MultiPressGenerator:
 
         # Default to minimal
         return PressDepth.MINIMAL
+
+    def _tone_seed(self, event_key: str) -> Optional[Dict[str, str]]:
+        seed = get_tone_seed(event_key, self._setting)
+        if seed:
+            return dict(seed)
+        return None
+
+    @property
+    def setting(self) -> Optional[str]:
+        return self._setting
 
     def generate_expedition_layers(
         self,
@@ -119,6 +175,7 @@ class MultiPressGenerator:
 
         # Add follow-up coverage based on depth
         if depth in [PressDepth.STANDARD, PressDepth.EXTENSIVE, PressDepth.BREAKING]:
+            tone_seed = self._tone_seed("expedition_followup")
             # Scholar reactions (1 hour later)
             num_reactions = {
                 PressDepth.STANDARD: 2,
@@ -145,7 +202,8 @@ class MultiPressGenerator:
                     delay_minutes=60 + (i * 15),  # Stagger reactions
                     type="academic_gossip",
                     generator=academic_gossip,
-                    context=gossip_ctx
+                    context=gossip_ctx,
+                    tone_seed=tone_seed,
                 ))
 
         # Breaking news gets additional analysis
@@ -154,14 +212,16 @@ class MultiPressGenerator:
             layers.append(self._generate_analysis_layer(
                 expedition_ctx,
                 outcome_ctx,
-                delay_minutes=120
+                delay_minutes=120,
+                tone_seed=self._tone_seed("expedition_followup"),
             ))
 
             # Follow-up investigations (3 hours later)
             if outcome_ctx.result.sideways_discovery:
                 layers.append(self._generate_investigation_layer(
                     outcome_ctx.result.sideways_discovery,
-                    delay_minutes=180
+                    delay_minutes=180,
+                    tone_seed=self._tone_seed("expedition_followup"),
                 ))
 
         return layers
@@ -182,6 +242,7 @@ class MultiPressGenerator:
 
         if phase == "launch":
             # Curate teaser reactions (delayed)
+            tone_seed = self._tone_seed("symposium_resolution")
             for i, scholar in enumerate(safe_scholars[:3]):
                 quote = f"{scholar.name} hints at bold arguments for '{topic}'."
                 ctx = GossipContext(
@@ -195,6 +256,7 @@ class MultiPressGenerator:
                         type="academic_gossip",
                         generator=academic_gossip,
                         context=ctx,
+                        tone_seed=tone_seed,
                     )
                 )
         elif phase == "resolution" and votes:
@@ -208,6 +270,7 @@ class MultiPressGenerator:
             )
 
             analysts = safe_scholars[:4]
+            tone_seed = self._tone_seed("symposium_resolution")
             for i, scholar in enumerate(analysts):
                 quote = self._generate_symposium_reaction(
                     scholar.name,
@@ -227,6 +290,7 @@ class MultiPressGenerator:
                         type="academic_gossip",
                         generator=academic_gossip,
                         context=ctx,
+                        tone_seed=tone_seed,
                     )
                 )
 
@@ -245,6 +309,7 @@ class MultiPressGenerator:
                             metadata={"topic": topic, "phase": "analysis"},
                         ),
                         context={},
+                        tone_seed=tone_seed,
                     )
                 )
 
@@ -270,6 +335,7 @@ class MultiPressGenerator:
         ))
 
         if depth in [PressDepth.STANDARD, PressDepth.EXTENSIVE, PressDepth.BREAKING]:
+            tone_seed = self._tone_seed("defection_followup")
             # Immediate reactions from close colleagues
             colleagues = self._find_colleagues(scholar, scholars)[:3]
             for i, colleague in enumerate(colleagues):
@@ -290,7 +356,8 @@ class MultiPressGenerator:
                     delay_minutes=30 + (i * 10),
                     type="academic_gossip",
                     generator=academic_gossip,
-                    context=gossip_ctx
+                    context=gossip_ctx,
+                    tone_seed=tone_seed,
                 ))
 
         # Extensive coverage includes institutional responses
@@ -300,7 +367,8 @@ class MultiPressGenerator:
                 old_faction,
                 scholar.name,
                 "regret",
-                delay_minutes=120
+                delay_minutes=120,
+                tone_seed=self._tone_seed("defection_followup"),
             ))
 
             # Statement from new faction (2.5 hours later)
@@ -308,7 +376,8 @@ class MultiPressGenerator:
                 defection_ctx.new_faction,
                 scholar.name,
                 "welcome",
-                delay_minutes=150
+                delay_minutes=150,
+                tone_seed=self._tone_seed("defection_followup"),
             ))
 
         return layers
@@ -344,6 +413,7 @@ class MultiPressGenerator:
 
         # Conference proceedings (30 minutes later)
         if depth != PressDepth.MINIMAL:
+            tone_seed = self._tone_seed("symposium_resolution")
             # Generate debate highlights
             for i in range(min(3, len(participants))):
                 participant = participants[i] if i < len(participants) else f"Scholar {i+1}"
@@ -359,7 +429,8 @@ class MultiPressGenerator:
                     delay_minutes=30 + (i * 10),
                     type="academic_gossip",
                     generator=academic_gossip,
-                    context=gossip_ctx
+                    context=gossip_ctx,
+                    tone_seed=tone_seed,
                 ))
 
         # Outcome announcement (1 hour later)
@@ -369,8 +440,192 @@ class MultiPressGenerator:
                 theory,
                 outcome,
                 reputation_changes,
-                delay_minutes=60
+                delay_minutes=60,
+                tone_seed=self._tone_seed("symposium_resolution"),
             ))
+
+        return layers
+
+    def generate_mentorship_layers(
+        self,
+        *,
+        mentor: str,
+        scholar: Scholar,
+        phase: str,
+        track: Optional[str] = None,
+    ) -> List[PressLayer]:
+        """Generate layered coverage for mentorship lifecycle events."""
+
+        layers: List[PressLayer] = []
+        safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
+        safe_long = [delay for delay in self.long_layer_delays if delay > 0]
+        track_name = track or scholar.career.get("track", "Academia")
+
+        fast_quotes = {
+            "queued": [
+                f"{mentor} promises to open hidden archives for {scholar.name}.",
+                f"Assistants scramble to prepare {scholar.name}'s orientation dossier.",
+            ],
+            "activation": [
+                f"{scholar.name} reports for their first session with {mentor}.",
+                f"The {track_name} faculty clear space for the new protégé.",
+            ],
+            "progression": [
+                f"{scholar.name}'s experiments draw praise from {mentor}.",
+                f"Lab chatter says {scholar.name} cracked a vexing {track_name} puzzle.",
+            ],
+            "completion": [
+                f"{mentor} applauds {scholar.name}'s graduation from the mentorship.",
+                f"Peers toast {scholar.name}'s final colloquy with {mentor}.",
+            ],
+        }
+
+        long_summaries = {
+            "queued": (
+                f"{mentor} outlines a rigorous on-boarding for {scholar.name},"
+                f" blending fresh fieldwork with {track_name} theory."),
+            "activation": (
+                f"{scholar.name} begins daily workshops under {mentor},"
+                f" mapping milestones for the {track_name} track."),
+            "progression": (
+                f"Progress reports note {scholar.name}'s breakthroughs and setbacks,"
+                f" with {mentor} adjusting the syllabus in real time."),
+            "completion": (
+                f"The mentorship capstone highlights {scholar.name}'s signature contribution"
+                f" to {track_name}, while {mentor} prepares the next cohort."),
+        }
+
+        tone_seed = self._tone_seed("mentorship_longform")
+        gossip_quotes = fast_quotes.get(phase, [])
+        for delay, quote in zip(safe_fast, gossip_quotes):
+            ctx = GossipContext(
+                scholar=mentor,
+                quote=quote,
+                trigger=f"Mentorship {phase}",
+            )
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay,
+                    type="academic_gossip",
+                    generator=academic_gossip,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        long_summary = long_summaries.get(phase)
+        if long_summary:
+            for delay in safe_long:
+                ctx = {
+                    "headline": f"Mentorship Briefing: {scholar.name}",
+                    "body": (
+                        f"After {delay // 60 if delay >= 60 else delay} hour(s), "
+                        f"{long_summary}"
+                    ),
+                    "metadata": {
+                        "phase": phase,
+                        "mentor": mentor,
+                        "scholar": scholar.id,
+                        "track": track_name,
+                        "delay_minutes": delay,
+                    },
+                    "persona": mentor,
+                }
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="mentorship_update",
+                        generator=mentorship_update,
+                        context=ctx,
+                        tone_seed=tone_seed,
+                    )
+                )
+
+        return layers
+
+    def generate_admin_layers(
+        self,
+        *,
+        event: str,
+        actor: Optional[str],
+        reason: Optional[str] = None,
+    ) -> List[PressLayer]:
+        """Generate layered coverage for administrative events."""
+
+        layers: List[PressLayer] = []
+        persona = actor or "Operations Council"
+        event_title = event.replace("_", " ").title()
+
+        fast_messages = {
+            "pause": [
+                "Systems team initiates failover drills.",
+                "Moderators catalogue which queues are safe to resume.",
+            ],
+            "resume": [
+                "Bots signal that queued stories are warming back up.",
+                "Archivists verify no records were lost during the pause.",
+            ],
+        }
+
+        long_messages = {
+            "pause": (
+                "Operations publish a stabilization plan, outlining diagnostics,"
+                " recovery checkpoints, and expectations for players awaiting narratives."
+            ),
+            "resume": (
+                "A retrospective summarises the outage, remediation steps,"
+                " and new safeguards for the narrative pipeline."
+            ),
+        }
+
+        tone_seed = self._tone_seed("admin_recovery")
+        quick_updates = fast_messages.get(event, [
+            "Administrators coordinate the next steps.",
+            "Players are reminded to monitor status channels.",
+        ])
+
+        safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
+        for delay, message in zip(safe_fast, quick_updates):
+            ctx = GossipContext(
+                scholar=persona,
+                quote=message,
+                trigger=f"Admin {event_title}",
+            )
+            layers.append(
+                PressLayer(
+                    delay_minutes=delay,
+                    type="admin_gossip",
+                    generator=academic_gossip,
+                    context=ctx,
+                    tone_seed=tone_seed,
+                )
+            )
+
+        long_message = long_messages.get(event)
+        if long_message:
+            safe_long = [delay for delay in self.long_layer_delays if delay > 0]
+            for delay in safe_long:
+                ctx = {
+                    "headline": f"Administrative Update: {event_title}",
+                    "body": long_message if not reason else f"{long_message}\nReason: {reason}",
+                    "metadata": {
+                        "event": event,
+                        "actor": persona,
+                        "reason": reason,
+                        "delay_minutes": delay,
+                    },
+                    "persona": persona,
+                    "type": "admin_update",
+                }
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="admin_update",
+                        generator=admin_update,
+                        context=ctx,
+                        tone_seed=tone_seed,
+                    )
+                )
 
         return layers
 
@@ -481,7 +736,8 @@ class MultiPressGenerator:
         self,
         expedition_ctx: ExpeditionContext,
         outcome_ctx: OutcomeContext,
-        delay_minutes: int
+        delay_minutes: int,
+        tone_seed: Optional[Dict[str, str]] = None,
     ) -> PressLayer:
         """Generate an analysis/editorial layer."""
         analysis_text = (
@@ -499,13 +755,15 @@ class MultiPressGenerator:
                 headline="Editorial: Analyzing Recent Developments",
                 body=analysis_text
             ),
-            context={}
+            context={},
+            tone_seed=tone_seed,
         )
 
     def _generate_investigation_layer(
         self,
         sideways_discovery: str,
-        delay_minutes: int
+        delay_minutes: int,
+        tone_seed: Optional[Dict[str, str]] = None,
     ) -> PressLayer:
         """Generate follow-up investigation layer."""
         investigation_text = (
@@ -522,7 +780,8 @@ class MultiPressGenerator:
                 headline="Investigation: Uncovering the Truth",
                 body=investigation_text
             ),
-            context={}
+            context={},
+            tone_seed=tone_seed,
         )
 
     def _generate_faction_statement(
@@ -530,7 +789,8 @@ class MultiPressGenerator:
         faction: str,
         scholar_name: str,
         tone: str,
-        delay_minutes: int
+        delay_minutes: int,
+        tone_seed: Optional[Dict[str, str]] = None,
     ) -> PressLayer:
         """Generate a faction statement."""
         if tone == "regret":
@@ -554,7 +814,8 @@ class MultiPressGenerator:
                 headline=f"Official Statement from {faction}",
                 body=statement
             ),
-            context={}
+            context={},
+            tone_seed=tone_seed,
         )
 
     def _generate_conference_outcome(
@@ -562,7 +823,8 @@ class MultiPressGenerator:
         theory: str,
         outcome: str,
         reputation_changes: Dict[str, int],
-        delay_minutes: int
+        delay_minutes: int,
+        tone_seed: Optional[Dict[str, str]] = None,
     ) -> PressLayer:
         """Generate conference outcome announcement."""
         winners = [p for p, r in reputation_changes.items() if r > 0]
@@ -588,7 +850,8 @@ class MultiPressGenerator:
                 headline="Conference Conclusion",
                 body=outcome_text
             ),
-            context={}
+            context={},
+            tone_seed=tone_seed,
         )
 
     def apply_layers(

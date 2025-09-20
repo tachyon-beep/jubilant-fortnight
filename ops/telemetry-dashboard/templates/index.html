@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>The Great Work – Telemetry Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; background: #0f172a; color: #f1f5f9; }
+      h1, h2 { color: #38bdf8; }
+      table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
+      th, td { border: 1px solid #1e293b; padding: 0.5rem 0.75rem; text-align: left; }
+      th { background: #1d4ed8; color: #f8fafc; }
+      tr:nth-child(even) { background: #111827; }
+      .meta { font-size: 0.9rem; color: #cbd5f5; margin-bottom: 2rem; }
+      .section { margin-bottom: 3rem; }
+    </style>
+  </head>
+  <body>
+    <h1>The Great Work – Telemetry Dashboard</h1>
+    <div class="meta">
+      <div>Generated at: {{ report.generated_at }}</div>
+      <div>Uptime: {{ '%.2f' | format(report.uptime_seconds / 3600) }} hours</div>
+      <div>Total events: {{ report.overall.total_events }} | Unique players: {{ report.overall.unique_players }}</div>
+    </div>
+
+    <div class="section">
+      <h2>Command Usage</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Uses</th>
+            <th>Success Rate</th>
+            <th>Unique Players</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for command, stats in command_stats_sorted[:15] %}
+          <tr>
+            <td>{{ command }}</td>
+            <td>{{ stats.usage_count }}</td>
+            <td>{{ '%.0f%%' | format(stats.success_rate * 100) }}</td>
+            <td>{{ stats.unique_players }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No command data recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Press Cadence (24h)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Layer</th>
+            <th>Layers</th>
+            <th>Avg Delay (m)</th>
+            <th>Max Delay (m)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in press_cadence %}
+          <tr>
+            <td>{{ entry.event_type }}</td>
+            <td>{{ entry.layer_type }}</td>
+            <td>{{ entry.layer_count }}</td>
+            <td>{{ '%.1f' | format(entry.avg_delay_minutes) }}</td>
+            <td>{{ '%.1f' | format(entry.max_delay_minutes) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No layered press recorded in the past 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Digest Health (24h)</h2>
+      {% set digest = report.digest_health_24h %}
+      {% if digest.total_digests > 0 %}
+      <table>
+        <tbody>
+          <tr><th>Total Digests</th><td>{{ digest.total_digests }}</td></tr>
+          <tr><th>Average Runtime</th><td>{{ '%.0f ms' | format(digest.avg_duration_ms) }}</td></tr>
+          <tr><th>Max Runtime</th><td>{{ '%.0f ms' | format(digest.max_duration_ms) }}</td></tr>
+          <tr><th>Average Releases</th><td>{{ '%.1f' | format(digest.avg_release_count) }}</td></tr>
+          <tr><th>Max Releases</th><td>{{ digest.max_release_count }}</td></tr>
+          <tr><th>Average Queue Size</th><td>{{ '%.1f' | format(digest.avg_queue_size) }}</td></tr>
+          <tr><th>Max Queue Size</th><td>{{ digest.max_queue_size }}</td></tr>
+        </tbody>
+      </table>
+      {% else %}
+      <p>No digest runs recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>LLM Activity (24h)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Press Type</th>
+            <th>Total Calls</th>
+            <th>Successes</th>
+            <th>Success Rate</th>
+            <th>Avg Duration</th>
+            <th>Max Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for press_type, stats in llm_activity %}
+          <tr>
+            <td>{{ press_type.replace('_', ' ') }}</td>
+            <td>{{ stats.total_calls }}</td>
+            <td>{{ stats.successes }}</td>
+            <td>{{ '%.0f%%' | format(stats.success_rate * 100) }}</td>
+            <td>{{ '%.0f ms' | format(stats.avg_duration_ms) }}</td>
+            <td>{{ '%.0f ms' | format(stats.max_duration_ms) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No LLM activity recorded in the past 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Recent System Events</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Event</th>
+            <th>Source</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in report.system_events_24h %}
+          <tr>
+            <td>{{ event.timestamp }}</td>
+            <td>{{ event.event }}</td>
+            <td>{{ event.source or '—' }}</td>
+            <td>{{ event.reason or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No system events recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

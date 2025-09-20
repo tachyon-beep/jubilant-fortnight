@@ -138,6 +138,69 @@ def test_track_performance():
         assert event.tags["query"] == "select_scholars"
 
 
+def test_track_press_layer_and_summary():
+    """Press cadence metrics should aggregate by event and layer type."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "press.db")
+
+        collector.track_press_layer(
+            layer_type="academic_gossip",
+            event_type="expedition",
+            delay_minutes=45.0,
+            persona="Scholar"
+        )
+        collector.track_press_layer(
+            layer_type="academic_gossip",
+            event_type="expedition",
+            delay_minutes=15.0,
+        )
+        collector.flush()
+
+        summary = collector.get_press_cadence_summary(hours=1)
+        assert summary
+        top = summary[0]
+        assert top["event_type"] == "expedition"
+        assert top["layer_type"] == "academic_gossip"
+        assert top["layer_count"] == 2
+        assert top["avg_delay_minutes"] > 0
+
+
+def test_track_queue_depth_and_summary():
+    """Queue depth metrics should aggregate by horizon."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "queue.db")
+
+        collector.track_queue_depth(3, horizon_hours=48)
+        collector.track_queue_depth(1, horizon_hours=24)
+        collector.track_queue_depth(5, horizon_hours=48)
+        collector.flush()
+
+        summary = collector.get_queue_depth_summary(hours=1)
+        assert summary
+        assert "48" in summary
+        assert summary["48"]["max_queue"] == 5
+        assert summary["24"]["avg_queue"] == 1.0
+
+
+def test_digest_summary():
+    """Digest summaries should surface runtime and queue size."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        collector = TelemetryCollector(Path(tmpdir) / "digest.db")
+
+        collector.track_digest(
+            duration_ms=1200.0,
+            release_count=3,
+            scheduled_queue_size=5,
+        )
+        collector.flush()
+
+        digest = collector.get_digest_summary(hours=1)
+        assert digest["total_digests"] == 1
+        assert digest["avg_duration_ms"] == 1200.0
+        assert digest["avg_release_count"] == 3.0
+        assert digest["avg_queue_size"] == 5.0
+
+
 def test_flush_metrics():
     """Test flushing metrics to database."""
     with tempfile.TemporaryDirectory() as tmpdir:

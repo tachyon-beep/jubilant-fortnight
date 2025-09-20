@@ -49,6 +49,7 @@ from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
 from .telemetry import get_telemetry
 from .llm_client import enhance_press_release_sync, LLMGenerationError, LLMNotEnabledError
+from .press_tone import get_tone_seed
 
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,8 @@ class GameService:
         self._rng = DeterministicRNG(seed=42)
         self._pending_expeditions: Dict[str, ExpeditionOrder] = {}
         self._generated_counter = self._initial_generated_counter()
-        self._multi_press = MultiPressGenerator()
+        tone_setting = os.getenv("GREAT_WORK_PRESS_SETTING")
+        self._multi_press = MultiPressGenerator(setting=tone_setting)
         self._llm_lock = threading.Lock()
         self._llm_fail_start: Optional[datetime] = None
         self._llm_pause_timeout = float(os.getenv("LLM_PAUSE_TIMEOUT", "600"))
@@ -186,6 +188,148 @@ class GameService:
             releases.append(release)
         return releases
 
+    def pending_press_count(self) -> int:
+        """Return the number of scheduled press items waiting to release."""
+
+        return self.state.count_queued_press()
+
+    def upcoming_press(
+        self,
+        *,
+        limit: int = 5,
+        within_hours: int = 48,
+    ) -> List[Dict[str, object]]:
+        """Provide a snapshot of scheduled press due within the time horizon."""
+
+        now = datetime.now(timezone.utc)
+        horizon = now + timedelta(hours=within_hours)
+        upcoming: List[Dict[str, object]] = []
+        for _, release_at, payload in self.state.list_queued_press():
+            if release_at > horizon:
+                continue
+            upcoming.append(
+                {
+                    "headline": payload.get("headline", "Scheduled Update"),
+                    "type": payload.get("type", "scheduled_press"),
+                    "release_at": release_at,
+                }
+            )
+        upcoming.sort(key=lambda item: item["release_at"])
+        return upcoming[:limit]
+
+    def create_digest_highlights(
+        self,
+        *,
+        now: Optional[datetime] = None,
+        limit: int = 5,
+        within_hours: int = 24,
+    ) -> Optional[PressRelease]:
+        """Create a digest highlight press release summarising upcoming drops."""
+
+        now = now or datetime.now(timezone.utc)
+        horizon = now + timedelta(hours=within_hours)
+        items: List[Dict[str, object]] = []
+        for _, release_at, payload in self.state.list_queued_press():
+            if release_at > horizon:
+                continue
+            items.append(
+                {
+                    "headline": payload.get("headline", "Scheduled Update"),
+                    "type": payload.get("type", "scheduled_press"),
+                    "metadata": payload.get("metadata", {}),
+                    "release_at": release_at,
+                }
+            )
+
+        if not items:
+            return None
+
+        items.sort(key=lambda item: item["release_at"])
+        items = items[:limit]
+        tone_seed = get_tone_seed("digest_highlight", getattr(self._multi_press, "setting", None))
+        headline_template = None
+        callout = None
+        blurb_template = None
+        if tone_seed:
+            headline_template = tone_seed.get("headline")
+            callout = tone_seed.get("callout")
+            blurb_template = tone_seed.get("blurb_template")
+        headline = headline_template.format(count=len(items)) if headline_template else f"Upcoming Highlights ({len(items)})"
+
+        lines: List[str] = []
+        metadata_items: List[Dict[str, object]] = []
+        for item in items:
+            release_at = item["release_at"]
+            delta_minutes = max(0, int((release_at - now).total_seconds() // 60))
+            if delta_minutes >= 60:
+                hours = delta_minutes // 60
+                minutes = delta_minutes % 60
+                relative = f"{hours}h {minutes}m"
+            else:
+                relative = f"{delta_minutes}m"
+            absolute = release_at.strftime("%Y-%m-%d %H:%M UTC")
+            summary = f"{item['headline']} — {absolute} (in {relative})"
+            if blurb_template:
+                blurb = blurb_template.format(
+                    headline=item["headline"],
+                    relative_time=relative,
+                    call_to_action=callout or ""
+                )
+            else:
+                blurb = summary
+            lines.append(f"• {blurb}")
+            metadata_items.append(
+                {
+                    "headline": item["headline"],
+                    "type": item["type"],
+                    "release_at": release_at.isoformat(),
+                    "relative_minutes": delta_minutes,
+                }
+            )
+
+        if callout:
+            lines.append(callout)
+
+        base_body = "\n".join(lines)
+        release = PressRelease(
+            type="digest_highlights",
+            headline=headline,
+            body=base_body,
+            metadata={
+                "digest_highlights": {
+                    "generated_at": now.isoformat(),
+                    "horizon_hours": within_hours,
+                    "items": metadata_items,
+                }
+            },
+        )
+        if tone_seed:
+            release.metadata.setdefault("tone_seed", {}).update(tone_seed)
+        extra_context: Dict[str, object] = {
+            "event_type": "digest_highlight",
+            "item_count": len(items),
+            "tone_seed": tone_seed or {},
+        }
+        release = self._enhance_press_release(
+            release,
+            base_body=base_body,
+            persona_name=None,
+            persona_traits=None,
+            extra_context=extra_context,
+        )
+        self._archive_press(release, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="digest_highlights_generated",
+                payload={
+                    "headline": release.headline,
+                    "item_count": len(items),
+                },
+            )
+        )
+        return release
+
     def _ensure_not_paused(self) -> None:
         if self._paused:
             raise GameService.GamePausedError(self._pause_reason or "Game is paused")
@@ -212,6 +356,38 @@ class GameService:
         self._queue_admin_notification(
             f"⚠️ Game paused — {self._pause_reason}"
         )
+        now = datetime.now(timezone.utc)
+        pause_press = PressRelease(
+            type="admin_action",
+            headline="Game Pause",
+            body=f"Live actions are halted while narrative systems recover: {reason}.",
+            metadata={
+                "source": "llm",
+                "reason": reason,
+            },
+        )
+        self._archive_press(pause_press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="game_paused",
+                payload={
+                    "reason": reason,
+                    "source": "llm",
+                },
+            )
+        )
+        layers = self._multi_press.generate_admin_layers(
+            event="pause",
+            actor="Operations Council",
+            reason=reason,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={pause_press.type},
+            timestamp=now,
+            event_type="admin",
+        )
         try:
             self._telemetry.track_system_event(
                 "llm_pause",
@@ -232,6 +408,38 @@ class GameService:
             self._pause_source = None
             self._llm_fail_start = None
         self._queue_admin_notification("✅ Narrative generator restored — game resumed.")
+        now = datetime.now(timezone.utc)
+        resume_press = PressRelease(
+            type="admin_action",
+            headline="Game Resume",
+            body="Narrative systems restored; queued actions will resume shortly.",
+            metadata={
+                "source": "llm",
+                "reason": previous_reason,
+            },
+        )
+        self._archive_press(resume_press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="game_resumed",
+                payload={
+                    "source": "llm",
+                    "reason": previous_reason,
+                },
+            )
+        )
+        layers = self._multi_press.generate_admin_layers(
+            event="resume",
+            actor="Operations Council",
+            reason=previous_reason,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={resume_press.type},
+            timestamp=now,
+            event_type="admin",
+        )
         try:
             self._telemetry.track_system_event(
                 "llm_resume",
@@ -352,6 +560,8 @@ class GameService:
     ) -> PressRelease:
         self._ensure_not_paused()
         self.ensure_player(player_id)
+        player = self.state.get_player(player_id)
+        assert player is not None
         ctx = BulletinContext(
             bulletin_number=len(self.state.export_events()) + 1,
             player=player_id,
@@ -361,6 +571,36 @@ class GameService:
             deadline=deadline,
         )
         press = academic_bulletin(ctx)
+        base_body = press.body
+        press.metadata = {
+            **press.metadata,
+            "submission": {
+                "player_id": player_id,
+                "display_name": player.display_name,
+                "theory": theory,
+                "confidence": confidence.value,
+                "supporters": list(supporters),
+                "deadline": deadline,
+            },
+        }
+        press = self._enhance_press_release(
+            press,
+            base_body=base_body,
+            persona_name=player.display_name,
+            persona_traits=None,
+            extra_context={
+                "type": "academic_bulletin",
+                "player": player.display_name,
+                "action": (
+                    f"submitted '{theory}' with {confidence.value} confidence; "
+                    f"counter-claims invited before {deadline}"
+                ),
+                "theory": theory,
+                "confidence": confidence.value,
+                "supporters": supporters,
+                "deadline": deadline,
+            },
+        )
         now = datetime.now(timezone.utc)
         self.state.append_event(
             Event(
@@ -386,6 +626,61 @@ class GameService:
             )
         )
         self._archive_press(press, now)
+        return press
+
+    def post_table_talk(
+        self,
+        player_id: str,
+        display_name: str,
+        message: str,
+    ) -> PressRelease:
+        """Publish a table-talk message with LLM enhancement and archival."""
+
+        self._ensure_not_paused()
+        self.ensure_player(player_id, display_name)
+        player = self.state.get_player(player_id)
+        assert player is not None
+
+        now = datetime.now(timezone.utc)
+        headline = f"Table Talk — {player.display_name}"
+        base_body = f"{player.display_name}: {message}"
+        press = PressRelease(
+            type="table_talk",
+            headline=headline,
+            body=base_body,
+            metadata={
+                "table_talk": {
+                    "player_id": player_id,
+                    "display_name": player.display_name,
+                    "message": message,
+                    "posted_at": now.isoformat(),
+                }
+            },
+        )
+        press = self._enhance_press_release(
+            press,
+            base_body=base_body,
+            persona_name=player.display_name,
+            persona_traits=None,
+            extra_context={
+                "type": "table_talk",
+                "player": player.display_name,
+                "action": f"shared table-talk: {message}",
+                "message": message,
+            },
+        )
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="table_talk_post",
+                payload={
+                    "player": player_id,
+                    "display_name": player.display_name,
+                    "message": message,
+                },
+            )
+        )
         return press
 
     def queue_expedition(
@@ -596,6 +891,7 @@ class GameService:
                 layers,
                 skip_types={"research_manifesto", release.type},
                 timestamp=now,
+                event_type="expedition",
             )
             releases.extend(extra_releases)
             self.state.append_event(
@@ -824,6 +1120,7 @@ class GameService:
             layers,
             skip_types={press.type},
             timestamp=timestamp,
+            event_type="defection",
         )
         self.state.append_event(
             Event(
@@ -1222,6 +1519,7 @@ class GameService:
                 layers,
                 skip_types={release.type},
                 timestamp=timestamp,
+                event_type="defection",
             )
             press.extend(extra_layers)
 
@@ -1296,6 +1594,7 @@ class GameService:
                 layers,
                 skip_types={release.type},
                 timestamp=timestamp,
+                event_type="defection",
             )
             press.extend(extra_layers)
 
@@ -1477,6 +1776,19 @@ class GameService:
                     "mentorship_id": mentorship_id,
                 },
             )
+        )
+
+        layers = self._multi_press.generate_mentorship_layers(
+            mentor=player.display_name,
+            scholar=scholar,
+            phase="queued",
+            track=career_track,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=now,
+            event_type="mentorship",
         )
 
         return press
@@ -1814,6 +2126,7 @@ class GameService:
             layers,
             skip_types={press.type},
             timestamp=now,
+            event_type="symposium",
         )
 
         return press
@@ -1993,6 +2306,7 @@ class GameService:
             layers,
             skip_types={press.type},
             timestamp=now,
+            event_type="symposium",
         )
 
         return press
@@ -2340,6 +2654,18 @@ class GameService:
             )
         )
 
+        layers = self._multi_press.generate_admin_layers(
+            event="resume",
+            actor=actor,
+            reason=previous_reason,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=now,
+            event_type="admin",
+        )
+
         return press
 
     def wager_reference(self) -> Dict[str, object]:
@@ -2540,6 +2866,20 @@ class GameService:
                 )
                 releases.append(press)
                 self._archive_press(press, now)
+                layers = self._multi_press.generate_mentorship_layers(
+                    mentor=mentor_name,
+                    scholar=scholar,
+                    phase="progression",
+                    track=track,
+                )
+                releases.extend(
+                    self._apply_multi_press_layers(
+                        layers,
+                        skip_types={press.type},
+                        timestamp=now,
+                        event_type="mentorship",
+                    )
+                )
                 self.state.append_event(
                     Event(
                         timestamp=now,
@@ -2564,6 +2904,20 @@ class GameService:
                     )
                     releases.append(complete_press)
                     self._archive_press(complete_press, now)
+                    completion_layers = self._multi_press.generate_mentorship_layers(
+                        mentor=mentor_name,
+                        scholar=scholar,
+                        phase="completion",
+                        track=track,
+                    )
+                    releases.extend(
+                        self._apply_multi_press_layers(
+                            completion_layers,
+                            skip_types={complete_press.type},
+                            timestamp=now,
+                            event_type="mentorship",
+                        )
+                    )
 
             self.state.save_scholar(scholar)
         return releases
@@ -2631,6 +2985,18 @@ class GameService:
                     trigger="Mentorship activation",
                 )
             )
+            press = self._enhance_press_release(
+                press,
+                base_body=press.body,
+                persona_name=player.display_name,
+                persona_traits=None,
+                extra_context={
+                    "event": "mentorship_activated",
+                    "mentor": player.display_name,
+                    "scholar": scholar.name,
+                    "career_track": career_track or scholar.career.get("track", "Academia"),
+                },
+            )
             releases.append(press)
             self._archive_press(press, now)
 
@@ -2649,6 +3015,19 @@ class GameService:
                 order_id,
                 "completed",
                 result={"mentorship_id": mentorship_id},
+            )
+
+            layers = self._multi_press.generate_mentorship_layers(
+                mentor=player.display_name,
+                scholar=scholar,
+                phase="activation",
+                track=career_track or scholar.career.get("track", "Academia"),
+            )
+            self._apply_multi_press_layers(
+                layers,
+                skip_types={press.type},
+                timestamp=now,
+                event_type="mentorship",
             )
 
         return releases
@@ -2923,6 +3302,7 @@ class GameService:
         *,
         skip_types: set[str],
         timestamp: datetime,
+        event_type: str = "general",
     ) -> List[PressRelease]:
         """Render additional press layers, archiving each generated release."""
 
@@ -2931,9 +3311,43 @@ class GameService:
         remaining = [layer for layer in layers if layer.type not in skip_types]
         if not remaining:
             return []
+        telemetry = self._telemetry
         immediate: List[PressRelease] = []
         for layer in remaining:
+            persona_hint: Optional[str] = None
+            if hasattr(layer.context, "scholar"):
+                persona_hint = getattr(layer.context, "scholar")
+            elif isinstance(layer.context, dict):
+                persona_hint = layer.context.get("persona")
+            if telemetry is not None:
+                telemetry.track_press_layer(
+                    layer_type=layer.type,
+                    event_type=event_type,
+                    delay_minutes=float(layer.delay_minutes),
+                    persona=persona_hint,
+                )
             release = layer.generator(layer.context)
+            if layer.tone_seed:
+                release.metadata.setdefault("tone_seed", {})
+                release.metadata["tone_seed"].update(layer.tone_seed)
+            extra_context: Dict[str, object] = {
+                "event_type": event_type,
+                "layer_type": layer.type,
+                "delay_minutes": layer.delay_minutes,
+            }
+            if layer.tone_seed:
+                extra_context["tone_seed"] = layer.tone_seed
+            base_body = release.body
+            persona_traits = None
+            if persona_hint:
+                persona_traits = self._resolve_scholar_traits(persona_hint)
+            release = self._enhance_press_release(
+                release,
+                base_body=base_body,
+                persona_name=persona_hint,
+                persona_traits=persona_traits,
+                extra_context=extra_context,
+            )
             if layer.delay_minutes <= 0:
                 self._archive_press(release, timestamp)
                 immediate.append(release)
@@ -2945,6 +3359,7 @@ class GameService:
                     "delay_minutes": layer.delay_minutes,
                     "generated_at": timestamp.isoformat(),
                     "layer_type": layer.type,
+                    "event_type": event_type,
                 }
             )
             release_at = timestamp + timedelta(minutes=layer.delay_minutes)

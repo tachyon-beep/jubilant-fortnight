@@ -1,12 +1,12 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-20 (Phase 3 telemetry & dispatcher audit)
+Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 
 ## 1. Scholar Lifecycle and Memory
 
 - **Design intent:** Maintain a roster of 20–30 memorable scholars blending handcrafted legends with procedurally generated additions, spawn sidecast scholars from expeditions, nurture mentorship-driven career growth, and track defections with scars and public fallout.【F:docs/HLD.md†L24-L177】
-- **Implementation status:** `GameService` enforces the roster window, seeds new procedurally generated scholars, activates mentorships, progresses mentored careers, and resolves multi-stage defection negotiations with multi-layer press and persona metadata archived alongside outcomes.【F:great_work/service.py†L89-L760】【F:great_work/service.py†L1024-L1995】
-- **Gap:** Sidecasts still land as a single gossip artefact with no follow-on scenes, and mentorship arcs have not yet gained layered Gazette coverage or persistent scars beyond their initial announcement.【F:great_work/service.py†L2254-L2287】【F:great_work/press.py†L20-L145】
+- **Implementation status:** `GameService` enforces the roster window, seeds new procedurally generated scholars, activates mentorships, progresses mentored careers, and resolves multi-stage defection negotiations with multi-layer press and persona metadata archived alongside outcomes. Mentorship queue, activation, and completion flows now schedule fast and long-form follow-ups via `MultiPressGenerator` to match the documented cadence.【F:great_work/service.py†L89-L760】【F:great_work/service.py†L1024-L1995】【F:great_work/multi_press.py†L420-L624】
+- **Gap:** Sidecasts still land as a single gossip artefact with no follow-on scenes, and mentorship arcs lack persistent scars or relationship shifts beyond their layered announcements.【F:great_work/service.py†L2254-L2287】【F:great_work/press.py†L20-L145】
 
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
 
@@ -35,20 +35,20 @@ Last Updated: 2025-09-20 (Phase 3 telemetry & dispatcher audit)
 ## 5. Press Artefacts and Public Record
 
 - **Design intent:** Every move should produce persona-driven press artefacts that persist in a public archive—bulletins, manifestos, discoveries, retractions, gossip, recruitment notes, defection wires—and stay publicly accessible.【F:docs/HLD.md†L86-L354】
-- **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, and symposium flows now queue delayed follow-ups via `MultiPressGenerator`, with scheduled gossip and faction statements releasing over time alongside the primary artefact.【F:great_work/service.py†L170-L1850】【F:great_work/multi_press.py†L1-L520】【F:great_work/state.py†L1-L220】【F:great_work/discord_bot.py†L562-L737】【F:great_work/web_archive.py†L416-L520】
-- **Gap:** Mentorship/admin maintenance events still emit single-template copy, and staged drops are not yet summarised in Gazette digests or surfaced via operator dashboards.【F:great_work/service.py†L1200-L2060】【F:great_work/multi_press.py†L1-L520】
+- **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, symposium, mentorship, and admin flows queue delayed follow-ups via `MultiPressGenerator`, with staggered fast/long cadences delivering gossip, faction statements, mentorship bulletins, and administrative updates alongside the primary artefact; theory submissions and table-talk updates now run through the LLM enhancer before archiving, and digest ticks mint highlight blurbs from the scheduled press queue.【F:great_work/service.py†L170-L1400】【F:great_work/service.py†L220-L340】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/multi_press.py†L1-L680】【F:great_work/state.py†L1-L520】【F:great_work/discord_bot.py†L562-L940】【F:great_work/web_archive.py†L416-L520】
+- **Gap:** Recruitment and table-talk flows still publish only a single beat with no layered follow-ups, layered template variety for long-running mentorship arcs remains thin, and sideways effect mappings stay hard-coded instead of data-driven, limiting narrative diversity against the design brief.【F:great_work/service.py†L900-L1006】【F:great_work/service.py†L2830-L3058】【F:great_work/multi_press.py†L180-L360】【F:docs/HLD.md†L90-L213】
 
 ### 5.1 Public archive availability
 
 - **Design intent:** Keep a permanent, public, citable archive beyond Discord.【F:docs/HLD.md†L214-L354】
-- **Implementation status:** `/export_web_archive` builds a static site with permalinks, search, and scholar profiles on disk, `/archive_link` retrieves specific headlines, and each digest now exports the archive automatically and posts a timestamped ZIP snapshot to the admin channel.【F:great_work/discord_bot.py†L591-L737】【F:great_work/service.py†L1747-L1880】【F:great_work/scheduler.py†L20-L120】【F:docs/internal/ARCHIVE_OPERATIONS.md†L1-L120】
-- **Gap:** Hosting to a public endpoint still requires manual intervention or bespoke scripts; we also need rotation tooling for snapshots shipped to Discord to avoid unbounded storage growth.【F:docs/HLD.md†L214-L354】【F:great_work/scheduler.py†L20-L120】
+- **Implementation status:** `/export_web_archive` builds a static site with permalinks, search, and scholar profiles on disk, `/archive_link` retrieves specific headlines, each digest exports the archive automatically, syncs it into the container-served static host, and posts a timestamped ZIP snapshot to the admin channel with retention pruning.【F:great_work/discord_bot.py†L591-L737】【F:great_work/service.py†L1747-L1880】【F:great_work/scheduler.py†L20-L180】【F:docs/internal/ARCHIVE_OPERATIONS.md†L1-L130】
+- **Gap:** External hosting adapters (S3, GitHub Pages) remain manual, and the containerised nginx service still needs production hardening and monitoring guidance.【F:docs/HLD.md†L214-L354】【F:great_work/scheduler.py†L20-L180】
 
 ## 6. Timing, Gazette Cadence, and Symposiums
 
 - **Design intent:** Twice-daily Gazette digests should advance cooldowns, timeline years, and queued orders before publishing to Discord, while weekly symposiums run structured topics with mandatory responses.【F:docs/HLD.md†L101-L386】
-- **Implementation status:** `GazetteScheduler` advances the digest, resolves follow-ups/mentorships/conferences, exports the archive, and posts to configured channels; weekly symposia launch automatically and accept votes via `/symposium_vote`.【F:great_work/scheduler.py†L20-L95】【F:great_work/service.py†L1700-L2059】【F:great_work/discord_bot.py†L503-L543】
-- **Gap:** Symposium topics still come from a static random list rather than the player-driven proposal cycle described in the design, and digest summaries do not highlight queued opportunities beyond raw press dumps.【F:docs/HLD.md†L180-L280】【F:great_work/scheduler.py†L52-L86】
+- **Implementation status:** `GazetteScheduler` advances the digest, resolves follow-ups/mentorships/conferences, exports the archive, posts to configured channels, emits digest highlight blurbs drawn from the scheduled press queue, raises alerts on slow or thin digests, and sends "upcoming highlights" to an opt-in channel; weekly symposia launch automatically and accept votes via `/symposium_vote`.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L1700-L2060】【F:great_work/service.py†L220-L340】【F:great_work/discord_bot.py†L503-L940】
+- **Gap:** Symposium topics still come from a static random list rather than the player-driven proposal cycle described in the design, and there are no structured prompts enforcing the mandatory response cadence described for symposium weeks.【F:docs/HLD.md†L180-L280】【F:great_work/scheduler.py†L52-L86】
 
 ### 6.1 Non-expedition order batching
 
@@ -65,8 +65,8 @@ Last Updated: 2025-09-20 (Phase 3 telemetry & dispatcher audit)
 ## 8. Discord Command Surface and Admin Tools
 
 - **Design intent:** Provide slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log exports, and admin hotfixes, with telemetry on usage.【F:docs/HLD.md†L248-L386】
-- **Implementation status:** Commands cover the expected surface, including `/poach`, `/counter`, `/view_offers`, `/mentor`, `/assign_lab`, `/conference`, `/export_web_archive`, `/telemetry_report`, and `/gw_admin` subcommands for moderation. All commands now share the telemetry decorator, emitting player, channel, and success metrics alongside LLM latency and pause events.【F:great_work/discord_bot.py†L123-L950】【F:great_work/telemetry_decorator.py†L12-L67】【F:great_work/telemetry.py†L72-L520】
-- **Gap:** Engagement dashboards and layered press counts are still missing from `/telemetry_report`, and several actions continue to answer ephemerally instead of posting public artefacts, keeping the "all moves are public" requirement partially met.【F:great_work/discord_bot.py†L597-L772】【F:great_work/telemetry.py†L337-L520】
+- **Implementation status:** Commands cover the expected surface, including `/poach`, `/counter`, `/view_offers`, `/mentor`, `/assign_lab`, `/conference`, `/export_web_archive`, `/telemetry_report`, and `/gw_admin` subcommands for moderation. All commands now share the telemetry decorator, emitting player, channel, success metrics, layered-press counts, and digest health; operators can review stats via Discord or the bundled telemetry dashboard container.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】【F:great_work/telemetry.py†L72-L660】【F:ops/telemetry-dashboard/app.py†L1-L64】
+- **Gap:** Several information surfaces still return ephemeral responses (table-talk summary, theory references), and success-metric thresholds for alerts are not yet tuned to product expectations.【F:great_work/discord_bot.py†L523-L940】【F:great_work/telemetry.py†L600-L660】
 
 ### 8.1 Credentials and application configuration
 
@@ -77,13 +77,13 @@ Last Updated: 2025-09-20 (Phase 3 telemetry & dispatcher audit)
 ## 9. LLM and Narrative Integration
 
 - **Design intent:** Generate press and reactions through persona-driven LLM prompts with batching and safety controls.【F:docs/HLD.md†L318-L369】
-- **Implementation status:** The LLM client now drives expeditions, defection negotiations, symposium updates, and admin notices with persona metadata and blocklist safeguards. Tests run in mock mode to verify prompts and pause behaviour.【F:great_work/service.py†L300-L1040】【F:tests/test_game_service.py†L80-L196】【F:tests/test_symposium.py†L20-L69】
-- **Gap:** Digest/scheduler loops still publish immediately without staged delays, and persona voice remains static for table-talk/utility commands. Pause/resume depends on manual admin intervention until telemetry-driven automation is added.【F:great_work/service.py†L90-L230】【F:great_work/scheduler.py†L24-L116】
+- **Implementation status:** The LLM client now drives expeditions, defection negotiations, symposium updates, mentorship beats, theory submissions, table-talk posts, and admin notices with persona metadata, retry scheduling, and blocklist safeguards; layered press metrics feed telemetry and tests run in mock mode to verify prompts and pause behaviour.【F:great_work/service.py†L300-L1080】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/llm_client.py†L1-L240】【F:tests/test_game_service.py†L80-L196】【F:tests/test_symposium.py†L20-L69】
+- **Gap:** The moderation layer is still limited to a static word list, there's no secondary guard-LLM or redaction workflow, and operator-facing pause/resume runbooks remain undocumented outside internal planning notes.【F:great_work/llm_client.py†L40-L140】【F:docs/HLD.md†L318-L369】
 
 ## Summary of Major Gaps
 
-1. Multi-layer press now stages expedition/defection/symposium follow-ups, yet mentorship/admin events lack layered coverage and Gazette summaries do not highlight queued drops.
+1. Recruitment/table-talk flows still publish single-beat coverage and layered templates remain thin for long mentorship arcs and sideways discoveries, limiting the narrative variety called for in the design.
 2. Influence sinks remain limited to expeditions and poaching, leaving symposium commitments and longer-term obligations unimplemented.
-3. Symposium topics and digest summaries are still scheduler-driven placeholders rather than the participatory flows described in the design.
-4. Telemetry dashboards and deployment guidance lag behind—commands emit LLM/channel metrics, yet layered-press counts, success criteria, and operator setup docs remain outstanding.
-5. Static archives now auto-export and post ZIP snapshots to the admin channel after each digest, yet automated publishing to a public host and snapshot rotation tooling are still open.
+3. Symposium topics and response prompts remain scheduler-driven placeholders rather than the participatory proposal cycle described in the design.
+4. Telemetry dashboards and `/telemetry_report` now surface queue depth and digest health, but success KPI thresholds, escalation routing, and dispatcher instrumentation still need to be defined and documented for operators.
+5. Static archives auto-export, sync to the container host, and prune snapshots; external hosting adapters and production monitoring guidance for the nginx container remain outstanding.

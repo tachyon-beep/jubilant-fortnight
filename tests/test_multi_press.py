@@ -1,6 +1,8 @@
 """Tests for multi-layer press generation."""
+import os
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 from great_work.multi_press import (
     PressDepth,
@@ -272,6 +274,51 @@ def test_find_colleagues():
     assert all(c in all_scholars for c in colleagues)
 
 
+def test_generate_mentorship_layers_dual_schedule():
+    """Mentorship cadence should produce fast gossip and long-form updates."""
+    generator = MultiPressGenerator()
+    generator.fast_layer_delays = [30, 60]
+    generator.long_layer_delays = [720, 1440]
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Dr. Vega"
+    scholar.id = "s.mentor-001"
+    scholar.career = {"track": "Academia"}
+
+    layers = generator.generate_mentorship_layers(
+        mentor="Professor Hale",
+        scholar=scholar,
+        phase="queued",
+        track="Academia",
+    )
+
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
+    update_layers = [layer for layer in layers if layer.type == "mentorship_update"]
+
+    assert len(gossip_layers) == 2
+    assert sorted(layer.delay_minutes for layer in gossip_layers) == [30, 60]
+    assert len(update_layers) == 2
+    assert sorted(layer.delay_minutes for layer in update_layers) == [720, 1440]
+
+
+def test_generate_admin_layers_includes_reason():
+    """Administrative layers should surface context and delay metadata."""
+    generator = MultiPressGenerator()
+    generator.fast_layer_delays = [15]
+    generator.long_layer_delays = [120]
+
+    layers = generator.generate_admin_layers(
+        event="pause",
+        actor="Ops Team",
+        reason="LLM offline",
+    )
+
+    assert any(layer.type == "admin_update" for layer in layers)
+    update_layer = next(layer for layer in layers if layer.type == "admin_update")
+    release = update_layer.generator(update_layer.context)
+    assert "LLM offline" in release.body
+
+
 def test_generate_analysis_layer():
     """Test generating editorial/analysis layers."""
     generator = MultiPressGenerator()
@@ -342,3 +389,24 @@ def test_faction_statement_generation():
 
     release = welcome_layer.generator(welcome_layer.context)
     assert "welcome" in release.body.lower() or "delighted" in release.body.lower()
+
+
+def test_multi_press_includes_tone_seed(monkeypatch):
+    """Tone packs should attach seeds to mentorship follow-up layers."""
+    monkeypatch.setenv("GREAT_WORK_PRESS_SETTING", "high_fantasy")
+    generator = MultiPressGenerator()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Aria"
+    scholar.id = "s.aria"
+    scholar.career = {"track": "Academia"}
+
+    layers = generator.generate_mentorship_layers(
+        mentor="Professor Lorian",
+        scholar=scholar,
+        phase="completion",
+    )
+
+    tone_seeds = [layer.tone_seed for layer in layers if layer.type in {"mentorship_update", "academic_gossip"}]
+    assert tone_seeds
+    assert all(seed is not None for seed in tone_seeds)

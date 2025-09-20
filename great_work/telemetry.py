@@ -26,6 +26,9 @@ class MetricType(Enum):
     ECONOMY_BALANCE = "economy_balance"
     LLM_ACTIVITY = "llm_activity"
     SYSTEM_EVENT = "system_event"
+    PRESS_CADENCE = "press_cadence"
+    DIGEST = "digest"
+    QUEUE_DEPTH = "queue_depth"
 
 
 @dataclass
@@ -245,6 +248,74 @@ class TelemetryCollector:
             1.0,
             tags=tags,
             metadata=metadata,
+        )
+
+    def track_press_layer(
+        self,
+        *,
+        layer_type: str,
+        event_type: str,
+        delay_minutes: float,
+        persona: Optional[str] = None,
+    ) -> None:
+        """Record scheduling of a layered press artefact."""
+
+        tags: Dict[str, str] = {
+            "layer_type": layer_type,
+            "event_type": event_type,
+        }
+        if persona:
+            tags["persona"] = persona
+
+        metadata = {
+            "delay_minutes": delay_minutes,
+        }
+
+        self.record(
+            MetricType.PRESS_CADENCE,
+            layer_type,
+            float(delay_minutes),
+            tags=tags,
+            metadata=metadata,
+        )
+
+    def track_digest(
+        self,
+        *,
+        duration_ms: float,
+        release_count: int,
+        scheduled_queue_size: int,
+    ) -> None:
+        """Record Gazette digest runtime and output volume."""
+
+        self.record(
+            MetricType.DIGEST,
+            "gazette_digest",
+            duration_ms,
+            tags={
+                "release_count": str(release_count),
+                "scheduled_queue": str(scheduled_queue_size),
+            },
+            metadata={
+                "duration_ms": duration_ms,
+                "release_count": release_count,
+                "scheduled_queue": scheduled_queue_size,
+            },
+        )
+
+    def track_queue_depth(
+        self,
+        queue_size: int,
+        *,
+        horizon_hours: int,
+    ) -> None:
+        """Record the size of the scheduled press queue within a time horizon."""
+
+        self.record(
+            MetricType.QUEUE_DEPTH,
+            "press_queue",
+            float(queue_size),
+            metadata={"horizon_hours": horizon_hours},
         )
 
     def track_scholar_stats(
@@ -592,6 +663,128 @@ class TelemetryCollector:
                 )
             return events
 
+    def get_press_cadence_summary(
+        self,
+        hours: int = 24,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Summarise layered press generation over the recent window."""
+
+        start_time = time.time() - (hours * 3600)
+
+        query = """
+            SELECT
+                json_extract(tags, '$.event_type') as event_type,
+                json_extract(tags, '$.layer_type') as layer_type,
+                COUNT(*) as layer_count,
+                AVG(value) as avg_delay,
+                MAX(value) as max_delay
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+            GROUP BY event_type, layer_type
+            ORDER BY layer_count DESC
+            LIMIT ?
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.PRESS_CADENCE.value,
+                start_time,
+                limit,
+            ])
+            summary = []
+            for row in cursor.fetchall():
+                summary.append(
+                    {
+                        "event_type": row[0] or "unknown",
+                        "layer_type": row[1] or "unknown",
+                        "layer_count": int(row[2] or 0),
+                        "avg_delay_minutes": float(row[3] or 0.0),
+                        "max_delay_minutes": float(row[4] or 0.0),
+                    }
+                )
+            return summary
+
+    def get_digest_summary(
+        self,
+        hours: int = 24,
+    ) -> Dict[str, Any]:
+        """Summarise digest runtimes and queue sizes."""
+
+        start_time = time.time() - (hours * 3600)
+
+        query = """
+            SELECT
+                COUNT(*) as total_digests,
+                AVG(value) as avg_duration,
+                MAX(value) as max_duration,
+                AVG(CAST(json_extract(tags, '$.release_count') AS INTEGER)) as avg_releases,
+                MAX(CAST(json_extract(tags, '$.release_count') AS INTEGER)) as max_releases,
+                AVG(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as avg_queue,
+                MAX(CAST(json_extract(tags, '$.scheduled_queue') AS INTEGER)) as max_queue
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.DIGEST.value,
+                start_time,
+            ])
+            row = cursor.fetchone()
+            if row is None or row[0] == 0:
+                return {
+                    "total_digests": 0,
+                    "avg_duration_ms": 0.0,
+                    "max_duration_ms": 0.0,
+                    "avg_release_count": 0.0,
+                    "max_release_count": 0,
+                    "avg_queue_size": 0.0,
+                    "max_queue_size": 0,
+                }
+            return {
+                "total_digests": int(row[0] or 0),
+                "avg_duration_ms": float(row[1] or 0.0),
+                "max_duration_ms": float(row[2] or 0.0),
+                "avg_release_count": float(row[3] or 0.0),
+                "max_release_count": int(row[4] or 0),
+                "avg_queue_size": float(row[5] or 0.0),
+                "max_queue_size": int(row[6] or 0),
+            }
+
+    def get_queue_depth_summary(
+        self,
+        hours: int = 24,
+    ) -> Dict[str, Dict[str, float]]:
+        """Return aggregate queue depth statistics grouped by horizon."""
+
+        start_time = time.time() - (hours * 3600)
+        query = """
+            SELECT
+                COALESCE(json_extract(metadata, '$.horizon_hours'), 0) as horizon,
+                AVG(value) as avg_queue,
+                MAX(value) as max_queue,
+                COUNT(*) as samples
+            FROM metrics
+            WHERE metric_type = ? AND timestamp >= ?
+            GROUP BY horizon
+        """
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(query, [
+                MetricType.QUEUE_DEPTH.value,
+                start_time,
+            ])
+            summary: Dict[str, Dict[str, float]] = {}
+            for row in cursor.fetchall():
+                horizon = int(row[0] or 0)
+                summary[str(horizon)] = {
+                    "avg_queue": float(row[1] or 0.0),
+                    "max_queue": float(row[2] or 0.0),
+                    "samples": float(row[3] or 0.0),
+                }
+            return summary
+
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
         report = {
@@ -604,6 +797,9 @@ class TelemetryCollector:
             "llm_activity_24h": self.get_llm_activity_summary(24),
             "channel_usage_24h": self.get_channel_usage(24),
             "system_events_24h": self.get_system_events(24, limit=10),
+            "press_cadence_24h": self.get_press_cadence_summary(24, limit=10),
+            "digest_health_24h": self.get_digest_summary(24),
+            "queue_depth_24h": self.get_queue_depth_summary(24),
         }
 
         # Add overall statistics

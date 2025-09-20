@@ -1,15 +1,15 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-09-20 (Phase 3 telemetry & dispatcher audit)
+Last Updated: 2025-09-27 (Phase 3 telemetry & narrative refresh)
 
 ## Executive Summary
 
 - **Fully Implemented:** 55 requirements (71.4%)
-- **Partially Implemented:** 10 requirements (13.0%)
-- **Not Implemented:** 10 requirements (13.0%)
+- **Partially Implemented:** 11 requirements (14.3%)
+- **Not Implemented:** 9 requirements (11.7%)
 - **Not Evaluated:** 2 requirements (2.6%)
 
-Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups for expeditions, defections, symposiums, and admin flows, telemetry instrumentation spans every command with channel metrics and LLM latency, and digest exports ship ZIP snapshots to the admin channel. Remaining gaps centre on mentorship/admin press cadence, telemetry dashboards, success metrics, and automated archive hosting.
+Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, and table-talk/theory updates, digest highlights summarise scheduled drops, telemetry reports include queue depth alongside layered-press cadence, and digest exports sync the public archive with ZIP snapshots. Remaining gaps centre on layered coverage for recruitment/table-talk follow-ups, telemetry success thresholds and dispatcher instrumentation, and external archive hardening.
 
 ## Functional Requirements Status
 
@@ -28,7 +28,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 6 | 100% |
 
-**Notes:** Roster enforcement, procedural generation, mentorship-driven careers, sidecasts, and multi-stage defection arcs all operate via the service layer and persistence tables.【F:great_work/service.py†L520-L1105】【F:great_work/state.py†L636-L944】
+**Notes:** Roster enforcement, procedural generation, mentorship-driven careers, sidecasts, and multi-stage defection/return arcs operate via the service layer and persistence tables, including scars and memory shifts applied during negotiations.【F:great_work/service.py†L520-L1600】【F:great_work/state.py†L636-L944】
 
 ### Confidence Wagering (3 requirements)
 
@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, and admin press now layer in gossip, faction statements, and LLM-enhanced narration with scheduled follow-ups; mentorship/admin maintenance beats still post single-layer copy and digest summaries do not highlight queued drops.【F:great_work/scheduler.py†L20-L138】【F:great_work/service.py†L300-L2060】【F:great_work/discord_bot.py†L20-L230】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; digest highlights summarise pending drops and table-talk/theory submissions now run through the enhancer, yet recruitment/table-talk coverage remains single-beat and sideways templates stay hand-authored.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L220-L2060】【F:great_work/multi_press.py†L180-L520】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -69,7 +69,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 10 | 100% |
 
-**Notes:** Slash commands cover theories, wagers, recruitment, expeditions, conferences, mentorship, offers, archives, telemetry, and admin overrides, all wired to service methods and wrapped in the shared telemetry decorator for usage tracking.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】
+**Notes:** Slash commands cover theories, wagers, recruitment, expeditions, conferences, mentorship, offers, archives, telemetry, and admin overrides, all wired to service methods and wrapped in the shared telemetry decorator with layered-press and digest metrics surfaced via Discord and the bundled dashboard container.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】【F:ops/telemetry-dashboard/app.py†L1-L64】
 
 ## Non-Functional Requirements Status
 
@@ -88,10 +88,9 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Status | Count | Percentage |
 |--------|-------|------------|
 | Fully Implemented | 1 | 33% |
-| Partially Implemented | 1 | 33% |
-| Not Implemented | 1 | 33% |
+| Partially Implemented | 2 | 67% |
 
-**Notes:** Template consistency is enforced and LLM narration now enhances expedition, defection, symposium, and admin artefacts; mentorship/table-talk flows still lean on static templates and several replies remain ephemeral instead of public.【F:great_work/service.py†L300-L1995】【F:great_work/discord_bot.py†L523-L772】
+**Notes:** Template consistency is enforced and LLM narration now enhances expedition, defection, symposium, mentorship, theory, table-talk, and admin artefacts with persona metadata; remaining gaps involve richer moderation/guard rails and ensuring informational replies surface publicly rather than ephemerally.【F:great_work/service.py†L300-L1100】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/discord_bot.py†L720-L940】【F:great_work/llm_client.py†L40-L180】
 
 ### Pacing and Engagement (3 requirements)
 
@@ -117,7 +116,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Partially Implemented | 1 | 25% |
 | Not Implemented | 2 | 50% |
 
-**Notes:** Scheduler-based maintenance exists with pause/resume automation and admin notifications, yet LLM batching/length controls are pending and posting frequency is not rate-limited beyond the digest cadence.【F:great_work/scheduler.py†L20-L120】【F:great_work/service.py†L90-L230】
+**Notes:** Scheduler-based maintenance exists with pause/resume automation, configurable retry schedules, and admin notifications, yet LLM guard-rail batching/length controls are pending and posting frequency is not rate-limited beyond the digest cadence.【F:great_work/scheduler.py†L20-L180】【F:great_work/service.py†L90-L320】【F:great_work/llm_client.py†L1-L200】
 
 ### Licensing and Safety (5 requirements)
 
@@ -156,6 +155,6 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 
 ## Key Follow-ups
 
-1. Extend layered press cadence (mentorship/admin maintenance, digest highlights) and complete persona coverage for remaining commands.
-2. Build telemetry dashboards, layered-press metrics, and success criteria tracking before external playtests.
-3. Automate archive hosting/snapshot rotation and fold operator runbook guidance into public deployment/configuration docs.
+1. Add layered coverage and template variety for recruitment/table-talk follow-ups and sideways discoveries.
+2. Define telemetry success thresholds, dispatcher/order instrumentation, and operator-facing escalation runbooks.
+3. Document external archive hosting options and production hardening for the containerised static site.

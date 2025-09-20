@@ -1,0 +1,78 @@
+settings:
+  post_cyberpunk_collapse:
+    digest_highlight:
+      headline: "Signal Echo — {count} stories warm up"
+      blurb_template: "{headline} in {relative_time}. {call_to_action}."
+      callout: "Tune relays; missed windows void salvage rights."
+    expedition_followup:
+      headline: "Ashstorm Addendum — Expedition {code}"
+      blurb: "{persona} crackles over the band: '{summary}'"
+      callout: "Operators ready the rad-shelters before {deadline}."
+    mentorship_longform:
+      headline: "Field Briefing — {scholar} / {mentor}"
+      blurb: "Past the fallout gates, {scholar} tests {artifact}; {mentor} logs every anomaly."
+      callout: "Vault clerks to notarise results by {deadline}."
+    defection_followup:
+      headline: "Transfer Wire — {scholar}"
+      blurb: "{scholar} reroutes allegiance to {new_faction}; {old_faction} ops claim failsafes arm in {hours}h."
+      callout: "Verify escrow bundles before releasing access credentials."
+    symposium_resolution:
+      headline: "Grid Consensus: {topic}"
+      blurb: "{vote_share}% back {option}; cooling stacks flare gold. {analyst} warns of load-shed in {hours}h."
+      callout: "Patch uplink scripts; transcripts drop at 0600." 
+    admin_recovery:
+      headline: "Narrative Grid Stabilised"
+      blurb: "Queues resume in {minutes}m; {persona} retunes safety interlocks."
+      callout: "Review telemetry tile 'Narrative Health' before unpausing."
+
+  high_fantasy:
+    digest_highlight:
+      headline: "Moonlit Gazette — {count} oaths stir"
+      blurb_template: "{headline} due in {relative_time}; heralds already polishing the trumpets."
+      callout: "Scribes, ready vellum and sealing wax."
+    expedition_followup:
+      headline: "Starfall Codex — Expedition {code}"
+      blurb: "Beneath twin moons, {scholar} inscribes: '{summary}'"
+      callout: "Order of Lanterns convenes before the bells of {deadline}."
+    mentorship_longform:
+      headline: "Apprentice Ledger — {scholar} & {mentor}"
+      blurb: "The Accord notes {scholar}'s triumph with the {relic}; {mentor} decrees festivities at {hall}."
+      callout: "Patrons may petition the council at dawn."
+    defection_followup:
+      headline: "Oathbreaker Chronicle — {scholar}"
+      blurb: "Before the elder trees, {scholar} swears fealty to {new_faction}; {old_faction} seers foretell storms within {hours} hours."
+      callout: "Stewards prepare amnesty rites or gird for reprisal."
+    symposium_resolution:
+      headline: "Conclave Decree: {topic}"
+      blurb: "{vote_share}% favor {option}; the Argent Choir prepares hymns."
+      callout: "Palace heralds to post transcripts at first light."
+    admin_recovery:
+      headline: "The Loom of Tales Rekindled"
+      blurb: "Storytellers resume their weave within {minutes} minutes; {persona} blesses the ink."
+      callout: "Bards consult the great ledger ere they sing."
+
+  renaissance_europe_1400s:
+    digest_highlight:
+      headline: "Gazetta Straordinaria — {count} dispatches"
+      blurb_template: "Expect delivery in {relative_time}; couriers ride under papal seal."
+      callout: "Guilds ready hall ledgers for notarisation."
+    expedition_followup:
+      headline: "Addendum a Sera — Impresa {code}"
+      blurb: "From {city}, Maestro {scholar} pens: '{summary}'"
+      callout: "Archivists assemble in the loggia before {deadline}."
+    mentorship_longform:
+      headline: "Bottega Registro — {mentor} con {scholar}"
+      blurb: "Within the atelier, {scholar} drafts the {treatise}; patrons witness before the Signoria."
+      callout: "Depositions accepted at the bronze portal."
+    defection_followup:
+      headline: "Affidavit di Defezione — {scholar}"
+      blurb: "Notaries record {scholar}'s passage to {new_faction}; {old_faction} dispatches envoys within {hours} ore."
+      callout: "Curia insists escrow ledgers be reviewed before sunset."
+    symposium_resolution:
+      headline: "Convocazione Esito: {topic}"
+      blurb: "By {vote_share}%, the collegium upholds {option}; bells of Santa Maria will toll thrice."
+      callout: "Masters present counter-theses by vespers."
+    admin_recovery:
+      headline: "Cancelleria Avvisa: Scriptoria riaperte"
+      blurb: "Quills resume within {minutes} minuti; {persona} affixes seal and sign."
+      callout: "Notaries consult the ledger of errata first."

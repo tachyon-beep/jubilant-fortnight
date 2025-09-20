@@ -14,6 +14,27 @@ services:
       - QDRANT__LOG_LEVEL=INFO
       - QDRANT__SERVICE__GRPC_PORT=6334
 
+  archive_server:
+    image: nginx:1.27-alpine
+    container_name: great-work-archive
+    restart: unless-stopped
+    depends_on: []
+    ports:
+      - "8080:80"
+    volumes:
+      - ./web_archive_public:/usr/share/nginx/html:Z,ro
+
+  telemetry_dashboard:
+    build:
+      context: .
+      dockerfile: ops/telemetry-dashboard/Dockerfile
+    container_name: great-work-telemetry
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./telemetry.db:/data/telemetry.db:Z,ro
+
   # Optional: PostgreSQL for future expansion beyond SQLite
   # postgres:
   #   image: postgres:15-alpine

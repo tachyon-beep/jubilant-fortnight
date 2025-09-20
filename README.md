@@ -82,11 +82,20 @@ DISCORD_APP_ID=your_app_id_here
 GREAT_WORK_CHANNEL_ORDERS=channel_id_for_commands
 GREAT_WORK_CHANNEL_GAZETTE=channel_id_for_digests
 GREAT_WORK_CHANNEL_TABLE_TALK=channel_id_for_flavor
+GREAT_WORK_CHANNEL_ADMIN=channel_id_for_admin_alerts
+GREAT_WORK_CHANNEL_UPCOMING=channel_id_for_optional_upcoming_highlights
 
 # Optional: LLM Configuration
 LLM_API_BASE=https://api.openai.com/v1
 LLM_API_KEY=your_api_key_here
 LLM_MODEL=gpt-4-turbo-preview
+
+# Optional: Archive & Telemetry
+GREAT_WORK_ARCHIVE_PUBLISH_DIR=web_archive_public
+GREAT_WORK_ALERT_MAX_DIGEST_MS=5000
+GREAT_WORK_ALERT_MAX_QUEUE=12
+GREAT_WORK_ALERT_MIN_RELEASES=1
+GREAT_WORK_PRESS_SETTING=post_cyberpunk_collapse
 ```
 
 1. **Initialize database**:
@@ -104,6 +113,14 @@ make run  # Loads .env automatically
 # Or manually:
 python -m great_work.discord_bot
 ```
+
+## Deployment Overview
+
+- Ensure all required environment variables are configured (`DISCORD_TOKEN`, channel IDs, LLM settings, alert thresholds).
+- For local installs, activate the virtualenv and run `python -m great_work.discord_bot`.
+- For containerised deployments, start the bot, archive server, and telemetry dashboard via `docker compose up`.
+- Full production guidance (env table, compose services, firewall notes) lives in [docs/deployment.md](docs/deployment.md);
+  follow it to expose the archive and dashboard safely.
 
 ## Discord Commands
 

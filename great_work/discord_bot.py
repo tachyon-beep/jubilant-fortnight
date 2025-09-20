@@ -30,6 +30,7 @@ class ChannelRouter:
     gazette: Optional[int]
     table_talk: Optional[int]
     admin: Optional[int]
+    upcoming: Optional[int]
 
     @staticmethod
     def from_env() -> "ChannelRouter":
@@ -48,6 +49,7 @@ class ChannelRouter:
             gazette=_parse("GREAT_WORK_CHANNEL_GAZETTE"),
             table_talk=_parse("GREAT_WORK_CHANNEL_TABLE_TALK"),
             admin=_parse("GREAT_WORK_CHANNEL_ADMIN"),
+            upcoming=_parse("GREAT_WORK_CHANNEL_UPCOMING"),
         )
 
 
@@ -141,7 +143,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             logger.info("Synced %d commands", len(synced))
         except Exception as exc:  # pragma: no cover - logging only
             logger.exception("Failed to sync commands: %s", exc)
-        if scheduler is None and (router.gazette is not None or router.admin is not None):
+        if scheduler is None and any(x is not None for x in (router.gazette, router.admin, router.upcoming)):
             publisher = None
             if router.gazette is not None:
                 publisher = lambda press: asyncio.run_coroutine_threadsafe(
@@ -156,6 +158,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
             admin_publisher = None
             admin_file_publisher = None
+            upcoming_publisher = None
             if router.admin is not None:
                 admin_publisher = lambda message: asyncio.run_coroutine_threadsafe(
                     _post_to_channel(
@@ -176,12 +179,23 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     ),
                     bot.loop,
                 )
+            if router.upcoming is not None:
+                upcoming_publisher = lambda message: asyncio.run_coroutine_threadsafe(
+                    _post_to_channel(
+                        bot,
+                        router.upcoming,
+                        message,
+                        purpose="upcoming",
+                    ),
+                    bot.loop,
+                )
 
             scheduler = GazetteScheduler(
                 service,
                 publisher=publisher,
                 admin_publisher=admin_publisher,
                 admin_file_publisher=admin_file_publisher,
+                upcoming_publisher=upcoming_publisher,
             )
             scheduler.start()
             logger.info("Started Gazette scheduler publishing to %s", router.gazette)
@@ -878,6 +892,57 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         )
                     )
 
+            press_layers = report.get('press_cadence_24h', [])
+            if press_layers:
+                lines.append("\n**Press Cadence (24 hours):**")
+                for entry in press_layers:
+                    lines.append(
+                        "• {event}/{layer}: {count} layers, avg {avg:.0f}m delay (max {max:.0f}m)".format(
+                            event=entry.get('event_type', 'event'),
+                            layer=entry.get('layer_type', 'layer'),
+                            count=entry.get('layer_count', 0),
+                            avg=entry.get('avg_delay_minutes', 0.0),
+                            max=entry.get('max_delay_minutes', 0.0),
+                        )
+                    )
+
+            digest_stats = report.get('digest_health_24h', {})
+            if digest_stats and digest_stats.get('total_digests', 0) > 0:
+                lines.append("\n**Digest Health (24 hours):**")
+                lines.append(
+                    "• Avg runtime {avg:.0f}ms (max {max:.0f}ms) across {count} digests".format(
+                        avg=digest_stats.get('avg_duration_ms', 0.0),
+                        max=digest_stats.get('max_duration_ms', 0.0),
+                        count=digest_stats.get('total_digests', 0),
+                    )
+                )
+                lines.append(
+                    "• Avg releases {avg_rel:.1f} (max {max_rel}) — Queue avg {avg_q:.1f} pending (max {max_q})".format(
+                        avg_rel=digest_stats.get('avg_release_count', 0.0),
+                        max_rel=digest_stats.get('max_release_count', 0),
+                        avg_q=digest_stats.get('avg_queue_size', 0.0),
+                        max_q=digest_stats.get('max_queue_size', 0),
+                    )
+                )
+
+            queue_summary = report.get('queue_depth_24h', {})
+            if queue_summary:
+                lines.append("\n**Queue Depth (24 hours):**")
+                for horizon, stats in sorted(queue_summary.items(), key=lambda item: int(item[0])):
+                    lines.append(
+                        "• ≤{h}h: avg {avg:.1f}, max {max:.0f} (samples {count})".format(
+                            h=horizon,
+                            avg=stats.get('avg_queue', 0.0),
+                            max=stats.get('max_queue', 0.0),
+                            count=int(stats.get('samples', 0)),
+                        )
+                    )
+                threshold = os.getenv("GREAT_WORK_ALERT_MAX_QUEUE")
+                if threshold:
+                    lines.append(
+                        f"• Alert threshold: {threshold} pending items"
+                    )
+
             system_events = report.get('system_events_24h', [])
             if system_events:
                 lines.append("\n**System Events (24 hours):**")
@@ -906,8 +971,19 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 ephemeral=True,
             )
             return
-        payload = f"**{display_name}:** {message}"
-        await _post_to_channel(bot, router.table_talk, payload, purpose="table-talk")
+        try:
+            press = service.post_table_talk(
+                player_id=str(interaction.user.display_name),
+                display_name=display_name,
+                message=message,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        formatted = _format_press(press)
+        await _post_to_channel(bot, router.table_talk, formatted, purpose="table-talk")
         await interaction.response.send_message("Posted to table-talk.", ephemeral=True)
         await _flush_admin_notifications()
 

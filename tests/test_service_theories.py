@@ -1,12 +1,15 @@
 """Tests for GameService theory submission and validation logic."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 import pytest
 
 from great_work.models import ConfidenceLevel, Player
 from great_work.service import GameService
+
+os.environ.setdefault("LLM_MODE", "mock")
 
 
 def test_submit_theory_creates_bulletin(tmp_path):
@@ -29,10 +32,16 @@ def test_submit_theory_creates_bulletin(tmp_path):
     # Verify press release
     assert press.type == "academic_bulletin"
     assert "Academic Bulletin" in press.headline
-    assert "lunar cycles" in press.body
-    assert "certain confidence" in press.body.lower()
-    assert "s.ironquill" in press.body
-    assert "2030-12-31" in press.body
+    assert press.body
+    submission_meta = press.metadata.get("submission", {})
+    assert submission_meta
+    assert submission_meta["theory"] == "The ancient calendar aligns with lunar cycles"
+    assert submission_meta["confidence"] == "certain"
+    assert submission_meta["supporters"] == ["s.ironquill", "s.scholar2"]
+    assert submission_meta["deadline"] == "2030-12-31"
+    llm_meta = press.metadata.get("llm", {})
+    assert llm_meta
+    assert llm_meta.get("persona") == "researcher1"
 
     # Verify event was recorded
     events = service.state.export_events()
@@ -66,8 +75,10 @@ def test_submit_theory_with_suspect_confidence(tmp_path):
         deadline="2024-11-30"
     )
 
-    assert "suspect confidence" in press.body.lower()
-    assert "Supporting scholars: None" in press.body
+    submission_meta = press.metadata.get("submission", {})
+    assert submission_meta
+    assert submission_meta["confidence"] == "suspect"
+    assert submission_meta["supporters"] == []
 
 
 def test_submit_theory_with_career_stake(tmp_path):
@@ -85,7 +96,9 @@ def test_submit_theory_with_career_stake(tmp_path):
         deadline="2025-01-15"
     )
 
-    assert "stake_my_career confidence" in press.body.lower()
+    submission_meta = press.metadata.get("submission", {})
+    assert submission_meta
+    assert submission_meta["confidence"] == "stake_my_career"
 
     # Verify high-stakes theory is recorded
     events = service.state.export_events()
@@ -190,7 +203,9 @@ def test_theory_submission_with_empty_supporters(tmp_path):
         deadline="2024-12-25"
     )
 
-    assert "Supporting scholars: None" in press.body
+    submission_meta = press.metadata.get("submission", {})
+    assert submission_meta
+    assert submission_meta["supporters"] == []
 
     # Verify in event log
     events = service.state.export_events()
@@ -215,9 +230,9 @@ def test_theory_submission_with_many_supporters(tmp_path):
         deadline="2025-01-01"
     )
 
-    # All supporters should be listed
-    for supporter in supporters:
-        assert supporter in press.body
+    submission_meta = press.metadata.get("submission", {})
+    assert submission_meta
+    assert submission_meta["supporters"] == supporters
 
 
 def test_theory_deadline_formats(tmp_path):

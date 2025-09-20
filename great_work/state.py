@@ -410,6 +410,11 @@ class GameState:
             releases.append((queue_id, release_at, payload))
         return releases
 
+    def count_queued_press(self) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute("SELECT COUNT(*) FROM queued_press").fetchone()
+        return int(row[0]) if row else 0
+
     def clear_queued_press(self, queue_id: int) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("DELETE FROM queued_press WHERE id = ?", (queue_id,))

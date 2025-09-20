@@ -8,11 +8,11 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ### Current State
 - All slash commands flow through `track_command`, emitting command usage with player, guild, channel, duration, and success tags (`great_work/telemetry_decorator.py:12`).
-- LLM activity, system pause/resume events, and player-state snapshots are recorded in `telemetry.db` and surfaced via `/telemetry_report` (`great_work/discord_bot.py:786`, `great_work/telemetry.py:520`).
-- Requirements still call for layered-press counts, engagement funnels, and explicit success criteria tracking (`docs/requirements_evaluation.md:157`).
+- LLM activity, system pause/resume events, queue-depth sampling, and player-state snapshots are recorded in `telemetry.db` and surfaced via `/telemetry_report` (`great_work/discord_bot.py:786`, `great_work/telemetry.py:520`).
+- Requirements still call for engagement funnels and explicit success criteria tracking (`docs/requirements_evaluation.md:157`).
 
 ### Objectives
-1. Provide on-demand dashboards (Discord command + optional HTML summary) covering:
+1. Provide on-demand dashboards (Discord command + bundled HTML dashboard) covering:
    - Layered press production and release cadence (by type, scheduled vs immediate).
    - Engagement metrics: unique players per digest, symposium participation, table-talk volume.
    - Health signals: digest duration, LLM latency distribution, pause frequency.
@@ -21,42 +21,43 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ### Proposed Approach
 - **Schema additions:**
-  - Add a `metrics_summary` view or derived table for layered press counts (ingest from `press_scheduled` events and scheduled queue releases).
+  - Queue depth snapshots are emitted directly via `track_queue_depth`; continue enriching layered press counts (ingest from `press_scheduled` events and scheduled queue releases).
   - Record digest runtime via a `track_performance` call wrapping `advance_digest` and `resolve_pending_expeditions`.
 - **Reporting surfaces:**
   - Extend `/telemetry_report` with new sections (layered press, engagement, digest health) and paginate when output exceeds Discord limits.
-  - Provide a `make telemetry-report` CLI option writing JSON for external dashboarding.
+  - Ship a lightweight FastAPI/Jinja dashboard inside the ops container to visualise historical metrics directly from `telemetry.db`.
 - **Alerting:**
-  - Implement configurable thresholds in settings (e.g., `telemetry.alerts.pause_minutes`, `telemetry.alerts.error_rate`). When breached, enqueue admin notifications and log system events.
+  - Configurable thresholds exposed via environment variables (`GREAT_WORK_ALERT_MAX_DIGEST_MS`, `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`). When breached, enqueue admin notifications and log system events.
+- **Operator notes:**
+  - `/telemetry_report` now prints queue depth averages/maxima alongside the active thresholds, giving moderators a quick read on backlog health.
+  - Queue depth snapshots are sampled when upcoming highlights are generated (default horizon 48h); adjust horizon via `GREAT_WORK_CHANNEL_UPCOMING` settings if cadence changes.
 
 ### Decision Points
-1. **Dashboard medium:** Is a richer external dashboard (Grafana/Metabase) in scope, or do we remain Discord + JSON? _Recommendation_: begin with Discord/JSON; revisit after first pilot.
+1. **Dashboard medium:** ✅ Use Discord `/telemetry_report` plus the bundled FastAPI/Jinja dashboard container for richer historical slices.
 2. **Success metric targets:** Need product input on target ranges (e.g., acceptable pause duration, desired engagement numbers) before hard-coding alerts.
 
 ### Implementation Plan
-1. Instrument digest runtimes and layered press metrics (order queue depth, scheduled release counts) in telemetry.
-2. Update `TelemetryCollector.generate_report()` to compute the new aggregates.
-3. Expand `/telemetry_report` formatting; add optional `--format json` CLI helper.
-4. Introduce alert evaluation during digest ticks and command execution; send admin notifications when thresholds trip.
-5. Document the workflow in `docs/implementation_plan.md` and operator guides.
+1. **Done:** Instrument digest runtimes and layered press metrics (queue depth, scheduled release counts) in telemetry and surface them via `/telemetry_report`.
+2. **Next:** Expose the aggregates to the FastAPI dashboard container and finalise success KPI targets with product.
+3. Introduce alert evaluation during command execution (error rate thresholds) and document escalation workflows.
+4. Document the workflow in `docs/implementation_plan.md` and operator guides.
 
 ## 2. Archive Automation & Hosting
 
 ### Current State
-- Gazette scheduler exports the static archive every digest and uploads ZIP snapshots to the admin channel (`great_work/scheduler.py:20`, `docs/internal/ARCHIVE_OPERATIONS.md`).
-- Hosting remains manual; snapshots accumulate locally and in Discord without automated rotation (`docs/gap_analysis.md:41`).
+- Gazette scheduler exports the static archive every digest, syncs the contents into `web_archive_public/`, and uploads ZIP snapshots to the admin channel (`great_work/scheduler.py:20`, `docs/internal/ARCHIVE_OPERATIONS.md`).
+- Hosting is handled by the bundled nginx container; optional managed adapters (S3/GitHub Pages) remain future work.
 
 ### Objectives
 1. Publish the archive to a persistent host (S3 bucket, GitHub Pages, or similar) after each digest.
 2. Implement retention policies for local and remote snapshots (e.g., keep last 30, prune older).
 3. Provide a one-command operator workflow, with failure telemetry and admin alerts when publishing stalls.
 
-### Proposed Approach
-- **Hosting target (recommended):** Amazon S3 + CloudFront or an equivalent static host; alternative is Git-based deployment to GitHub Pages.
+- **Hosting target (decided):** Self-hosted static site served from the project’s container image so anyone can run the publisher container. The digest job publishes into the container volume and the container exposes the archive over HTTPS. (Alternatives such as S3/GitHub Pages remain viable if operators prefer managed hosting.)
 - **Automation flow:**
-  1. After archive export, run a deployment hook (Python subprocess or dedicated worker) to sync `web_archive/` to the host (e.g., `aws s3 sync`).
-  2. Record deployment metadata (commit hash, digest timestamp) in telemetry via `track_system_event`.
-  3. Zip snapshots remain for disaster recovery; prune older than retention window.
+  1. After archive export, sync `web_archive/` into `web_archive_public/` (served by the container volume).
+  2. Record deployment metadata (digest timestamp) in telemetry via `track_system_event` and alert on failure.
+  3. Zip snapshots remain for disaster recovery; prune older than retention window automatically.
 - **Configuration:**
   - Extend settings with `archive.hosting` block (provider, credentials/env vars, retention days).
   - Add optional dry-run mode for local testing.
@@ -65,8 +66,8 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
   - Notify admin channel if publishing fails, including error summary and retry guidance.
 
 ### Decision Points
-1. **Hosting provider choice:** Confirm preferred target (S3 vs. GitHub Pages vs. self-hosted). _Default_: S3 due to existing CLI tooling.
-2. **Credential management:** Determine how operators will supply credentials (env vars, config file, secrets manager).
+1. **Hosting provider choice:** ✅ Use the self-hosted containerized static server; publish pipeline writes to its mounted volume. Additional providers can be added later via adapters.
+2. **Credential management:** Simplified—container runs with local filesystem access; no external credentials required unless operators add optional adapters.
 
 ### Implementation Plan
 1. Prototype provider adapters (`archive.publishers.s3`, `archive.publishers.github_pages`) behind a common interface.
@@ -98,8 +99,8 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
   - Tag mentorship/admin layers for reporting; log queue depth via new telemetry events.
 
 ### Decision Points
-1. **Cadence duration defaults:** Recommend 30/60/120-minute staggering; confirm tolerance for longer arcs.
-2. **Digest summary format:** Decide whether to append a “Coming soon” section to Gazette posts or provide a separate command.
+1. **Cadence duration defaults:** ✅ Support dual presets—"flash" layers (0–90 minutes) for immediate follow-ups and "long-form" arcs that can stretch across multiple digests or days. Expose both via settings.
+2. **Digest summary format:** ✅ Deliver upcoming highlights through an opt-in channel (e.g., `#gazette-upcoming`) so players choose whether to receive cadence teasers.
 
 ### Implementation Plan
 1. Expand `MultiPressGenerator` with helpers for mentorship/admin layers and configurable delay presets via settings.
@@ -110,8 +111,8 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 
 ## Next Steps & Approvals
 
-1. Confirm hosting provider and credential strategy for archive automation (decision owner: ops/product).
-2. Align on telemetry dashboard medium and success-metric thresholds (decision owner: product/design).
-3. Approve mentorship/admin cadence defaults and digest summary presentation (decision owner: narrative design).
+1. Finalise success-metric thresholds (pause duration, engagement targets) for alerting defaults.
+2. Document dashboard container configuration presets (port mappings, sample compose entry) for operators.
+3. Confirm naming conventions for the opt-in upcoming-highlights channel and integrate into onboarding docs.
 
-Once the above decisions are locked, we can proceed with implementation tasks per the updated plan.
+With hosting, dashboard medium, and cadence cadence decisions set, we can proceed into implementation planning for Phase 3 polish.
