@@ -1,12 +1,12 @@
 # Gap Analysis: High-Level Design vs. Current Implementation
 
-Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
+Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console)
 
 ## 1. Scholar Lifecycle and Memory
 
 - **Design intent:** Maintain a roster of 20–30 memorable scholars blending handcrafted legends with procedurally generated additions, spawn sidecast scholars from expeditions, nurture mentorship-driven career growth, and track defections with scars and public fallout.【F:docs/HLD.md†L24-L177】
-- **Implementation status:** `GameService` enforces the roster window, seeds new procedurally generated scholars, activates mentorships, progresses mentored careers, and resolves multi-stage defection negotiations with multi-layer press and persona metadata archived alongside outcomes. Mentorship queue, activation, and completion flows now schedule fast and long-form follow-ups via `MultiPressGenerator` to match the documented cadence.【F:great_work/service.py†L89-L760】【F:great_work/service.py†L1024-L1995】【F:great_work/multi_press.py†L420-L624】
-- **Gap:** Sidecasts still land as a single gossip artefact with no follow-on scenes, and mentorship arcs lack persistent scars or relationship shifts beyond their layered announcements.【F:great_work/service.py†L2254-L2287】【F:great_work/press.py†L20-L145】
+- **Implementation status:** `GameService` enforces the roster window, seeds new procedurally generated scholars, activates mentorships, progresses mentored careers, and resolves multi-stage defection negotiations with layered press. Multi-press orchestration now pulls from the sidecast arc catalogue, defection epilogues, recruitment/table-talk follow-ups, and sideways vignette payloads so sidecasts advance through debut/integration/spotlight beats while defections apply relationship adjustments alongside archived outcomes.【F:great_work/service.py†L89-L760】【F:great_work/service.py†L1024-L1995】【F:great_work/service.py†L4460-L4668】【F:great_work/multi_press.py†L350-L520】【F:great_work/multi_press.py†L900-L1120】【F:great_work/data/sidecast_arcs.yaml†L1-L90】【F:great_work/data/defection_epilogues.yaml†L1-L48】
+- **Gap:** Mentorship activations/progression/completion now adjust scholar feelings and log history, sidecast phases persist sponsor ties, `/status` surfaces the summary, recruitment/defection flows pull in the modifier, and the new seasonal commitments and faction projects consume the same history. Remaining work is tuning rewards/escalations and exposing operator controls for these loops.【F:great_work/service.py†L4242-L4770】【F:great_work/discord_bot.py†L872-L940】【F:great_work/state.py†L200-L2440】
 
 ## 2. Confidence Wagers, Reputation, and Recruitment Effects
 
@@ -18,7 +18,7 @@ Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 - **Design intent:** Each expedition type should apply tailored costs, prep modifiers, and depth-aware failure tables that yield sideways discoveries with gameplay repercussions such as faction swings, gossip, or queued orders.【F:docs/HLD.md†L57-L138】
 - **Implementation status:** Expedition launches deduct faction influence, persist preparation details, and an `ExpeditionResolver` rolls d100, applies modifiers, consults depth-specific failure tables, and now draws from a data-driven sideways catalogue to emit faction shifts, theories, queued orders, and tagged follow-ups that the dispatcher applies downstream.【F:great_work/service.py†L170-L392】【F:great_work/expeditions.py†L60-L213】【F:great_work/models.py†L122-L206】【F:great_work/data/sideways_effects.yaml†L1-L214】【F:great_work/service.py†L4734-L4999】
-- **Gap:** Landmark preparation still collapses into a single block of text, and even with the YAML catalogue the sideways library needs bespoke deep-prep copy and sidecast scenes to match the design’s vignette expectations.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L124-L213】【F:great_work/data/sideways_effects.yaml†L1-L214】
+- **Gap:** Landmark preparation still collapses into a single block of text and the sideways effect catalogue, while broader, lacks mechanical variety (e.g., faction/tag consequences) tied to the new vignette tags; extend prep copy and hook vignette metadata into faction, theory, or mentorship follow-ons to meet the design’s "adjacent unlock" expectations.【F:docs/HLD.md†L90-L138】【F:great_work/expeditions.py†L120-L320】【F:great_work/data/sideways_vignettes.yaml†L1-L180】
 
 ### 3.1 Great Projects - Status
 
@@ -36,13 +36,13 @@ Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 - **Design intent:** Every move should produce persona-driven press artefacts that persist in a public archive—bulletins, manifestos, discoveries, retractions, gossip, recruitment notes, defection wires—and stay publicly accessible.【F:docs/HLD.md†L86-L354】
 - **Implementation status:** Core actions call structured template generators, archive releases in SQLite, and `/gazette`, `/export_log`, and `/export_web_archive` surface history. Expedition, defection, symposium, mentorship, recruitment, table-talk, sidecast, and admin flows now queue delayed follow-ups via `MultiPressGenerator`, with staggered fast/long cadences delivering gossip, faction briefings, commons roundups, mentorship bulletins, sidecast spotlights, defection epilogues, and administrative updates alongside the primary artefact; tone packs support rotating headlines/blurbs per setting, YAML libraries drive recruitment/table-talk/sidecast copy, deep-prep sideways vignettes now dispatch layered press, and digest ticks mint highlight blurbs from the scheduled press queue.【F:great_work/service.py†L170-L392】【F:great_work/service.py†L680-L744】【F:great_work/service.py†L1013-L1106】【F:great_work/service.py†L1996-L2470】【F:great_work/multi_press.py†L620-L960】【F:great_work/data/recruitment_press.yaml†L1-L48】【F:great_work/data/table_talk_press.yaml†L1-L24】【F:great_work/data/sidecast_arcs.yaml†L1-L60】【F:great_work/data/defection_epilogues.yaml†L1-L32】【F:great_work/data/sideways_vignettes.yaml†L1-L36】【F:great_work/press_tone.py†L1-L102】【F:great_work/state.py†L1-L520】【F:great_work/discord_bot.py†L562-L940】【F:great_work/web_archive.py†L416-L520】
-- **Gap:** Maintain ongoing vignette additions as new expedition types surface and keep the tone-pack safety checklist current; narrative loops otherwise satisfy the design spec.【F:great_work/expeditions.py†L280-L360】【F:great_work/data/sideways_vignettes.yaml†L1-L120】【F:docs/internal/PHASE3_POLISH_DESIGN.md†L80-L110】
+- **Gap:** The new YAML libraries and writing guide broaden coverage, yet we still lack automated tone/safety guardrails (secondary LLM or moderation review) and an explicit process to validate new packs before deployment; wire those controls into the narrative pipeline.【F:great_work/llm_client.py†L40-L180】【F:docs/WRITING_GUIDE.md†L1-L120】【F:docs/internal/PHASE3_POLISH_DESIGN.md†L80-L110】
 
 ### 5.1 Public archive availability
 
 - **Design intent:** Keep a permanent, public, citable archive beyond Discord.【F:docs/HLD.md†L214-L354】
 - **Implementation status:** `/export_web_archive` builds a static site with permalinks, search, and scholar profiles on disk, `/archive_link` retrieves specific headlines, each digest exports the archive automatically, syncs it into the container-served static host, and posts a timestamped ZIP snapshot to the admin channel with retention pruning.【F:great_work/discord_bot.py†L591-L737】【F:great_work/service.py†L1747-L1880】【F:great_work/scheduler.py†L20-L180】【F:docs/internal/ARCHIVE_OPERATIONS.md†L1-L130】
-- **Gap:** External hosting adapters (S3, GitHub Pages) remain manual, and the containerised nginx service still needs production hardening and monitoring guidance.【F:docs/HLD.md†L214-L354】【F:great_work/scheduler.py†L20-L180】
+- **Gap:** GitHub Pages is now the chosen external host, but the publish adapter remains manual and the containerised nginx service still needs production hardening and monitoring guidance.【F:docs/HLD.md†L214-L354】【F:great_work/scheduler.py†L20-L180】
 
 ## 6. Timing, Gazette Cadence, and Symposiums
 
@@ -60,13 +60,13 @@ Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 - **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events with exports available through a bot command.【F:docs/HLD.md†L203-L385】
 - **Implementation status:** SQLite schema covers all major entities including offers, mentorships, conferences, symposium topics/votes, and press; the new `orders` table centralises delayed work (mentorship activations, conference resolutions) consumed by the dispatcher, while exports flow through `/export_log` and archive tooling.【F:great_work/state.py†L18-L520】【F:great_work/service.py†L1402-L1880】【F:great_work/discord_bot.py†L562-L737】
-- **Gap:** Add lightweight admin utilities to inspect dispatcher orders and export audit trails so operators can validate migrations without touching SQLite directly.【F:great_work/state.py†L600-L720】
+- **Gap:** `/gw_admin list_orders` and `/gw_admin cancel_order` now expose dispatcher state, but operators still need exportable order snapshots (CSV/JSON) and migration audit helpers to validate bulk changes safely.【F:great_work/service.py†L3888-L3974】【F:great_work/discord_bot.py†L1405-L1475】
 
 ## 8. Discord Command Surface and Admin Tools
 
 - **Design intent:** Provide slash commands for theories, wagers, recruitment, expeditions, conferences, status checks, log exports, and admin hotfixes, with telemetry on usage.【F:docs/HLD.md†L248-L386】
 - **Implementation status:** Commands cover the expected surface, including `/poach`, `/counter`, `/view_offers`, `/mentor`, `/assign_lab`, `/conference`, `/export_web_archive`, `/telemetry_report`, and `/gw_admin` subcommands for moderation. All commands now share the telemetry decorator, emitting player, channel, success metrics, layered-press counts, and digest health; operators can review stats via Discord or the bundled telemetry dashboard container.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】【F:great_work/telemetry.py†L72-L660】【F:ops/telemetry-dashboard/app.py†L1-L64】
-- **Gap:** Several information surfaces still return ephemeral responses (table-talk summary, theory references), and moderators still lack a Discord workflow to manage dispatcher orders without digging into telemetry or SQL.【F:great_work/discord_bot.py†L523-L940】【F:great_work/state.py†L600-L720】
+- **Gap:** Utility commands such as `/table_talk_summary` and theory lookups still reply ephemerally; convert those outputs into channel posts or pinned references, and extend the new dispatcher consoles with filtering/search so moderators can triage large backlogs quickly.【F:great_work/discord_bot.py†L523-L1475】
 
 ### 8.1 Credentials and application configuration
 
@@ -82,8 +82,8 @@ Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 
 ## Summary of Major Gaps
 
-1. Recruitment and table-talk now ship layered follow-ups; remaining narrative work is expanding mentorship sidecasts, defection epilogues, and deep-prep sideways vignettes while surfacing queued follow-up press in Gazette highlights.
-2. Symposium pledges and contract upkeep drain influence, but longer-term commitments (seasonal projects, faction contracts) are still pending to keep the economy pressure steady.
-3. Symposium proposals are player-driven with automated expiries, scoring heuristics, and pledge penalties/debt carryover; remaining work is sharper economic escalation (interest, faction projects) and transparent backlog curation reports before launch.
-4. Telemetry dashboards and `/telemetry_report` surface queue depth, scoring, debt metrics, and dispatcher backlog snapshots; next add external escalation routing and a moderator console for dispatcher order management before live pilots.
-5. Static archives auto-export, sync to the container host, and prune snapshots; external hosting adapters and production monitoring guidance for the nginx container remain outstanding.
+1. Mentorship/sidecast history now surfaces in `/status`, recruitment odds, defection negotiations, seasonal commitments, and faction projects; next tune rewards/escalations and add operator tooling so social history consistently affects every long-term decision.
+2. Symposium pledges and contract upkeep drain influence, yet seasonal projects/faction investments are still missing to maintain long-term economic pressure.
+3. Symposium backlog scoring remains heuristic-only; add transparent weighting reports and debt escalation rules that mirror the design’s punitive loop.
+4. Telemetry captures dispatcher snapshots and queue depth, but we still need external alert routing and richer moderator dashboards (filters/search, CSV export) before live pilots.
+5. Static archives auto-export and prune snapshots, but the GitHub Pages publishing workflow and production monitoring guidance for the nginx container remain outstanding.

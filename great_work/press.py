@@ -226,6 +226,7 @@ class RecruitmentContext:
     outcome: str
     chance: float
     faction: str
+    relationship_modifier: float = 0.0
 
 
 def recruitment_report(ctx: RecruitmentContext) -> PressRelease:
@@ -234,6 +235,8 @@ def recruitment_report(ctx: RecruitmentContext) -> PressRelease:
         f"{ctx.player} pursued {ctx.scholar} through {ctx.faction}. "
         f"Outcome: {ctx.outcome}. Chance: {ctx.chance:.0%}."
     )
+    if ctx.relationship_modifier:
+        body += f" Relationship modifier {ctx.relationship_modifier:+.0%}."
     return PressRelease(type="recruitment_report", headline=headline, body=body)
 
 
@@ -254,6 +257,80 @@ def defection_notice(ctx: DefectionContext) -> PressRelease:
     return PressRelease(type="defection_notice", headline=headline, body=body)
 
 
+@dataclass
+class SeasonalCommitmentContext:
+    player: str
+    faction: str
+    tier: Optional[str]
+    cost: int
+    relationship_modifier: float
+    debt: int
+    status: str
+    paid: int
+
+
+def seasonal_commitment_update(ctx: SeasonalCommitmentContext) -> PressRelease:
+    tier_suffix = f" (Tier {ctx.tier})" if ctx.tier else ""
+    headline = f"Seasonal Commitment Update — {ctx.player}{tier_suffix}"
+    body = (
+        f"{ctx.player} maintains a seasonal pledge with {ctx.faction}. "
+        f"Cost: {ctx.cost}. Relationship modifier {ctx.relationship_modifier:+.0%}."
+    )
+    if ctx.debt:
+        body += f" Outstanding debt: {ctx.debt}."
+    if ctx.paid and ctx.debt == 0:
+        body += " Commitments remain in good standing."
+    return PressRelease(type="seasonal_commitment_update", headline=headline, body=body)
+
+
+def seasonal_commitment_complete(ctx: SeasonalCommitmentContext) -> PressRelease:
+    tier_suffix = f" (Tier {ctx.tier})" if ctx.tier else ""
+    headline = f"Seasonal Commitment Completed — {ctx.player}{tier_suffix}"
+    body = (
+        f"{ctx.player} concludes their seasonal pledge with {ctx.faction}. "
+        f"Final cost {ctx.cost} with relationship modifier {ctx.relationship_modifier:+.0%}."
+    )
+    if ctx.debt:
+        body += f" Remaining debt {ctx.debt} will carry forward."
+    return PressRelease(type="seasonal_commitment_complete", headline=headline, body=body)
+
+
+@dataclass
+class FactionProjectUpdateContext:
+    name: str
+    faction: str
+    progress: float
+    target: float
+    contributions: List[Dict[str, object]]
+
+
+def faction_project_update(ctx: FactionProjectUpdateContext) -> PressRelease:
+    headline = f"Faction Project Update — {ctx.name}"
+    progress_pct = (ctx.progress / ctx.target * 100) if ctx.target else 0
+    body_lines = [
+        f"{ctx.name} advances under {ctx.faction} stewardship.",
+        f"Progress: {ctx.progress:.2f}/{ctx.target:.2f} ({progress_pct:.1f}%).",
+    ]
+    if ctx.contributions:
+        top = sorted(ctx.contributions, key=lambda entry: entry["contribution"], reverse=True)[:3]
+        contrib_lines = [
+            f"{entry['player']}: {entry['contribution']:.2f} ({entry['relationship_modifier']:+.0%})"
+            for entry in top
+        ]
+        body_lines.append("Top contributors: " + "; ".join(contrib_lines))
+    body = " ".join(body_lines)
+    return PressRelease(type="faction_project_update", headline=headline, body=body)
+
+
+def faction_project_complete(ctx: FactionProjectUpdateContext) -> PressRelease:
+    headline = f"Faction Project Completed — {ctx.name}"
+    body = (
+        f"{ctx.name} is complete under the auspices of {ctx.faction}. "
+        f"Final progress {ctx.progress:.2f}/{ctx.target:.2f}."
+    )
+    return PressRelease(type="faction_project_complete", headline=headline, body=body)
+
+
 __all__ = [
     "academic_bulletin",
     "academic_bulletin_async",
@@ -271,4 +348,10 @@ __all__ = [
     "GossipContext",
     "RecruitmentContext",
     "DefectionContext",
+    "SeasonalCommitmentContext",
+    "FactionProjectUpdateContext",
+    "seasonal_commitment_update",
+    "seasonal_commitment_complete",
+    "faction_project_update",
+    "faction_project_complete",
 ]

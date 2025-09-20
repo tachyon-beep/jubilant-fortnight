@@ -1,6 +1,6 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
+Last Updated: 2025-09-30 (Sidecast arcs, defection epilogues, dispatcher console)
 
 ## Executive Summary
 
@@ -9,7 +9,7 @@ Last Updated: 2025-09-27 (Layered recruitment/table-talk & sideways follow-ups)
 - **Not Implemented:** 9 requirements (11.7%)
 - **Not Evaluated:** 2 requirements (2.6%)
 
-Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, and table-talk/theory updates; digest highlights summarise scheduled drops, telemetry reports include queue depth alongside layered-press cadence, and digest exports sync the public archive with ZIP snapshots. Remaining gaps centre on mentorship sidecasts/defection epilogues, deeper sideways vignettes plus public surfacing of queued follow-ups, telemetry success thresholds and dispatcher instrumentation, and external archive hardening.
+Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, table-talk updates, sidecasts, and sideways vignettes; digest highlights summarise scheduled drops, telemetry reports include dispatcher backlog stats, and digest exports sync the public archive with ZIP snapshots. Remaining gaps centre on turning mentorship/sidecast beats into persistent relationship state, broadening long-tail influence sinks, hardening telemetry alert routing (and export tooling), and documenting external archive hosting.
 
 ## Functional Requirements Status
 
@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Remaining work focuses on expanding the deep-prep vignette catalogue and documenting safety guardrails for tone randomisation.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L1106】【F:great_work/service.py†L1996-L2470】【F:great_work/telemetry.py†L788-L890】【F:great_work/discord_bot.py†L317-L820】【F:great_work/multi_press.py†L620-L990】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, and admin press layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; tone packs randomise setting-specific headlines, digest highlights summarise pending drops, and sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, and debt rollovers with faction reprisals. Mentorship activations/progression/completions now log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, and recruitment odds incorporate the relationship modifier. Remaining work targets propagating those deltas into other mechanical gates (poach loyalty, faction commitments) plus automated tone/safety guardrails beyond the writer-facing guide.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4663】【F:great_work/telemetry.py†L788-L1110】【F:great_work/discord_bot.py†L317-L1475】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L120】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -151,10 +151,10 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 4 | 100% |
 
-**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, and digest ticks ship ZIP snapshots to the admin channel—meeting archival accessibility requirements even though external hosting remains manual.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L120】
+**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, and digest ticks ship ZIP snapshots to the admin channel—meeting archival accessibility requirements even though the GitHub Pages publish workflow we’ve selected remains undocumented and manual today.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L180】
 
 ## Key Follow-ups
 
-1. Broaden mentorship sidecasts/defection epilogues, deepen the data-driven sideways catalogue, and surface dispatcher-queued follow-ups in Gazette highlights.
-2. Deliver moderator tooling and alert routing so dispatcher backlog escalations can be actioned without touching SQLite.
-3. Document external archive hosting options and production hardening for the containerised static site.
+1. Tune seasonal commitment/faction project rewards and document operator workflows so relationship-driven loops remain sustainable.
+2. Design and document additional influence sinks (faction investments, archive programs) that pair with symposium debt escalation.
+3. Ship external alert routing plus dispatcher backlog exports/dashboards, and document external archive hosting for production.

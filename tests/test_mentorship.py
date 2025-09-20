@@ -53,6 +53,14 @@ def test_mentorship_flow():
         assert len(releases) > 0
         assert releases[0].type == "academic_gossip"
 
+        scholar = service.state.get_scholar(scholar.id)
+        activation_feeling = scholar.memory.feelings.get(player_id)
+        assert activation_feeling is not None and activation_feeling > 0
+        history = scholar.contract.get("mentorship_history")
+        assert isinstance(history, list)
+        assert any(entry.get("event") == "activation" for entry in history)
+        assert any(fact.type == "mentorship" for fact in scholar.memory.facts)
+
         completed_orders = service.state.list_orders(order_type="mentorship_activation")
         assert completed_orders[0]["status"] == "completed"
 
@@ -82,6 +90,22 @@ def test_mentorship_flow():
         # Should have advanced after 3 ticks
         scholar = service.state.get_scholar(scholar.id)
         assert scholar.career.get("tier") == "Director"  # Second tier of Industry track
+
+        # Advance until mentorship completes (final tier)
+        for _ in range(6):
+            service._progress_careers()
+        scholar = service.state.get_scholar(scholar.id)
+
+        final_feeling = scholar.memory.feelings.get(player_id)
+        assert final_feeling is not None and final_feeling > activation_feeling
+
+        history = scholar.contract.get("mentorship_history")
+        events = [entry.get("event") for entry in history]
+        assert "progression" in events
+        assert "completion" in events
+
+        # Mentorship should no longer be active after completion
+        assert service.state.get_active_mentorship(scholar.id) is None
 
         print("Mentorship system test passed!")
 

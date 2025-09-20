@@ -23,6 +23,7 @@ from .models import (
     MemoryFact,
     OfferRecord,
     Player,
+    Scholar,
     PressRecord,
     PressRelease,
     SidewaysEffectType,
@@ -35,6 +36,8 @@ from .press import (
     ExpeditionContext,
     RecruitmentContext,
     DefectionContext,
+    SeasonalCommitmentContext,
+    FactionProjectUpdateContext,
     academic_bulletin,
     academic_gossip,
     defection_notice,
@@ -42,6 +45,10 @@ from .press import (
     recruitment_report,
     retraction_notice,
     research_manifesto,
+    seasonal_commitment_update,
+    seasonal_commitment_complete,
+    faction_project_update,
+    faction_project_complete,
 )
 from .multi_press import MultiPressGenerator
 from .rng import DeterministicRNG
@@ -1061,7 +1068,9 @@ class GameService:
             faction=faction,
             base_chance=base_chance,
         )
-        chance = chance_payload["chance"]
+        base_chance_value = chance_payload["chance"]
+        relationship_details = self._relationship_bonus(scholar, player_id)
+        chance = self._clamp_probability(base_chance_value + relationship_details["total"])
         roll = self._rng.uniform(0.0, 1.0)
         success = roll < chance
         now = datetime.now(timezone.utc)
@@ -1079,6 +1088,7 @@ class GameService:
                     outcome="success",
                     chance=chance,
                     faction=faction,
+                    relationship_modifier=relationship_details["total"],
                 )
             )
         else:
@@ -1090,6 +1100,7 @@ class GameService:
                     outcome="failure",
                     chance=chance,
                     faction=faction,
+                    relationship_modifier=relationship_details["total"],
                 )
             )
             resolve_at = now + self._FOLLOWUP_DELAYS["recruitment_grudge"]
@@ -1099,6 +1110,17 @@ class GameService:
                 resolve_at,
                 {"player": player_id, "faction": faction},
             )
+        press.metadata.update(
+            {
+                "player": player_id,
+                "scholar": scholar.id,
+                "faction": faction,
+                "chance": chance,
+                "base_chance": base_chance_value,
+                "relationship_modifier": relationship_details["total"],
+                "relationship_details": relationship_details,
+            }
+        )
         self.state.save_scholar(scholar)
         self.state.upsert_player(player)
         self._archive_press(press, now)
@@ -1114,6 +1136,7 @@ class GameService:
                     "success": success,
                     "cooldown_penalty": chance_payload["cooldown_penalty"],
                     "influence_bonus": chance_payload["influence_bonus"],
+                    "relationship": relationship_details,
                 },
             )
         )
@@ -1134,6 +1157,49 @@ class GameService:
         )
         return success, press
 
+    def start_seasonal_commitment(
+        self,
+        player_id: str,
+        faction: str,
+        *,
+        tier: Optional[str] = None,
+        base_cost: Optional[int] = None,
+        duration_days: Optional[int] = None,
+    ) -> int:
+        now = datetime.now(timezone.utc)
+        base = base_cost if base_cost is not None else self.settings.seasonal_commitment_base_cost
+        duration = duration_days if duration_days is not None else self.settings.seasonal_commitment_duration_days
+        end_at = now + timedelta(days=duration)
+        return self.state.create_seasonal_commitment(
+            player_id=player_id,
+            faction=faction,
+            tier=tier,
+            base_cost=base,
+            start_at=now,
+            end_at=end_at,
+        )
+
+    def list_seasonal_commitments(self, player_id: str) -> List[Dict[str, object]]:
+        return self.state.list_player_commitments(player_id)
+
+    def start_faction_project(
+        self,
+        name: str,
+        faction: str,
+        *,
+        target_progress: float,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> int:
+        return self.state.create_faction_project(
+            name=name,
+            faction=faction,
+            target_progress=target_progress,
+            metadata=metadata,
+        )
+
+    def list_faction_projects(self, *, include_completed: bool = False) -> List[Dict[str, object]]:
+        return self.state.list_faction_projects(include_completed=include_completed)
+
     def recruitment_odds(
         self,
         player_id: str,
@@ -1152,21 +1218,25 @@ class GameService:
         self._require_reputation(player, "recruitment")
 
         odds: List[Dict[str, object]] = []
+        relationship_details = self._relationship_bonus(scholar, player_id)
         for faction in self._FACTIONS:
             data = self._compute_recruitment_chance(
                 player=player,
                 faction=faction,
                 base_chance=base_chance,
             )
+            final_chance = self._clamp_probability(data["chance"] + relationship_details["total"])
             odds.append(
                 {
                     "faction": faction,
-                    "chance": data["chance"],
+                    "chance": final_chance,
+                    "base_chance": data["chance"],
                     "influence_bonus": data["influence_bonus"],
                     "cooldown_penalty": data["cooldown_penalty"],
                     "cooldown_active": data["cooldown_active"],
                     "cooldown_remaining": data["cooldown_remaining"],
                     "influence": data["influence"],
+                    "relationship_modifier": relationship_details["total"],
                 }
             )
         odds.sort(key=lambda item: item["chance"], reverse=True)
@@ -1211,7 +1281,10 @@ class GameService:
         if not scholar:
             raise ValueError("Unknown scholar")
 
+        relationship = self._relationship_bonus(scholar, scholar.contract.get("employer", "") or "")
+        relationship_effect = -relationship["total"]
         probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
+        probability = self._clamp_probability(probability + relationship_effect)
         roll = self._rng.uniform(0.0, 1.0)
         timestamp = datetime.now(timezone.utc)
         former_employer = scholar.contract.get("employer", "their patron")
@@ -1274,7 +1347,21 @@ class GameService:
                 "outcome": outcome,
                 "probability": probability,
                 "new_faction": new_faction,
+                "relationship_modifier": relationship_effect,
             },
+        )
+        press.metadata.update(
+            {
+                "probability": probability,
+                "relationship_modifier": relationship_effect,
+                "relationship_details": relationship,
+                "former_employer": former_employer,
+                "new_faction": new_faction,
+                "offer_quality": offer_quality,
+                "mistreatment": mistreatment,
+                "alignment": alignment,
+                "plateau": plateau,
+            }
         )
         self.state.save_scholar(scholar)
         self._archive_press(press, timestamp)
@@ -1546,7 +1633,10 @@ class GameService:
         total_influence = sum(offer.influence_offered.values())
         offer_quality = min(10.0, total_influence / 10.0)  # Scale to 0-10
 
-        # Check feelings toward rival and patron
+        # Relationship adjustments from mentorship/sidecasts and feelings
+        rival_relationship = self._relationship_bonus(scholar, offer.rival_id)
+        patron_relationship = self._relationship_bonus(scholar, offer.patron_id)
+
         rival_feeling = scholar.memory.feelings.get(offer.rival_id, 0.0)
         patron_feeling = scholar.memory.feelings.get(offer.patron_id, 0.0)
 
@@ -1568,6 +1658,10 @@ class GameService:
         from .scholars import defection_probability
         probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
 
+        # Apply relationship bonuses: rival increases, patron decreases
+        probability += rival_relationship["total"]
+        probability -= patron_relationship["total"]
+
         # Adjust for contract terms
         if "exclusive_research" in offer.terms:
             probability += 0.1
@@ -1580,7 +1674,9 @@ class GameService:
         if offer.offer_type == "counter":
             probability -= 0.1  # Loyalty bonus to current patron
 
-        return min(1.0, max(0.0, probability))
+        probability = self._clamp_probability(probability)
+
+        return probability
 
     def resolve_offer_negotiation(
         self,
@@ -1624,6 +1720,9 @@ class GameService:
         scholar = self.state.get_scholar(best_offer.scholar_id)
         press = []
 
+        rival_relationship = self._relationship_bonus(scholar, best_offer.rival_id)
+        patron_relationship = self._relationship_bonus(scholar, best_offer.patron_id)
+
         if roll < best_probability:
             # Scholar accepts the offer
             winner_id = best_offer.rival_id if best_offer.offer_type == "initial" else best_offer.patron_id
@@ -1664,6 +1763,9 @@ class GameService:
                     "winner": winner_id,
                     "loser": loser_id,
                     "offer_id": best_offer.id,
+                    "probability": best_probability,
+                    "relationship_rival": rival_relationship,
+                    "relationship_patron": patron_relationship,
                 }
             )
             release = self._enhance_press_release(
@@ -1676,6 +1778,9 @@ class GameService:
                     "winner": winner_name,
                     "loser": loser_id,
                     "offer_id": best_offer.id,
+                    "probability": best_probability,
+                    "relationship_rival": rival_relationship["total"],
+                    "relationship_patron": patron_relationship["total"],
                 },
             )
             self._archive_press(release, timestamp)
@@ -1744,6 +1849,9 @@ class GameService:
                 metadata={
                     "scholar": scholar.id,
                     "all_rejected": True,
+                    "probability": best_probability,
+                    "relationship_rival": rival_relationship,
+                    "relationship_patron": patron_relationship,
                 }
             )
             release = self._enhance_press_release(
@@ -1755,6 +1863,9 @@ class GameService:
                     "scholar": scholar.name,
                     "offer_chain": [o.id for o in offer_chain],
                     "outcome": "rejected",
+                    "probability": best_probability,
+                    "relationship_rival": rival_relationship["total"],
+                    "relationship_patron": patron_relationship["total"],
                 },
             )
             self._archive_press(release, timestamp)
@@ -1803,6 +1914,8 @@ class GameService:
                     "probability": best_probability,
                     "roll": roll,
                     "accepted": roll < best_probability,
+                    "relationship_rival": rival_relationship if best_offer else None,
+                    "relationship_patron": patron_relationship if best_offer else None,
                 }
             )
         )
@@ -1823,6 +1936,8 @@ class GameService:
             action: value for action, value in self.settings.action_thresholds.items()
         }
         contracts = self._contract_summary_for_player(player)
+        relationships = self._player_relationship_summary(player)
+        commitments = self._player_commitment_summary(player)
         return {
             "id": player.id,
             "display_name": player.display_name,
@@ -1833,6 +1948,8 @@ class GameService:
             "cooldowns": dict(player.cooldowns),
             "thresholds": thresholds,
             "contracts": contracts,
+            "relationships": relationships,
+            "commitments": commitments,
         }
 
     def roster_status(self) -> List[Dict[str, object]]:
@@ -3597,6 +3714,138 @@ class GameService:
                             )
                         self._queue_admin_notification(note)
 
+    def _apply_seasonal_commitments(self, now: datetime) -> List[PressRelease]:
+        releases: List[PressRelease] = []
+        commitments = self.state.list_active_seasonal_commitments(now)
+        if not commitments:
+            return releases
+
+        for commitment in commitments:
+            last_processed = commitment.get("last_processed_at")
+            if last_processed and (now - last_processed) < timedelta(hours=6):
+                continue
+
+            player = self.state.get_player(commitment["player_id"])
+            if not player:
+                continue
+
+            faction = commitment.get("faction", "")
+            relationship = self._player_faction_relationship(
+                player,
+                faction,
+                weight=self.settings.seasonal_commitment_relationship_weight,
+            )
+            base_cost = int(commitment.get("base_cost", self.settings.seasonal_commitment_base_cost))
+            modifier = max(0.5, 1.0 - relationship)
+            effective_cost = max(0, int(round(base_cost * modifier)))
+
+            self._ensure_influence_structure(player)
+            available = player.influence.get(faction, 0)
+            paid = min(available, effective_cost)
+            if paid:
+                self._apply_influence_change(player, faction, -paid)
+            debt = effective_cost - paid
+            debt_details: List[Dict[str, object]] = []
+            if debt > 0:
+                self.state.record_influence_debt(
+                    player_id=player.id,
+                    faction=faction,
+                    amount=debt,
+                    now=now,
+                    source="seasonal",
+                )
+                debt_details.append(
+                    {
+                        "faction": faction,
+                        "remaining": debt,
+                        "reprisal_level": 0,
+                        "last_reprisal_at": None,
+                    }
+                )
+            self.state.upsert_player(player)
+
+            if debt_details:
+                self._apply_influence_debt_reprisal(
+                    player=player,
+                    debt_details=debt_details,
+                    now=now,
+                    source="seasonal",
+                    threshold=self.settings.contract_debt_reprisal_threshold,
+                    penalty=self.settings.contract_debt_reprisal_penalty,
+                    cooldown_days=self.settings.contract_debt_reprisal_cooldown_days,
+                    telemetry_event="seasonal_commitment_reprisal",
+                )
+
+            ctx = SeasonalCommitmentContext(
+                player=player.display_name,
+                faction=faction or "Unaligned",
+                tier=commitment.get("tier"),
+                cost=effective_cost,
+                relationship_modifier=relationship,
+                debt=debt,
+                status="active",
+                paid=paid,
+            )
+            release = seasonal_commitment_update(ctx)
+            release.metadata.setdefault("commitment", {}).update(
+                {
+                    "id": commitment.get("id"),
+                    "tier": commitment.get("tier"),
+                    "base_cost": base_cost,
+                    "relationship_modifier": relationship,
+                    "paid": paid,
+                    "debt": debt,
+                }
+            )
+            self._archive_press(release, now)
+            releases.append(release)
+
+            self.state.mark_seasonal_commitment_processed(commitment["id"], now)
+
+            end_at = commitment.get("end_at")
+            if isinstance(end_at, datetime) and end_at <= now:
+                self.state.set_seasonal_commitment_status(
+                    commitment_id=commitment["id"],
+                    status="completed",
+                    processed_at=now,
+                )
+                completion_release = seasonal_commitment_complete(
+                    SeasonalCommitmentContext(
+                        player=player.display_name,
+                        faction=faction or "Unaligned",
+                        tier=commitment.get("tier"),
+                        cost=effective_cost,
+                        relationship_modifier=relationship,
+                        debt=debt,
+                        status="completed",
+                        paid=paid,
+                    )
+                )
+                completion_release.metadata.setdefault("commitment", {}).update(
+                    {
+                        "id": commitment.get("id"),
+                        "completed_at": now.isoformat(),
+                    }
+                )
+                self._archive_press(completion_release, now)
+                releases.append(completion_release)
+
+            try:
+                self._telemetry.track_game_progression(
+                    "seasonal_commitment_charge",
+                    float(effective_cost),
+                    player_id=player.id,
+                    details={
+                        "faction": faction,
+                        "relationship_modifier": relationship,
+                        "debt": debt,
+                    },
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to record seasonal commitment telemetry", exc_info=True)
+
+        return releases
+
     def _contract_summary_for_player(self, player: Player) -> Dict[str, Dict[str, object]]:
         commitments = self._contract_commitments().get(player.id, {})
         summary: Dict[str, Dict[str, object]] = {}
@@ -4170,6 +4419,8 @@ class GameService:
         releases.extend(self._resolve_followups())
         releases.extend(self._process_symposium_reminders())
         self._apply_contract_upkeep(now)
+        releases.extend(self._apply_seasonal_commitments(now))
+        releases.extend(self._advance_faction_projects(now))
         releases.extend(self.resolve_conferences())
         return releases
 
@@ -4266,6 +4517,14 @@ class GameService:
                 mentor_player = self.state.get_player(mentorship[1])
                 mentor_name = mentor_player.display_name if mentor_player else "their mentor"
 
+                self._record_mentorship_memory(
+                    scholar,
+                    mentor_player,
+                    event="progression",
+                    track=track,
+                    timestamp=now,
+                )
+
                 quote = f"Advanced to {scholar.career['tier']} under the guidance of {mentor_name}."
                 press = academic_gossip(
                     GossipContext(scholar=scholar.name, quote=quote, trigger="Career advancement"),
@@ -4301,6 +4560,13 @@ class GameService:
                 # Complete mentorship after max tier reached
                 if idx == len(ladder) - 2:  # Just reached final tier
                     self.state.complete_mentorship(mentorship[0], now)
+                    self._record_mentorship_memory(
+                        scholar,
+                        mentor_player,
+                        event="completion",
+                        track=track,
+                        timestamp=now,
+                    )
                     complete_press = academic_gossip(
                         GossipContext(
                             scholar=mentor_name,
@@ -4375,13 +4641,22 @@ class GameService:
 
             self.state.activate_mentorship(mentorship_id)
 
+            track_name = scholar.career.get("track", "Academia")
             if career_track and career_track in self._CAREER_TRACKS:
-                old_track = scholar.career.get("track", "Academia")
-                if old_track != career_track:
+                if track_name != career_track:
                     scholar.career["track"] = career_track
                     scholar.career["tier"] = self._CAREER_TRACKS[career_track][0]
                     scholar.career["ticks"] = 0
-                    self.state.save_scholar(scholar)
+                track_name = career_track
+
+            self._record_mentorship_memory(
+                scholar,
+                player,
+                event="activation",
+                track=track_name,
+                timestamp=now,
+            )
+            self.state.save_scholar(scholar)
 
             quote = f"The mentorship between {player.display_name} and {scholar.name} has officially commenced."
             press = academic_gossip(
@@ -4400,7 +4675,7 @@ class GameService:
                     "event": "mentorship_activated",
                     "mentor": player.display_name,
                     "scholar": scholar.name,
-                    "career_track": career_track or scholar.career.get("track", "Academia"),
+                    "career_track": track_name,
                 },
             )
             releases.append(press)
@@ -4578,6 +4853,19 @@ class GameService:
                     expedition_type=expedition_type,
                     expedition_code=expedition_code,
                 )
+
+                self._record_sidecast_memory(
+                    scholar,
+                    sponsor_id,
+                    arc=arc_key,
+                    phase=phase,
+                    timestamp=now,
+                    extra={
+                        "expedition_code": expedition_code,
+                        "expedition_type": expedition_type,
+                    },
+                )
+                self.state.save_scholar(scholar)
 
                 immediate_layers = self._apply_multi_press_layers(
                     plan.layers,
@@ -5295,18 +5583,30 @@ class GameService:
         identifier = f"s.proc-{self._generated_counter:03d}"
         self._generated_counter += 1
         scholar = self.repository.generate(self._rng, identifier)
-        scholar.memory.record_fact(
-            MemoryFact(
-                timestamp=datetime.now(timezone.utc),
-                type="sidecast",
-                subject=order.player_id,
-                details={"expedition": order.code},
-            )
-        )
         scholar.contract["employer"] = order.player_id
         arc_key = self._multi_press.pick_sidecast_arc()
         scholar.contract["sidecast_arc"] = arc_key
         scholar.contract["sidecast_sponsor"] = order.player_id
+        now = datetime.now(timezone.utc)
+        self._record_sidecast_memory(
+            scholar,
+            order.player_id,
+            arc=arc_key,
+            phase="spawn",
+            timestamp=now,
+            extra={
+                "expedition": order.code,
+                "expedition_type": order.expedition_type,
+            },
+        )
+        self._append_contract_history(
+            scholar,
+            "expedition_links",
+            {
+                "expedition": order.code,
+                "timestamp": now.isoformat(),
+            },
+        )
         self.state.save_scholar(scholar)
         ctx = GossipContext(
             scholar=scholar.name,
@@ -5316,14 +5616,14 @@ class GameService:
         press = academic_gossip(ctx)
         self.state.append_event(
             Event(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=now,
                 action="scholar_sidecast",
                 payload={"scholar": scholar.id, "expedition": order.code},
             )
         )
         # Schedule debut follow-up to introduce the sidecast arc
         delay_hours = self._multi_press.sidecast_phase_delay(arc_key, "debut", default_hours=6.0)
-        scheduled_at = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
+        scheduled_at = now + timedelta(hours=delay_hours)
         self.state.enqueue_order(
             "followup:sidecast_debut",
             actor_id=scholar.id,
@@ -5338,6 +5638,382 @@ class GameService:
             scheduled_at=scheduled_at,
         )
         return press
+
+    def _append_contract_history(
+        self,
+        scholar: Scholar,
+        key: str,
+        entry: Dict[str, object],
+    ) -> None:
+        history = scholar.contract.get(key)
+        if not isinstance(history, list):
+            history = []
+            scholar.contract[key] = history
+        history.append(entry)
+
+    def _clamp_probability(self, value: float) -> float:
+        return max(0.05, min(0.95, value))
+
+    def _relationship_bonus(
+        self,
+        scholar: Scholar,
+        player_id: str,
+    ) -> Dict[str, object]:
+        feeling = scholar.memory.feelings.get(player_id, 0.0)
+        base_bonus = max(-0.2, min(0.2, feeling * 0.02))
+
+        mentorship_bonus = 0.0
+        active = self.state.get_active_mentorship(scholar.id)
+        active_for_player = bool(active and active[1] == player_id)
+        if active_for_player:
+            mentorship_bonus += 0.05
+        else:
+            history = scholar.contract.get("mentorship_history")
+            if isinstance(history, list):
+                entries = [entry for entry in history if entry.get("mentor_id") == player_id]
+                if entries:
+                    last_event = entries[-1].get("event")
+                    if last_event == "completion":
+                        mentorship_bonus += 0.04
+                    else:
+                        mentorship_bonus += 0.02
+
+        sidecast_bonus = 0.0
+        sidecasts = scholar.contract.get("sidecast_history")
+        if isinstance(sidecasts, list):
+            if any(entry.get("sponsor_id") == player_id for entry in sidecasts):
+                sidecast_bonus += 0.02
+
+        total = base_bonus + mentorship_bonus + sidecast_bonus
+        total = max(-0.25, min(0.25, total))
+
+        return {
+            "total": total,
+            "feeling": feeling,
+            "base_bonus": base_bonus,
+            "mentorship_bonus": mentorship_bonus,
+            "sidecast_bonus": sidecast_bonus,
+            "active_mentorship": active_for_player,
+        }
+
+    def _player_faction_relationship(
+        self,
+        player: Player,
+        faction: str,
+        *,
+        weight: Optional[float] = None,
+    ) -> float:
+        factor = weight if weight is not None else self.settings.seasonal_commitment_relationship_weight
+        total = 0.0
+        count = 0
+        for scholar in self.state.all_scholars():
+            if scholar.contract.get("employer") != player.id:
+                continue
+            if faction and scholar.contract.get("faction") != faction:
+                continue
+            feeling = scholar.memory.feelings.get(player.id, 0.0)
+            total += feeling
+            count += 1
+            history = scholar.contract.get("mentorship_history")
+            if isinstance(history, list):
+                for entry in history:
+                    if entry.get("mentor_id") == player.id:
+                        total += 1.0
+            sidecasts = scholar.contract.get("sidecast_history")
+            if isinstance(sidecasts, list):
+                if any(entry.get("sponsor_id") == player.id for entry in sidecasts):
+                    total += 1.0
+        if count == 0:
+            influence = max(0.0, player.influence.get(faction, 0))
+            if influence <= 0:
+                return 0.0
+            return max(-0.1, min(0.1, (influence / 10.0) * factor))
+        average = total / count
+        modifier = average * factor
+        return max(-0.25, min(0.25, modifier))
+
+    def _player_relationship_summary(self, player: Player, limit: int = 5) -> List[Dict[str, object]]:
+        entries: List[Dict[str, object]] = []
+        for scholar in self.state.all_scholars():
+            feeling = scholar.memory.feelings.get(player.id)
+            mentorship_history = scholar.contract.get("mentorship_history")
+            mentorship_entries = []
+            if isinstance(mentorship_history, list):
+                mentorship_entries = [entry for entry in mentorship_history if entry.get("mentor_id") == player.id]
+
+            sidecast_history = scholar.contract.get("sidecast_history")
+            sidecast_entries = []
+            if isinstance(sidecast_history, list):
+                sidecast_entries = [entry for entry in sidecast_history if entry.get("sponsor_id") == player.id]
+
+            if feeling is None and not mentorship_entries and not sidecast_entries:
+                continue
+
+            active = self.state.get_active_mentorship(scholar.id)
+            active_for_player = bool(active and active[1] == player.id)
+
+            last_mentorship_event = None
+            last_mentorship_at = None
+            if mentorship_entries:
+                last_entry = mentorship_entries[-1]
+                last_mentorship_event = last_entry.get("event")
+                last_mentorship_at = last_entry.get("timestamp") or last_entry.get("resolved_at")
+
+            last_sidecast_phase = None
+            last_sidecast_at = None
+            if sidecast_entries:
+                last_sidecast = sidecast_entries[-1]
+                last_sidecast_phase = last_sidecast.get("phase")
+                last_sidecast_at = last_sidecast.get("timestamp")
+
+            sidecast_arc = None
+            if sidecast_entries:
+                sidecast_arc = sidecast_entries[-1].get("arc") or scholar.contract.get("sidecast_arc")
+
+            entries.append(
+                {
+                    "scholar": scholar.name,
+                    "scholar_id": scholar.id,
+                    "feeling": feeling or 0.0,
+                    "active_mentorship": active_for_player,
+                    "track": scholar.career.get("track"),
+                    "tier": scholar.career.get("tier"),
+                    "last_mentorship_event": last_mentorship_event,
+                    "last_mentorship_at": last_mentorship_at,
+                    "sidecast_arc": sidecast_arc,
+                    "last_sidecast_phase": last_sidecast_phase,
+                    "last_sidecast_at": last_sidecast_at,
+                }
+            )
+
+        entries.sort(key=lambda item: item["feeling"], reverse=True)
+        if limit > 0:
+            entries = entries[:limit]
+        return entries
+
+    def _player_commitment_summary(self, player: Player, limit: int = 10) -> List[Dict[str, object]]:
+        commitments = self.state.list_player_commitments(player.id)
+        summary: List[Dict[str, object]] = []
+        for entry in commitments:
+            relationship = self._player_faction_relationship(
+                player,
+                entry.get("faction", ""),
+            )
+            summary.append(
+                {
+                    "id": entry.get("id"),
+                    "faction": entry.get("faction"),
+                    "tier": entry.get("tier"),
+                    "base_cost": entry.get("base_cost"),
+                    "start_at": entry.get("start_at"),
+                    "end_at": entry.get("end_at"),
+                    "status": entry.get("status"),
+                    "relationship_modifier": relationship,
+                    "last_processed_at": entry.get("last_processed_at"),
+                }
+            )
+        summary.sort(key=lambda item: item.get("end_at") or datetime.max)
+        if limit > 0:
+            summary = summary[:limit]
+        return summary
+
+    def _advance_faction_projects(self, now: datetime) -> List[PressRelease]:
+        releases: List[PressRelease] = []
+        projects = self.state.list_active_faction_projects()
+        if not projects:
+            return releases
+
+        players = list(self.state.all_players())
+        for project in projects:
+            faction = project.get("faction", "")
+            base_increment = self.settings.faction_project_base_progress_weight
+            total_progress = project.get("progress", 0.0)
+            contributions: List[Dict[str, object]] = []
+
+            for player in players:
+                influence = max(0.0, player.influence.get(faction, 0))
+                relationship = self._player_faction_relationship(
+                    player,
+                    faction,
+                    weight=self.settings.faction_project_relationship_weight,
+                )
+                contribution = influence * base_increment + relationship
+                if contribution <= 0:
+                    continue
+                total_progress += contribution
+                contributions.append(
+                    {
+                        "player": player.display_name,
+                        "contribution": contribution,
+                        "relationship_modifier": relationship,
+                        "influence": influence,
+                    }
+                )
+
+            if not contributions:
+                continue
+
+            self.state.update_faction_project_progress(project["id"], total_progress, now)
+
+            ctx = FactionProjectUpdateContext(
+                name=project.get("name", "Project"),
+                faction=faction or "Unaligned",
+                progress=total_progress,
+                target=project.get("target_progress", 0.0),
+                contributions=contributions,
+            )
+            release = faction_project_update(ctx)
+            release.metadata.setdefault("project", {}).update(
+                {
+                    "id": project.get("id"),
+                    "progress": total_progress,
+                    "target": project.get("target_progress", 0.0),
+                }
+            )
+            self._archive_press(release, now)
+            releases.append(release)
+
+            if total_progress >= project.get("target_progress", 0.0):
+                self.state.complete_faction_project(project["id"], now)
+                completion_release = faction_project_complete(
+                    FactionProjectUpdateContext(
+                        name=project.get("name", "Project"),
+                        faction=faction or "Unaligned",
+                        progress=total_progress,
+                        target=project.get("target_progress", 0.0),
+                        contributions=contributions,
+                    )
+                )
+                completion_release.metadata.setdefault("project", {}).update(
+                    {
+                        "id": project.get("id"),
+                        "completed_at": now.isoformat(),
+                    }
+                )
+                self._archive_press(completion_release, now)
+                releases.append(completion_release)
+
+                reward = self.settings.faction_project_completion_reward
+                if reward > 0:
+                    for entry in contributions:
+                        player = next(
+                            (p for p in players if p.display_name == entry["player"]),
+                            None,
+                        )
+                        if not player:
+                            continue
+                        self._apply_influence_change(player, faction, reward)
+                        self.state.upsert_player(player)
+
+            try:
+                self._telemetry.track_game_progression(
+                    "faction_project_progress",
+                    float(total_progress),
+                    details={
+                        "project_id": project.get("id"),
+                        "faction": faction,
+                    },
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to record faction project telemetry", exc_info=True)
+
+        return releases
+
+    def _record_mentorship_memory(
+        self,
+        scholar: Scholar,
+        mentor: Optional[Player],
+        *,
+        event: str,
+        track: str,
+        timestamp: datetime,
+    ) -> None:
+        if mentor is None:
+            return
+        mentor_id = mentor.id
+        delta_map = {
+            "activation": 1.0,
+            "progression": 0.5,
+            "completion": 1.5,
+        }
+        delta = delta_map.get(event, 0.0)
+        if delta:
+            scholar.memory.adjust_feeling(mentor_id, delta)
+
+        details = {
+            "event": event,
+            "mentor": mentor.display_name,
+            "mentor_id": mentor_id,
+            "track": track,
+        }
+        scholar.memory.record_fact(
+            MemoryFact(
+                timestamp=timestamp,
+                type="mentorship",
+                subject=mentor_id,
+                details=details,
+            )
+        )
+
+        self._append_contract_history(
+            scholar,
+            "mentorship_history",
+            {
+                "event": event,
+                "mentor_id": mentor_id,
+                "mentor": mentor.display_name,
+                "track": track,
+                "timestamp": timestamp.isoformat(),
+            },
+        )
+
+    def _record_sidecast_memory(
+        self,
+        scholar: Scholar,
+        sponsor_id: Optional[str],
+        *,
+        arc: str,
+        phase: str,
+        timestamp: datetime,
+        extra: Optional[Dict[str, object]] = None,
+    ) -> None:
+        delta_map = {
+            "spawn": 0.75,
+            "debut": 1.0,
+            "integration": 0.6,
+            "spotlight": 1.2,
+        }
+        if sponsor_id:
+            delta = delta_map.get(phase, 0.4)
+            if delta:
+                scholar.memory.adjust_feeling(sponsor_id, delta)
+        subject = sponsor_id or arc
+        details = {
+            "arc": arc,
+            "phase": phase,
+            "sponsor_id": sponsor_id,
+        }
+        if extra:
+            details.update(extra)
+        scholar.memory.record_fact(
+            MemoryFact(
+                timestamp=timestamp,
+                type="sidecast",
+                subject=subject,
+                details=details,
+            )
+        )
+        self._append_contract_history(
+            scholar,
+            "sidecast_history",
+            {
+                "arc": arc,
+                "phase": phase,
+                "sponsor_id": sponsor_id,
+                "timestamp": timestamp.isoformat(),
+                "details": details,
+            },
+        )
 
     def _generate_reactions(self, team: List[str], result) -> List[str]:
         reactions = []

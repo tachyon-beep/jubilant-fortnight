@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import discord
 from discord import app_commands
@@ -340,22 +340,33 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
         lines = [f"**Recruitment odds for {scholar_id}**"]
         lines.append(f"Base chance before modifiers: {base_chance * 100:.1f}%")
+        relationship_modifier = odds[0]["relationship_modifier"] if odds else 0.0
         cooldown_info = odds[0]["cooldown_remaining"] if odds else 0
         if cooldown_info:
             lines.append(
                 f"Recruitment cooldown active — penalties apply for the next {cooldown_info} digests."
             )
+        if relationship_modifier:
+            lines.append(
+                "Scholar attitude modifier: {:+.1f}% (based on mentorship/sidecast history).".format(
+                    relationship_modifier * 100,
+                )
+            )
         lines.append("")
         for entry in odds:
             faction = entry["faction"].capitalize()
             chance_pct = entry["chance"] * 100
+            base_pct = entry.get("base_chance", entry["chance"]) * 100
+            relationship_pct = entry.get("relationship_modifier", 0.0) * 100
             influence_bonus = entry["influence_bonus"] * 100
             influence_value = entry["influence"]
             cooldown_text = "halved" if entry["cooldown_active"] else "normal"
             lines.append(
-                "• {faction}: {chance:.1f}% (influence {influence} ➜ +{bonus:.1f}%, cooldown {cooldown})".format(
+                "• {faction}: {chance:.1f}% (base {base:.1f}%, relationship {rel:+.1f}%, influence {influence} ➜ +{bonus:.1f}%, cooldown {cooldown})".format(
                     faction=faction,
                     chance=chance_pct,
+                    base=base_pct,
+                    rel=relationship_pct,
                     influence=influence_value,
                     bonus=influence_bonus,
                     cooldown=cooldown_text,
@@ -899,6 +910,49 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         debt=payload.get("outstanding", 0),
                     )
                 )
+        relationships = data.get("relationships") or []
+        if relationships:
+            lines.append("")
+            lines.append("Mentorship & Sidecast Links:")
+            for entry in relationships:
+                feeling = entry.get("feeling", 0.0)
+                feeling_text = f"{feeling:+.1f}"
+                detail_parts: List[str] = []
+                if entry.get("active_mentorship"):
+                    detail_parts.append("active mentorship")
+                elif entry.get("last_mentorship_event"):
+                    detail = entry.get("last_mentorship_event")
+                    when = entry.get("last_mentorship_at") or "recently"
+                    detail_parts.append(f"{detail} ({when})")
+                track = entry.get("track")
+                tier = entry.get("tier")
+                if track:
+                    detail_parts.append(f"track {track}{'/' + tier if tier else ''}")
+                sidecast = entry.get("sidecast_arc")
+                if sidecast:
+                    phase = entry.get("last_sidecast_phase") or "ongoing"
+                    detail_parts.append(f"sidecast {sidecast} ({phase})")
+                summary = "; ".join(detail_parts) if detail_parts else "relationship"
+                lines.append(f" - {entry['scholar']} (Δ {feeling_text}) — {summary}")
+        commitments = data.get("commitments") or []
+        if commitments:
+            lines.append("")
+            lines.append("Seasonal Commitments:")
+            for entry in commitments:
+                relationship_pct = entry.get("relationship_modifier", 0.0) * 100
+                end_at = entry.get("end_at")
+                if isinstance(end_at, datetime):
+                    end_text = end_at.strftime("%Y-%m-%d")
+                else:
+                    end_text = str(end_at) if end_at else "ongoing"
+                lines.append(
+                    " - {faction}: status {status}, Δ {rel:+.1f}%, ends {end}".format(
+                        faction=(entry.get("faction") or "Unaligned").capitalize(),
+                        status=entry.get("status", "active"),
+                        rel=relationship_pct,
+                        end=end_text,
+                    )
+                )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
@@ -918,6 +972,57 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         bounds = reference["reputation_bounds"]
         lines.append("")
         lines.append(f"Reputation bounds: {bounds['min']} to {bounds['max']}")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="seasonal_commitments", description="View your seasonal commitments")
+    @track_command
+    async def seasonal_commitments(interaction: discord.Interaction) -> None:
+        player_id = str(interaction.user.display_name)
+        service.ensure_player(player_id, interaction.user.display_name)
+        commitments = service.list_seasonal_commitments(player_id)
+        if not commitments:
+            await interaction.response.send_message("No seasonal commitments recorded.", ephemeral=True)
+            return
+        lines = ["**Seasonal Commitments**"]
+        for entry in commitments:
+            faction = (entry.get("faction") or "Unaligned").capitalize()
+            status = entry.get("status", "active")
+            end_at = entry.get("end_at")
+            if isinstance(end_at, datetime):
+                end_text = end_at.strftime("%Y-%m-%d")
+            else:
+                end_text = str(end_at) if end_at else "ongoing"
+            lines.append(
+                "• {faction}: status {status}, base cost {cost}, ends {end}".format(
+                    faction=faction,
+                    status=status,
+                    cost=entry.get("base_cost", 0),
+                    end=end_text,
+                )
+            )
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="faction_projects", description="Show active faction projects")
+    @track_command
+    async def faction_projects(interaction: discord.Interaction) -> None:
+        projects = service.list_faction_projects()
+        if not projects:
+            await interaction.response.send_message("No active faction projects.", ephemeral=True)
+            return
+        lines = ["**Active Faction Projects**"]
+        for project in projects:
+            progress = project.get("progress", 0.0)
+            target = project.get("target_progress", 0.0)
+            progress_pct = (progress / target * 100) if target else 0
+            lines.append(
+                "• {name} ({faction}) — {progress:.2f}/{target:.2f} ({pct:.1f}%)".format(
+                    name=project.get("name", "Project"),
+                    faction=(project.get("faction") or "Unaligned").capitalize(),
+                    progress=progress,
+                    target=target,
+                    pct=progress_pct,
+                )
+            )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @app_commands.command(name="gazette", description="Show recent Gazette headlines")
@@ -1556,6 +1661,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(symposium_status)
     bot.tree.add_command(status)
     bot.tree.add_command(wager)
+    bot.tree.add_command(seasonal_commitments)
+    bot.tree.add_command(faction_projects)
     bot.tree.add_command(gazette)
     bot.tree.add_command(export_log)
     bot.tree.add_command(export_web_archive)

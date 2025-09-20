@@ -44,6 +44,12 @@ class Settings:
     reputation_bounds: Dict[str, int]
     action_thresholds: Dict[str, int]
     influence_caps: Dict[str, float]
+    seasonal_commitment_base_cost: int
+    seasonal_commitment_duration_days: int
+    seasonal_commitment_relationship_weight: float
+    faction_project_base_progress_weight: float
+    faction_project_relationship_weight: float
+    faction_project_completion_reward: int
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Settings":
@@ -73,6 +79,8 @@ class Settings:
         reprisal_cooldown = int(debt_cfg.get("reprisal_cooldown_days", 7))
         contract_cfg = data.get("contracts", {})
         contract_debt_cfg = contract_cfg.get("debt", {})
+        seasonal_cfg = data.get("seasonal_commitments", {})
+        projects_cfg = data.get("faction_projects", {})
         return Settings(
             time_scale_days_per_year=data["time_scale"]["real_days_per_year"],
             timeline_start_year=int(data["time_scale"].get("start_year", 1920)),
@@ -103,6 +111,12 @@ class Settings:
             reputation_bounds=reputation,
             action_thresholds={k: int(v) for k, v in thresholds.items()},
             influence_caps={"base": float(influence_caps.get("base", 5)), "per_reputation": float(influence_caps.get("per_reputation", 0.0))},
+            seasonal_commitment_base_cost=int(seasonal_cfg.get("base_cost", 3)),
+            seasonal_commitment_duration_days=int(seasonal_cfg.get("duration_days", 90)),
+            seasonal_commitment_relationship_weight=float(seasonal_cfg.get("relationship_weight", 0.02)),
+            faction_project_base_progress_weight=float(projects_cfg.get("base_progress_weight", 0.1)),
+            faction_project_relationship_weight=float(projects_cfg.get("relationship_weight", 5.0)),
+            faction_project_completion_reward=int(projects_cfg.get("completion_reward", 5)),
         )
 
 

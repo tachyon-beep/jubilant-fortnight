@@ -35,6 +35,14 @@ contracts:
     reprisal_threshold: 0
     reprisal_penalty: 0
     reprisal_cooldown_days: 7
+seasonal_commitments:
+  base_cost: 3
+  duration_days: 90
+  relationship_weight: 0.02
+faction_projects:
+  base_progress_weight: 0.1
+  relationship_weight: 5.0
+  completion_reward: 5
 confidence_wagers:
   suspect:
     reward: 2

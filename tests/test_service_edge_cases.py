@@ -47,6 +47,8 @@ def test_player_status_returns_complete_info(tmp_path):
     assert status["cooldowns"]["recruitment"] == 2
     assert "influence_cap" in status
     assert status["influence_cap"] > 0
+    assert "relationships" in status
+    assert isinstance(status["relationships"], list)
 
 
 def test_player_status_nonexistent_returns_none(tmp_path):
@@ -56,6 +58,49 @@ def test_player_status_nonexistent_returns_none(tmp_path):
 
     status = service.player_status("nonexistent")
     assert status is None
+
+
+def test_player_status_relationship_summary(tmp_path):
+    """player_status should include mentorship/sidecast relationship summary."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    service.ensure_player("mentor", "Mentor")
+
+    scholar = next(iter(service.state.all_scholars()))
+    scholar.memory.adjust_feeling("mentor", 3.5)
+    scholar.contract["mentorship_history"] = [
+        {
+            "event": "activation",
+            "mentor_id": "mentor",
+            "mentor": "Mentor",
+            "track": "Academia",
+            "timestamp": "2025-09-20T12:00:00+00:00",
+        }
+    ]
+    scholar.contract["sidecast_history"] = [
+        {
+            "arc": "local_junior",
+            "phase": "debut",
+            "sponsor_id": "mentor",
+            "timestamp": "2025-09-19T09:00:00+00:00",
+            "details": {
+                "arc": "local_junior",
+                "phase": "debut",
+                "sponsor_id": "mentor",
+            },
+        }
+    ]
+    service.state.save_scholar(scholar)
+
+    status = service.player_status("mentor")
+    summary = status.get("relationships")
+    assert summary
+    entry = summary[0]
+    assert entry["scholar"] == scholar.name
+    assert entry["feeling"] > 0
+    assert entry["last_mentorship_event"] == "activation"
+    assert entry["sidecast_arc"] == "local_junior"
 
 
 def test_archive_digest_generates_summary(tmp_path):
@@ -270,6 +315,18 @@ def test_sidecast_followup_orders_spawn(tmp_path):
     kinds = {entry[2] for entry in followups}
     assert "sidecast_debut" in kinds
 
+    spawned = None
+    for candidate in service.state.all_scholars():
+        if candidate.contract.get("sidecast_sponsor") == "sponsor":
+            spawned = candidate
+            break
+    assert spawned is not None
+    feeling = spawned.memory.feelings.get("sponsor")
+    assert feeling is not None and feeling > 0
+    history = spawned.contract.get("sidecast_history")
+    assert isinstance(history, list)
+    assert any(entry.get("phase") == "spawn" for entry in history)
+
 
 def test_defection_epilogue_followup(tmp_path):
     """Defection return follow-up should emit layered epilogue press."""
@@ -326,6 +383,43 @@ def test_defection_rivalry_followup(tmp_path):
     releases = service._resolve_followups()
     types = {press.type for press in releases}
     assert "defection_epilogue" in types
+
+
+def test_sidecast_followup_updates_state(tmp_path):
+    """Sidecast follow-ups should adjust scholar memory and history."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    service.ensure_player("patron", "Patron")
+
+    scholar = next(iter(service.state.all_scholars()))
+    scholar.contract["sidecast_arc"] = "local_junior"
+    scholar.contract["sidecast_sponsor"] = "patron"
+    service.state.save_scholar(scholar)
+
+    now = datetime.now(timezone.utc)
+    service.state.enqueue_order(
+        "followup:sidecast_debut",
+        actor_id=scholar.id,
+        subject_id="patron",
+        payload={
+            "arc": "local_junior",
+            "phase": "debut",
+            "sponsor": "patron",
+            "expedition_code": "EXP-TEST",
+            "expedition_type": "field",
+        },
+        scheduled_at=now,
+    )
+
+    service._resolve_followups()
+
+    updated = service.state.get_scholar(scholar.id)
+    feeling = updated.memory.feelings.get("patron")
+    assert feeling is not None and feeling > 0
+    history = updated.contract.get("sidecast_history")
+    assert isinstance(history, list)
+    assert any(entry.get("phase") == "debut" for entry in history)
 
 
 def test_sideways_vignette_followup(tmp_path):

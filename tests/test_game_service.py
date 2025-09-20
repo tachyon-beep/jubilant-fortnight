@@ -8,7 +8,7 @@ import sqlite3
 
 import pytest
 
-from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation
+from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation, OfferRecord
 from great_work.service import GameService
 
 
@@ -265,6 +265,8 @@ def test_defection_offer_and_digest(tmp_path):
     assert second_notice.type == "defection_notice"
     assert "llm" in notice.metadata
     assert "llm" in second_notice.metadata
+    assert "relationship_modifier" in notice.metadata
+    assert "relationship_modifier" in second_notice.metadata
     assert notice.metadata["llm"]["persona"] == "Dr Elara Ironquill"
     assert second_notice.metadata["llm"]["persona"] == "Dr Elara Ironquill"
 
@@ -290,6 +292,124 @@ def test_defection_offer_and_digest(tmp_path):
     updated = service.state.get_player("sarah")
     if updated:
         assert updated.cooldowns.get("recruitment", 0) <= 1
+
+
+def test_defection_probability_respects_relationship(tmp_path, monkeypatch):
+    positive_root = tmp_path / "positive"
+    positive_root.mkdir()
+    service = build_service(positive_root)
+    scholar_id = "s.ironquill"
+    scholar = service.state.get_scholar(scholar_id)
+    assert scholar is not None
+    employer = scholar.contract.get("employer")
+    assert employer
+
+    scholar.memory.adjust_feeling(employer, 10.0)
+    service.state.save_scholar(scholar)
+    monkeypatch.setattr(service._rng, "uniform", lambda *_: 1.0)
+
+    _, positive_notice = service.evaluate_defection_offer(
+        scholar_id=scholar_id,
+        offer_quality=0.4,
+        mistreatment=0.1,
+        alignment=0.2,
+        plateau=0.2,
+        new_faction="Industry",
+    )
+
+    positive_prob = positive_notice.metadata["probability"]
+    positive_modifier = positive_notice.metadata["relationship_modifier"]
+    assert positive_modifier < 0
+
+    negative_root = tmp_path / "negative"
+    negative_root.mkdir()
+    service_cold = build_service(negative_root)
+    scholar_cold = service_cold.state.get_scholar(scholar_id)
+    assert scholar_cold is not None
+    employer_cold = scholar_cold.contract.get("employer")
+    assert employer_cold
+
+    scholar_cold.memory.adjust_feeling(employer_cold, -10.0)
+    service_cold.state.save_scholar(scholar_cold)
+    monkeypatch.setattr(service_cold._rng, "uniform", lambda *_: 1.0)
+
+    _, negative_notice = service_cold.evaluate_defection_offer(
+        scholar_id=scholar_id,
+        offer_quality=0.4,
+        mistreatment=0.1,
+        alignment=0.2,
+        plateau=0.2,
+        new_faction="Industry",
+    )
+
+    negative_prob = negative_notice.metadata["probability"]
+    negative_modifier = negative_notice.metadata["relationship_modifier"]
+    assert negative_modifier > 0
+    assert negative_prob > positive_prob
+
+
+def test_evaluate_scholar_offer_relationship_bonus(tmp_path):
+    offer_root = tmp_path / "offer-rel"
+    offer_root.mkdir()
+    service = build_service(offer_root)
+    service.ensure_player("poacher", "Poacher")
+
+    scholar_id = "s.ironquill"
+    scholar = service.state.get_scholar(scholar_id)
+    assert scholar is not None
+    employer = scholar.contract.get("employer")
+    assert employer
+
+    scholar.memory.feelings.clear()
+    scholar.contract["mentorship_history"] = []
+    scholar.contract["sidecast_history"] = []
+    service.state.save_scholar(scholar)
+
+    offer = OfferRecord(
+        scholar_id=scholar_id,
+        faction="Industry",
+        rival_id="poacher",
+        patron_id=employer,
+        offer_type="initial",
+        influence_offered={"industry": 10},
+        terms={},
+        status="pending",
+    )
+    offer_id = service.state.save_offer(offer)
+
+    base_prob = service.evaluate_scholar_offer(offer_id)
+
+    scholar = service.state.get_scholar(scholar_id)
+    assert scholar is not None
+    scholar.contract["mentorship_history"] = [
+        {
+            "event": "completion",
+            "mentor_id": "poacher",
+            "mentor": "Poacher",
+            "track": "Industry",
+            "timestamp": "2025-09-25T12:00:00+00:00",
+        }
+    ]
+    service.state.save_scholar(scholar)
+
+    boosted_prob = service.evaluate_scholar_offer(offer_id)
+    assert boosted_prob > base_prob
+
+    scholar = service.state.get_scholar(scholar_id)
+    assert scholar is not None
+    scholar.contract.setdefault("mentorship_history", []).append(
+        {
+            "event": "completion",
+            "mentor_id": employer,
+            "mentor": employer,
+            "track": "Academia",
+            "timestamp": "2025-09-26T12:00:00+00:00",
+        }
+    )
+    service.state.save_scholar(scholar)
+
+    reduced_prob = service.evaluate_scholar_offer(offer_id)
+    assert reduced_prob < boosted_prob
 
 
 def test_followup_queue_can_be_seeded(tmp_path):

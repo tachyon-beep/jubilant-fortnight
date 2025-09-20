@@ -212,6 +212,33 @@ CREATE TABLE IF NOT EXISTS queued_press (
     release_at TEXT NOT NULL,
     payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS seasonal_commitments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    tier TEXT,
+    base_cost INTEGER NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    last_processed_at TEXT,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_seasonal_commitments_status
+    ON seasonal_commitments (status, end_at);
+CREATE TABLE IF NOT EXISTS faction_projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    faction TEXT NOT NULL,
+    target_progress REAL NOT NULL,
+    progress REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    metadata TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_faction_projects_status
+    ON faction_projects (status, faction);
 """
 
 
@@ -2167,6 +2194,212 @@ class GameState:
                    SET status = 'resolved', winner = ?
                    WHERE id = ?""",
                 (winner, topic_id),
+            )
+            conn.commit()
+
+    # Seasonal commitments ---------------------------------------------
+    def create_seasonal_commitment(
+        self,
+        *,
+        player_id: str,
+        faction: str,
+        tier: Optional[str],
+        base_cost: int,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> int:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO seasonal_commitments
+                       (player_id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, 'active', NULL, ?)""",
+                (
+                    player_id,
+                    faction,
+                    tier,
+                    base_cost,
+                    start_at.isoformat(),
+                    end_at.isoformat(),
+                    start_at.isoformat(),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def list_active_seasonal_commitments(self, now: datetime) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, player_id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at
+                       FROM seasonal_commitments
+                       WHERE status = 'active' AND start_at <= ?""",
+                (now.isoformat(),),
+            ).fetchall()
+        commitments: List[Dict[str, object]] = []
+        for row in rows:
+            commitments.append(
+                {
+                    "id": int(row[0]),
+                    "player_id": row[1],
+                    "faction": row[2],
+                    "tier": row[3],
+                    "base_cost": int(row[4]),
+                    "start_at": datetime.fromisoformat(row[5]),
+                    "end_at": datetime.fromisoformat(row[6]),
+                    "status": row[7],
+                    "last_processed_at": datetime.fromisoformat(row[8]) if row[8] else None,
+                    "updated_at": datetime.fromisoformat(row[9]) if row[9] else None,
+                }
+            )
+        return commitments
+
+    def list_player_commitments(self, player_id: str) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at
+                       FROM seasonal_commitments
+                       WHERE player_id = ?""",
+                (player_id,),
+            ).fetchall()
+        commitments: List[Dict[str, object]] = []
+        for row in rows:
+            commitments.append(
+                {
+                    "id": int(row[0]),
+                    "faction": row[1],
+                    "tier": row[2],
+                    "base_cost": int(row[3]),
+                    "start_at": datetime.fromisoformat(row[4]),
+                    "end_at": datetime.fromisoformat(row[5]),
+                    "status": row[6],
+                    "last_processed_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                    "updated_at": datetime.fromisoformat(row[8]) if row[8] else None,
+                }
+            )
+        return commitments
+
+    def mark_seasonal_commitment_processed(
+        self,
+        commitment_id: int,
+        processed_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE seasonal_commitments SET last_processed_at = ?, updated_at = ? WHERE id = ?",
+                (processed_at.isoformat(), processed_at.isoformat(), commitment_id),
+            )
+            conn.commit()
+
+    def set_seasonal_commitment_status(
+        self,
+        commitment_id: int,
+        status: str,
+        processed_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE seasonal_commitments SET status = ?, last_processed_at = ?, updated_at = ? WHERE id = ?",
+                (status, processed_at.isoformat(), processed_at.isoformat(), commitment_id),
+            )
+            conn.commit()
+
+    # Faction projects --------------------------------------------------
+    def create_faction_project(
+        self,
+        *,
+        name: str,
+        faction: str,
+        target_progress: float,
+        metadata: Optional[Dict[str, object]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        now = (created_at or datetime.now(timezone.utc)).isoformat()
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO faction_projects
+                       (name, faction, target_progress, progress, status, created_at, updated_at, metadata)
+                       VALUES (?, ?, ?, 0, 'active', ?, ?, ?)""",
+                (
+                    name,
+                    faction,
+                    float(target_progress),
+                    now,
+                    now,
+                    json.dumps(metadata or {}),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def list_active_faction_projects(self) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """SELECT id, name, faction, target_progress, progress, status, created_at, updated_at, metadata
+                       FROM faction_projects
+                       WHERE status = 'active'""",
+                (),
+            ).fetchall()
+        projects: List[Dict[str, object]] = []
+        for row in rows:
+            projects.append(
+                {
+                    "id": int(row[0]),
+                    "name": row[1],
+                    "faction": row[2],
+                    "target_progress": float(row[3]),
+                    "progress": float(row[4]),
+                    "status": row[5],
+                    "created_at": datetime.fromisoformat(row[6]),
+                    "updated_at": datetime.fromisoformat(row[7]),
+                    "metadata": json.loads(row[8]) if row[8] else {},
+                }
+            )
+        return projects
+
+    def list_faction_projects(self, include_completed: bool = False) -> List[Dict[str, object]]:
+        query = "SELECT id, name, faction, target_progress, progress, status, created_at, updated_at, metadata FROM faction_projects"
+        if not include_completed:
+            query += " WHERE status = 'active'"
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query).fetchall()
+        projects: List[Dict[str, object]] = []
+        for row in rows:
+            projects.append(
+                {
+                    "id": int(row[0]),
+                    "name": row[1],
+                    "faction": row[2],
+                    "target_progress": float(row[3]),
+                    "progress": float(row[4]),
+                    "status": row[5],
+                    "created_at": datetime.fromisoformat(row[6]),
+                    "updated_at": datetime.fromisoformat(row[7]),
+                    "metadata": json.loads(row[8]) if row[8] else {},
+                }
+            )
+        return projects
+
+    def update_faction_project_progress(
+        self,
+        project_id: int,
+        progress: float,
+        updated_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE faction_projects SET progress = ?, updated_at = ? WHERE id = ?",
+                (float(progress), updated_at.isoformat(), project_id),
+            )
+            conn.commit()
+
+    def complete_faction_project(
+        self,
+        project_id: int,
+        completed_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "UPDATE faction_projects SET status = 'completed', progress = target_progress, updated_at = ? WHERE id = ?",
+                (completed_at.isoformat(), project_id),
             )
             conn.commit()
 
