@@ -164,6 +164,28 @@ class TestSidewaysEffectGeneration:
             if rep_effects:
                 assert rep_effects[0].payload["amount"] >= 2
 
+    def test_vignette_queue_order_payload(self):
+        """Deep-prep sideways vignettes should enqueue narrative follow-ups."""
+
+        rng = DeterministicRNG(101)
+        resolver = ExpeditionResolver()
+        effects = resolver._generate_sideways_effects(  # noqa: SLF001
+            rng,
+            discovery_text="Hidden Archive Unearthed",
+            expedition_type="field",
+            prep_depth="deep",
+            is_landmark=False,
+        )
+
+        assert effects is not None
+        queue_effect = next(
+            e for e in effects if e.effect_type == SidewaysEffectType.QUEUE_ORDER
+        )
+        payload = queue_effect.payload["order_data"]
+        assert payload["headline"]
+        assert payload["body"]
+        assert "gossip" in payload
+
 
 class TestSidewaysEffectApplication:
     """Test that sideways effects are properly applied in the game service."""

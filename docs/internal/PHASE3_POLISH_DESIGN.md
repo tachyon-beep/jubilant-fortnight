@@ -144,6 +144,14 @@ To close the remaining narrative gaps (sidecasts, defection epilogues, deep-prep
 - **Data:** new `great_work/data/sideways_vignettes.yaml` with entries keyed by expedition type + prep depth. Each defines narrative text, mechanical payload (faction shifts, opportunities, theory seeds), and optional chained follow-ups (e.g., conference, symposium topic, sidecast trigger).
 - **Integration:** `ExpeditionResolver._generate_sideways_effects` selects vignette bundles, registers tags, and enqueues follow-up press orders that surface in digest highlights. Tone packs gain `sideways_vignette` seeds for each setting.
 
+### D. Vignette Coverage & Tone Safety
+- **Coverage target:** minimum of **three** vignettes per expedition type/depth combination (think tank shallow/standard/deep, field shallow/standard/deep, great project deep) so RNG draws different arcs across a campaign. Additional slots remain open for future expansions (e.g., symposium, great project standard) with the same structure.
+- **Content guidelines:** each vignette entry must include a `headline`, `body`, and at least one gossip quote. Tag with thematic markers (`archives`, `industry`, `politics`) so digest highlights badge them appropriately.
+- **Tone guardrails:**
+  - Keep tone-pack entries for `sidecast_followup`, `defection_epilogue`, and `sideways_vignette` descriptive rather than prescriptive—avoid inflammatory language and call out moderation steps (e.g., “Flag rivalry flare-ups”).
+  - When writing vignette copy, run it through the PG-13 filter, avoid references to real-world conflicts, and ensure reconciliation/rivalry beats do not encourage harassment.
+  - Document new tone seeds in this file and run a manual spot-check whenever tone packs expand. Telemetry will flag any tone key missing from `press_tone_packs.yaml`.
+
 ### D. Dispatcher & Press Support
 - Implement `MultiPressGenerator.generate_sidecast_layers` and `generate_defection_epilogues` helpers drawing from the new YAML assets so layered press reuses fast/long cadence settings.
 - Add dispatcher order types `sidecast_debut`, `sidecast_spotlight`, `defection_epilogue`, and `sideways_vignette_followup`, all tracked via the existing telemetry/alert pathways.

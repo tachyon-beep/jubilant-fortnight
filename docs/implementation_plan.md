@@ -176,5 +176,5 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 1. Extend archive automation docs with container hosting instructions and optional external adapters (S3/GitHub Pages).
 2. Ship moderator tooling for dispatcher order management (list/cancel) and extend alert routing beyond Discord.
-3. Broaden mentorship sidecasts, deepen the sideways discovery catalogue, and surface queued follow-up press in Gazette highlights.
+3. Continue enriching the sideways vignette library as new expedition content ships and keep the tone-pack safety checklist current.
 4. Publish deployment/configuration notes covering Discord channels (including highlights), telemetry dashboard container, and local LLM persona stack plus LLM safety settings.
