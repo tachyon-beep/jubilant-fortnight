@@ -4230,6 +4230,25 @@ class GameService:
                 )
             self.state.upsert_player(player)
 
+            remaining_debt = int(debt_record.get("amount", 0)) if debt_record else 0
+            threshold = self.settings.seasonal_commitment_reprisal_threshold
+            if (
+                threshold > 0
+                and remaining_debt >= max(1, int(threshold * 0.75))
+                and remaining_debt < threshold
+            ):
+                try:
+                    self._telemetry.track_system_event(
+                        f"alert_commitment_overdue_{player.id}",
+                        source=faction or "seasonal",
+                        reason=(
+                            f"{player.display_name} owes {remaining_debt} influence on seasonal commitment"
+                            f" (reprisal at {threshold})."
+                        ),
+                    )
+                except Exception:  # pragma: no cover
+                    logger.debug("Failed to record commitment overdue alert", exc_info=True)
+
             if debt_details:
                 self._apply_influence_debt_reprisal(
                     player=player,
@@ -4260,7 +4279,7 @@ class GameService:
                     "base_cost": base_cost,
                     "relationship_modifier": relationship,
                     "paid": paid,
-                    "debt": int(debt_record.get("amount", 0)) if debt_record else debt,
+                    "debt": remaining_debt if debt_record else debt,
                 }
             )
             self._archive_press(release, now)
@@ -4309,6 +4328,33 @@ class GameService:
                 )
             except Exception:  # pragma: no cover
                 logger.debug("Failed to record seasonal commitment telemetry", exc_info=True)
+
+            days_remaining = None
+            end_at = commitment.get("end_at")
+            if isinstance(end_at, datetime):
+                days_remaining = max(0, int((end_at - now).total_seconds() // 86400))
+            try:
+                self._telemetry.track_game_progression(
+                    "seasonal_commitment_status",
+                    float(remaining_debt),
+                    player_id=player.id,
+                    details={
+                        "commitment_id": commitment.get("id"),
+                        "faction": faction,
+                        "tier": commitment.get("tier"),
+                        "paid": paid,
+                        "base_cost": base_cost,
+                        "relationship_modifier": relationship,
+                        "remaining_debt": remaining_debt,
+                        "debt_threshold": threshold,
+                        "days_remaining": days_remaining,
+                        "reprisal_level": int(
+                            debt_record.get("reprisal_level", 0) if debt_record else 0
+                        ),
+                    },
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Failed to record seasonal commitment status", exc_info=True)
 
         return releases
 

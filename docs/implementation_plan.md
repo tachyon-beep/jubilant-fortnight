@@ -138,7 +138,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 5. **Telemetry Expansion** – ⚠️ Partial
    - Decorator shares the bot's `GameService`, emitting command usage with player context, channel metrics, LLM latency/failure telemetry, layered-press cadence, digest health, queue depth, and the new symposium/economy guardrails.
-   - `/telemetry_report` highlights health checks, symposium scoring/debt, and long-tail economy summaries; alerts now route through the configured webhook with cooldowns, and the dashboard adds dispatcher filters plus CSV export. Remaining work: product-facing KPIs and wiring alerts into the broader ops tooling.
+   - `/telemetry_report` highlights health checks, symposium scoring/debt, long-tail economy summaries, and seasonal commitment debt warnings; alerts now route through the configured webhook/email endpoints with cooldowns, the dashboard adds dispatcher filters plus CSV export, and economy summaries surface outstanding commitments. Remaining work: product-facing KPIs and wiring alerts into the broader ops tooling.
 
 6. **Archive Automation & Docs** – ✅ Complete
    - Digest scheduler now exports the web archive automatically, syncs the output into the containerised static host, mirrors the build into a configured GitHub Pages repository (dropping `.nojekyll`), posts a timestamped ZIP to the admin channel, prunes old snapshots, and alerts when snapshot storage crosses configurable thresholds. Operator guides describe the Pages workflow and storage runbook.

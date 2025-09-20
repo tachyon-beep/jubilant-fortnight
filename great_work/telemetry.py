@@ -1356,6 +1356,8 @@ class TelemetryCollector:
         total_endowment_amount = 0.0
         total_debt_paid = 0.0
         total_reputation_gain = 0.0
+        commitment_players: Dict[str, Dict[str, Any]] = {}
+        total_commitment_debt = 0.0
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
@@ -1449,6 +1451,52 @@ class TelemetryCollector:
                     record["last_amount"] = amount
                     record["last_timestamp"] = datetime.fromtimestamp(ts).isoformat()
 
+            cursor = conn.execute(
+                """SELECT value,
+                               json_extract(tags, '$.player_id') AS player_id,
+                               json_extract(metadata, '$.faction') AS faction,
+                               json_extract(metadata, '$.tier') AS tier,
+                               json_extract(metadata, '$.remaining_debt') AS remaining,
+                               json_extract(metadata, '$.days_remaining') AS days_remaining,
+                               json_extract(metadata, '$.debt_threshold') AS threshold,
+                               json_extract(metadata, '$.reprisal_level') AS reprisal_level,
+                               timestamp
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                        ORDER BY timestamp DESC""",
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "seasonal_commitment_status",
+                    start_time,
+                ),
+            )
+            for value, player_id, faction, tier, remaining, days_remaining, threshold, reprisal_level, ts in cursor.fetchall():
+                remaining_debt = float(value or 0.0)
+                if remaining_debt < 0:
+                    continue
+                total_commitment_debt += remaining_debt
+                key = player_id or "unknown"
+                record = commitment_players.setdefault(
+                    key,
+                    {
+                        "player_id": player_id,
+                        "faction": faction,
+                        "tier": tier,
+                        "latest_debt": 0.0,
+                        "threshold": threshold,
+                        "days_remaining": days_remaining,
+                        "reprisal_level": reprisal_level,
+                        "last_timestamp": None,
+                    },
+                )
+                record["latest_debt"] = remaining_debt
+                record["faction"] = faction
+                record["tier"] = tier
+                record["threshold"] = threshold
+                record["days_remaining"] = days_remaining
+                record["reprisal_level"] = reprisal_level
+                record["last_timestamp"] = datetime.fromtimestamp(ts).isoformat()
+
         investment_leaderboard = [
             {
                 "player_id": player_id,
@@ -1501,6 +1549,10 @@ class TelemetryCollector:
                 "top_players": endowment_leaderboard[:5],
                 "total_debt_paid": total_debt_paid,
                 "total_reputation_gain": total_reputation_gain,
+            },
+            "commitments": {
+                "total_outstanding": total_commitment_debt,
+                "players": commitment_players,
             },
         }
 

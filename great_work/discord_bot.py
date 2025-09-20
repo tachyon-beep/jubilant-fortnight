@@ -1569,6 +1569,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             if economy_metrics:
                 invest = economy_metrics.get('investments', {})
                 endow = economy_metrics.get('endowments', {})
+                commitments = economy_metrics.get('commitments', {})
                 lines.append("\n**Long-tail Economy (24 hours):**")
                 lines.append(
                     "• Investments: {total:.1f} influence across {players} player(s)".format(
@@ -1606,6 +1607,27 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                             amount=top_endower.get('total', 0.0),
                         )
                     )
+                if commitments:
+                    outstanding = commitments.get('total_outstanding', 0.0)
+                    lines.append(
+                        "• Seasonal commitments outstanding: {debt:.1f} influence".format(
+                            debt=outstanding,
+                        )
+                    )
+                    top_commitments = sorted(
+                        commitments.get('players', {}).values(),
+                        key=lambda item: item.get('latest_debt', 0.0),
+                        reverse=True,
+                    )[:3]
+                    for entry in top_commitments:
+                        player_label = entry.get('player_id') or 'unknown'
+                        debt_val = entry.get('latest_debt', 0.0)
+                        faction_label = entry.get('faction') or 'unaligned'
+                        days_remaining = entry.get('days_remaining')
+                        descriptor = f"{debt_val:.1f} owed to {faction_label}"
+                        if days_remaining is not None:
+                            descriptor += f", {int(days_remaining)}d remaining"
+                        lines.append(f"   • {player_label}: {descriptor}")
 
             system_events = report.get('system_events_24h', [])
             if system_events:

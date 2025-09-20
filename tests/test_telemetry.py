@@ -476,6 +476,29 @@ def test_get_feature_engagement():
         assert engagement["symposium"]["total_uses"] == 1
 
 
+def test_get_economy_metrics_includes_commitments(tmp_path):
+    collector = TelemetryCollector(tmp_path / "economy.db")
+    collector.track_game_progression(
+        "seasonal_commitment_status",
+        5.0,
+        player_id="p1",
+        details={
+            "faction": "Academic",
+            "tier": "Bronze",
+            "remaining_debt": 5,
+            "debt_threshold": 8,
+            "days_remaining": 2,
+            "reprisal_level": 0,
+        },
+    )
+    collector.flush()
+
+    economy = collector.get_economy_metrics(hours=1)
+    commitments = economy.get("commitments", {})
+    assert commitments.get("total_outstanding") >= 5
+    assert "p1" in commitments.get("players", {})
+
+
 def test_get_error_summary():
     """Test retrieving error summary."""
     with tempfile.TemporaryDirectory() as tmpdir:

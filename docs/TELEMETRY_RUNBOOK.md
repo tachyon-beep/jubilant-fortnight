@@ -25,6 +25,7 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 | Symposium reprisals | 3 per player (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS`) | Highest reprisal count in 24 h | Reach out to the affected player; consider waiving upcoming penalties. |
 | Investment concentration | 60 % share (`GREAT_WORK_ALERT_INVESTMENT_SHARE`) | Share of investments attributed to a single player | If alert, encourage rival factions or seed new long-tail sinks. |
 | Archive snapshot usage | 512 MB (`GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`) | Total size of ZIP snapshots kept on disk | If alert, prune old snapshots or move them to long-term storage before the disk fills. |
+| Seasonal commitments | same as reprisal threshold (`GREAT_WORK_SEASONAL_COMMITMENT_REPRISAL_THRESHOLD`) | Outstanding upkeep owed before reprisal | Alert fires when debt approaches the reprisal threshold—nudge the player or adjust the pact before penalties land. |
 
 ### Adjusting Thresholds
 
@@ -57,6 +58,7 @@ The telemetry report now includes:
 - **Investments:** total influence invested over 24 h, top investors, and faction distribution. Use this to gauge whether sponsorship loops are active.
 - **Archive endowments:** amount donated, symposium debt repaid, and total reputation bonuses awarded.
 - **Symposium debt:** per-player debt with timestamps to monitor escalation windows.
+- **Seasonal commitments:** per-player upkeep debt, days remaining, and reprisal threshold context. Alerts labeled `alert_commitment_overdue_*` fire when a player nears reprisal—coordinate with ops before penalties stack.
 
 If investments concentrate on one player, consider introducing temporary incentives (e.g., discounted programs) for other factions.
 
