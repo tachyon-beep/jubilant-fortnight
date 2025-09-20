@@ -82,7 +82,7 @@ Mount the `web_archive_public/` volume so the scheduler can sync exports (defaul
 
 ## 3. Telemetry Dashboard
 
-The optional `telemetry-dashboard` service reads `telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, and digest health.
+The optional `telemetry-dashboard` service reads `telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). It bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
 
 - Default port: `8082`
 - Environment requirements: same `.env` file (or a subset with `TELEMETRY_DB_PATH`)
@@ -116,6 +116,10 @@ The `/telemetry_report` command now opens with a **Health Summary**, mapping key
 - **Seasonal debt** – When outstanding seasonal commitments exceed the alert ceiling, review current pledges,
   encourage manual repayments, or lower the base cost/reprisal penalties via the new calibration helper before
   reprisals cascade.
+- **Nickname adoption** – Low nickname activity suggests the roster isn't resonating. If the adoption rate falls
+  below the alert floor, seed nicknames via Gazette stories or prompt players directly.
+- **Press shares** – Monitor how often players broadcast Gazette copy. When shares dip below the floor, spotlight
+  notable releases manually or share automated highlights to rekindle engagement.
 
 ### Dispatcher Moderation
 
@@ -135,8 +139,8 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
    python -m great_work.tools.recommend_kpi_thresholds --db telemetry.db
    ```
 
-   The script samples command usage, manifesto adoption, and archive lookups and prints recommended environment variables (scaled from recent activity). Use the `--engagement-days`, `--manifesto-days`, and `--archive-days` flags to widen or narrow the analysis window.
-2. Copy the suggested values into your deployment environment (`GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS`, etc.) and redeploy or reload the bot.
+   The script samples command usage, manifesto adoption, nickname adoption, archive lookups, and press shares, then prints recommended environment variables (scaled from recent activity). Use the `--engagement-days`, `--manifesto-days`, and `--archive-days` flags to widen or narrow the analysis window.
+2. Copy the suggested values into your deployment environment (`GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS`, `GREAT_WORK_ALERT_MIN_MANIFESTO_RATE`, `GREAT_WORK_ALERT_MIN_NICKNAME_RATE`, `GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS`, `GREAT_WORK_ALERT_MIN_PRESS_SHARES`) and redeploy or reload the bot.
 3. Configure multiple alert targets (e.g., Discord plus on-call) by setting `GREAT_WORK_ALERT_WEBHOOK_URLS` with a comma-separated list. The router fans out to each endpoint while keeping the legacy `GREAT_WORK_ALERT_WEBHOOK_URL` for single-target setups.
 4. Send a smoke test once the environment variables are live (`python -m great_work.tools.simple_alert_webhook` locally or a curl POST) to confirm alerts land in both channels.
 

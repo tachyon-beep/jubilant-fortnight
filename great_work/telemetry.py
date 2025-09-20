@@ -1153,6 +1153,38 @@ class TelemetryCollector:
                 ),
             ).fetchone()
 
+            nickname_row = conn.execute(
+                """
+                    SELECT
+                        COUNT(*) AS event_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "nickname_adopted",
+                    manifesto_start,
+                ),
+            ).fetchone()
+
+            press_share_row = conn.execute(
+                """
+                    SELECT
+                        COUNT(*) AS event_count,
+                        COUNT(DISTINCT json_extract(tags, '$.player_id')) AS unique_players,
+                        MAX(timestamp) AS last_timestamp
+                    FROM metrics
+                    WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "press_shared",
+                    archive_start,
+                ),
+            ).fetchone()
+
         engagement_short_commands = float(engagement_short_row[0] or 0.0)
         engagement_short_players = float(engagement_short_row[1] or 0.0)
         engagement_short_last = _ts_to_iso(engagement_short_row[2])
@@ -1170,6 +1202,14 @@ class TelemetryCollector:
         archive_events = float(archive_row[1] or 0.0)
         archive_unique_players = float(archive_row[2] or 0.0)
         archive_last = _ts_to_iso(archive_row[3])
+
+        nickname_events = float(nickname_row[0] or 0.0)
+        nickname_players = float(nickname_row[1] or 0.0)
+        nickname_last = _ts_to_iso(nickname_row[2])
+
+        share_events = float(press_share_row[0] or 0.0)
+        share_players = float(press_share_row[1] or 0.0)
+        share_last = _ts_to_iso(press_share_row[2])
 
         avg_cmds_short = (
             engagement_short_commands / engagement_short_players
@@ -1190,6 +1230,18 @@ class TelemetryCollector:
 
         archive_share = (
             archive_unique_players / engagement_long_players
+            if engagement_long_players > 0
+            else 0.0
+        )
+
+        nickname_rate = (
+            nickname_players / engagement_long_players
+            if engagement_long_players > 0
+            else 0.0
+        )
+
+        press_share_rate = (
+            share_players / engagement_long_players
             if engagement_long_players > 0
             else 0.0
         )
@@ -1221,6 +1273,20 @@ class TelemetryCollector:
                 "lookup_players_7d": archive_unique_players,
                 "engaged_share_7d": archive_share,
                 "last_lookup_at": archive_last,
+            },
+            "nicknames": {
+                "window_days": manifesto_window_days,
+                "nickname_events_7d": nickname_events,
+                "nickname_players_7d": nickname_players,
+                "nickname_rate_7d": nickname_rate,
+                "last_nickname_at": nickname_last,
+            },
+            "press_shares": {
+                "window_days": archive_window_days,
+                "press_shares_7d": share_events,
+                "press_share_players_7d": share_players,
+                "press_share_rate_7d": press_share_rate,
+                "last_share_at": share_last,
             },
         }
 
@@ -1272,6 +1338,26 @@ class TelemetryCollector:
                     (MetricType.GAME_PROGRESSION.value, "archive_lookup", start_time),
                 )
             )
+            nickname_rows = list(
+                conn.execute(
+                    """
+                        SELECT timestamp, json_extract(tags, '$.player_id')
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                    """,
+                    (MetricType.GAME_PROGRESSION.value, "nickname_adopted", start_time),
+                )
+            )
+            press_share_rows = list(
+                conn.execute(
+                    """
+                        SELECT timestamp, json_extract(tags, '$.player_id')
+                        FROM metrics
+                        WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                    """,
+                    (MetricType.GAME_PROGRESSION.value, "press_shared", start_time),
+                )
+            )
 
         daily_players: Dict[str, set[str]] = defaultdict(set)
         for ts, player in engagement_rows:
@@ -1294,7 +1380,27 @@ class TelemetryCollector:
             if day:
                 daily_archive_events[day] += 1
 
-        all_days = sorted({*daily_players.keys(), *daily_manifesto_events.keys(), *daily_archive_events.keys()})
+        daily_nickname_events: Dict[str, int] = defaultdict(int)
+        for ts, player in nickname_rows:
+            day = _day(ts)
+            if day:
+                daily_nickname_events[day] += 1
+
+        daily_press_share_events: Dict[str, int] = defaultdict(int)
+        for ts, player in press_share_rows:
+            day = _day(ts)
+            if day:
+                daily_press_share_events[day] += 1
+
+        all_days = sorted(
+            {
+                *daily_players.keys(),
+                *daily_manifesto_events.keys(),
+                *daily_archive_events.keys(),
+                *daily_nickname_events.keys(),
+                *daily_press_share_events.keys(),
+            }
+        )
         history = []
         for day in all_days:
             history.append(
@@ -1304,6 +1410,8 @@ class TelemetryCollector:
                     "manifesto_players": float(len(daily_manifesto_players.get(day, set()))),
                     "manifesto_events": float(daily_manifesto_events.get(day, 0)),
                     "archive_events": float(daily_archive_events.get(day, 0)),
+                    "nickname_events": float(daily_nickname_events.get(day, 0)),
+                    "press_share_events": float(daily_press_share_events.get(day, 0)),
                 }
             )
 
@@ -1311,6 +1419,51 @@ class TelemetryCollector:
             "window_days": days,
             "daily": history,
         }
+
+    def get_product_kpi_history_summary(self, days: int = 30) -> Dict[str, Any]:
+        """Return summary statistics for KPI history (averages, percentiles)."""
+
+        history = self.get_product_kpi_history(days=days)
+        daily = history.get("daily", [])
+        if not daily:
+            return {
+                "window_days": days,
+                "daily": [],
+                "summary": {},
+            }
+
+        import statistics
+
+        def _values(key: str) -> List[float]:
+            return [float(entry.get(key, 0.0) or 0.0) for entry in daily]
+
+        def _percentile(values: List[float], p: float) -> float:
+            if not values:
+                return 0.0
+            sorted_vals = sorted(values)
+            rank = max(0, min(len(sorted_vals) - 1, int(round((p / 100.0) * (len(sorted_vals) - 1)))))
+            return sorted_vals[rank]
+
+        data = {
+            "active_players": _values("active_players"),
+            "manifesto_events": _values("manifesto_events"),
+            "archive_events": _values("archive_events"),
+            "nickname_events": _values("nickname_events"),
+            "press_share_events": _values("press_share_events"),
+        }
+
+        summary = {}
+        for key, values in data.items():
+            if not values:
+                continue
+            summary[key] = {
+                "average": round(statistics.mean(values), 2),
+                "median": round(statistics.median(values), 2),
+                "p90": round(_percentile(values, 90), 2),
+            }
+
+        history["summary"] = summary
+        return history
 
     def generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive telemetry report."""
@@ -1331,7 +1484,7 @@ class TelemetryCollector:
             "symposium": self.get_symposium_metrics(24),
             "economy": self.get_economy_metrics(24),
             "product_kpis": self.get_product_kpis(),
-            "product_kpi_history": self.get_product_kpi_history(),
+            "product_kpi_history": self.get_product_kpi_history_summary(),
         }
 
         # Add overall statistics
@@ -1379,6 +1532,8 @@ class TelemetryCollector:
             "manifesto_rate": _get_env_float("GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", 0.5),
             "archive_lookups": _get_env_float("GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", 1.0),
             "seasonal_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SEASONAL_DEBT", 25.0),
+            "nickname_rate": _get_env_float("GREAT_WORK_ALERT_MIN_NICKNAME_RATE", 0.3),
+            "press_shares": _get_env_float("GREAT_WORK_ALERT_MIN_PRESS_SHARES", 1.0),
         }
 
         checks: List[Dict[str, Any]] = []
@@ -1674,6 +1829,40 @@ class TelemetryCollector:
             f"Total outstanding {seasonal_debt_total:.1f} influence",
             observed=seasonal_debt_total,
             threshold=thresholds["seasonal_debt"],
+        )
+
+        nicknames = product_kpis.get("nicknames", {})
+        nickname_rate = nicknames.get("nickname_rate_7d", 0.0) or 0.0
+        nickname_status = _status_lower_buffer(
+            nickname_rate,
+            thresholds["nickname_rate"],
+            warning_scale=1.1,
+        )
+        _register(
+            "nickname_rate",
+            "Nickname adoption (7d)",
+            nickname_status,
+            f"{nickname_rate:.0%} of active players set nicknames",
+            observed=nickname_rate,
+            threshold=thresholds["nickname_rate"],
+            window=f"{int(nicknames.get('window_days', 7))}d",
+        )
+
+        press_shares = product_kpis.get("press_shares", {})
+        share_events = float(press_shares.get("press_shares_7d", 0.0) or 0.0)
+        share_status = _status_lower_buffer(
+            share_events,
+            thresholds["press_shares"],
+            warning_scale=1.25,
+        )
+        _register(
+            "press_shares",
+            "Press shares (7d)",
+            share_status,
+            f"{share_events:.0f} press shares recorded",
+            observed=share_events,
+            threshold=thresholds["press_shares"],
+            window=f"{int(press_shares.get('window_days', 7))}d",
         )
 
         return {

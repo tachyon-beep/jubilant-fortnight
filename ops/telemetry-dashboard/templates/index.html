@@ -19,6 +19,8 @@
       .filter-bar button:hover { background: #0ea5e9; }
       .filter-bar a { color: #f8fafc; text-decoration: none; font-size: 0.9rem; }
       .filter-bar a:hover { text-decoration: underline; }
+      .chart-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+      .chart-row canvas { flex: 1 1 240px; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.5rem; }
     </style>
   </head>
   <body>
@@ -134,10 +136,109 @@
           </tr>
         </tbody>
       </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Nickname Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Nicknames (7d)</td>
+            <td>{{ '%.0f' | format(product_nicknames.get('nickname_events_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Players (7d)</td>
+            <td>{{ '%.0f' | format(product_nicknames.get('nickname_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Adoption Rate</td>
+            <td>{{ '%.0f%%' | format((product_nicknames.get('nickname_rate_7d', 0) or 0) * 100) }}</td>
+          </tr>
+          <tr>
+            <td>Last Nickname</td>
+            <td>{{ product_nicknames.get('last_nickname_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Press Share Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Shares (7d)</td>
+            <td>{{ '%.0f' | format(product_shares.get('press_shares_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Players (7d)</td>
+            <td>{{ '%.0f' | format(product_shares.get('press_share_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Last Share</td>
+            <td>{{ product_shares.get('last_share_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="section">
       <h2>KPI Trend (Daily)</h2>
+      <div class="chart-row">
+        <canvas id="kpi-active-chart" height="120"></canvas>
+        <canvas id="kpi-manifesto-chart" height="120"></canvas>
+        <canvas id="kpi-archive-chart" height="120"></canvas>
+        <canvas id="kpi-nickname-chart" height="120"></canvas>
+        <canvas id="kpi-share-chart" height="120"></canvas>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Average</th>
+            <th>Median</th>
+            <th>P90</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Active Players</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Manifesto Events</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Archive Lookups</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Nicknames</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Press Shares</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('p90', 0)) }}</td>
+          </tr>
+        </tbody>
+      </table>
       <table>
         <thead>
           <tr>
@@ -146,6 +247,8 @@
             <th>Manifesto Events</th>
             <th>Manifesto Players</th>
             <th>Archive Lookups</th>
+            <th>Nicknames</th>
+            <th>Press Shares</th>
           </tr>
         </thead>
         <tbody>
@@ -156,9 +259,11 @@
             <td>{{ '%.0f' | format(entry.manifesto_events or 0) }}</td>
             <td>{{ '%.0f' | format(entry.manifesto_players or 0) }}</td>
             <td>{{ '%.0f' | format(entry.archive_events or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.nickname_events or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.press_share_events or 0) }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="5">No KPI history recorded.</td></tr>
+          <tr><td colspan="7">No KPI history recorded.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -479,6 +584,7 @@
         </tbody>
       </table>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha256-CcG2A+qsSVqS+8CA0nVddOZXS6jttuPAHyBs+K6TfGs=" crossorigin="anonymous"></script>
     <script>
       function formatOldest(seconds) {
         if (seconds === null || seconds === undefined || seconds === "") {
@@ -553,6 +659,101 @@
 
       document.getElementById("order-refresh").addEventListener("click", refreshOrderRecords);
       document.addEventListener("DOMContentLoaded", refreshOrderRecords);
+
+      function renderKpiCharts() {
+        fetch('/api/kpi_history?days=30')
+          .then((response) => response.json())
+          .then((payload) => {
+            const daily = payload.daily || [];
+            if (!daily.length || typeof Chart === 'undefined') {
+              return;
+            }
+
+            const labels = daily.map((entry) => entry.date);
+            const active = daily.map((entry) => entry.active_players || 0);
+            const manifestos = daily.map((entry) => entry.manifesto_events || 0);
+            const archive = daily.map((entry) => entry.archive_events || 0);
+            const nicknames = daily.map((entry) => entry.nickname_events || 0);
+            const shares = daily.map((entry) => entry.press_share_events || 0);
+
+            const options = {
+              type: 'line',
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { mode: 'index', intersect: false },
+                },
+                interaction: { mode: 'nearest', intersect: false },
+                scales: {
+                  x: { ticks: { color: '#f1f5f9' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
+                  y: { beginAtZero: true, ticks: { color: '#f1f5f9' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
+                },
+              },
+            };
+
+            new Chart(
+              document.getElementById('kpi-active-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Active Players', data: active, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-manifesto-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Manifesto Events', data: manifestos, borderColor: '#f472b6', backgroundColor: 'rgba(244,114,182,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-archive-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Archive Lookups', data: archive, borderColor: '#c084fc', backgroundColor: 'rgba(192,132,252,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-nickname-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Nicknames', data: nicknames, borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-share-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Press Shares', data: shares, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+          })
+          .catch((error) => {
+            console.error('Failed to load KPI history', error);
+          });
+      }
+
+      document.addEventListener('DOMContentLoaded', renderKpiCharts);
     </script>
   </body>
 </html>

@@ -899,6 +899,123 @@ class GameService:
         )
         return press
 
+    def set_scholar_nickname(
+        self,
+        player_id: str,
+        display_name: str,
+        scholar_id: str,
+        nickname: str,
+    ) -> str:
+        """Record a scholar nickname supplied by a player."""
+
+        nickname = nickname.strip()
+        if not nickname:
+            raise ValueError("Nickname cannot be empty.")
+        if len(nickname) > 64:
+            raise ValueError("Nickname must be 64 characters or fewer.")
+
+        self._ensure_not_paused()
+        self.ensure_player(player_id, display_name)
+        player = self.state.get_player(player_id)
+        assert player is not None
+
+        scholar = self.state.get_scholar(scholar_id)
+        if scholar is None:
+            raise ValueError("Unknown scholar identifier.")
+
+        self._moderate_player_text(
+            surface="nickname",
+            text=nickname,
+            actor=player.display_name,
+        )
+
+        now = datetime.now(timezone.utc)
+        self.state.add_scholar_nickname(
+            scholar_id=scholar_id,
+            player_id=player_id,
+            nickname=nickname,
+            created_at=now,
+        )
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="nickname_adopted",
+                payload={
+                    "player_id": player_id,
+                    "scholar_id": scholar_id,
+                    "nickname": nickname,
+                },
+            )
+        )
+
+        try:
+            self._telemetry.track_game_progression(
+                "nickname_adopted",
+                1.0,
+                player_id=player_id,
+                details={
+                    "scholar_id": scholar_id,
+                    "nickname_length": len(nickname),
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry optional
+            logger.debug("Failed to record nickname telemetry", exc_info=True)
+
+        return f"Nickname '{nickname}' recorded for {scholar.name}."
+
+    def share_press_release(
+        self,
+        player_id: str,
+        display_name: str,
+        press_id: int,
+    ) -> str:
+        """Log that a player shared a press release and return the formatted message."""
+
+        self._ensure_not_paused()
+        self.ensure_player(player_id, display_name)
+        player = self.state.get_player(player_id)
+        assert player is not None
+
+        record = self.state.get_press_release(press_id)
+        if record is None:
+            raise ValueError("Press release not found.")
+
+        now = datetime.now(timezone.utc)
+        message = f"**{record.release.headline}**\n{record.release.body}"
+
+        self.state.record_press_share(
+            player_id=player_id,
+            press_id=press_id,
+            headline=record.release.headline,
+            shared_at=now,
+        )
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="press_shared",
+                payload={
+                    "player_id": player_id,
+                    "press_id": press_id,
+                    "headline": record.release.headline,
+                },
+            )
+        )
+
+        try:
+            self._telemetry.track_game_progression(
+                "press_shared",
+                1.0,
+                player_id=player_id,
+                details={
+                    "press_id": press_id,
+                    "press_type": record.release.type,
+                },
+            )
+        except Exception:  # pragma: no cover - telemetry optional
+            logger.debug("Failed to record press share telemetry", exc_info=True)
+
+        return message
+
     def queue_expedition(
         self,
         code: str,

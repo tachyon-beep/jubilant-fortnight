@@ -9,7 +9,7 @@ Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 - **Not Implemented:** 9 requirements (11.7%)
 - **Not Evaluated:** 2 requirements (2.6%)
 
- Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, table-talk updates, sidecasts, and sideways vignettes; Guardian moderation vets both player inputs and generated copy. Digest highlights summarise scheduled drops, telemetry reports include dispatcher backlog stats plus seasonal commitment debt, and digest exports sync the public archive with ZIP snapshots. The telemetry guardrails now capture product KPIs (active player counts, manifesto adoption, archive reach), chart daily trends in Discord + the dashboard, and can fan out alerts to multiple on-call webhooks; remaining gaps centre on tuning mentorship/sidecast outcomes, balancing long-tail influence sinks, and defining KPI targets once live playtest data arrives.
+Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, table-talk updates, sidecasts, and sideways vignettes; Guardian moderation vets both player inputs and generated copy. Digest highlights summarise scheduled drops, telemetry reports include dispatcher backlog stats plus seasonal commitment debt, and digest exports sync the public archive with ZIP snapshots. The telemetry guardrails now capture product KPIs (active player counts, manifesto adoption, archive reach), chart daily trends in Discord + the dashboard, and can fan out alerts to multiple on-call webhooks; remaining gaps centre on tuning mentorship/sidecast outcomes, balancing long-tail influence sinks, and defining KPI targets once live playtest data arrives.
 
 ## Functional Requirements Status
 
@@ -134,7 +134,7 @@ Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 | Not Implemented | 3 | 75% |
 | Not Evaluated | 1 | 25% |
 
-**Notes:** Telemetry now tracks manifesto adoption and archive lookups (with calibration helpers to derive KPI/seasonal thresholds), but nickname adoption and press sharing remain uninstrumented; iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L320】【F:great_work/tools/recommend_kpi_thresholds.py†L1-L160】【F:great_work/tools/recommend_seasonal_settings.py†L1-L120】
+**Notes:** Telemetry now tracks manifesto adoption, nickname adoption, archive lookups, and press shares (with calibration helpers to derive KPI/seasonal/engagement thresholds); iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L320】【F:great_work/tools/recommend_kpi_thresholds.py†L1-L180】【F:great_work/tools/recommend_seasonal_settings.py†L1-L120】
 
 ### Open-Source Readiness (5 requirements)
 

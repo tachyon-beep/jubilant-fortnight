@@ -70,6 +70,24 @@ CREATE TABLE IF NOT EXISTS press_releases (
     body TEXT NOT NULL,
     metadata TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS scholar_nicknames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scholar_id TEXT NOT NULL,
+    player_id TEXT NOT NULL,
+    nickname TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_scholar_nicknames_scholar
+    ON scholar_nicknames (scholar_id);
+CREATE TABLE IF NOT EXISTS press_shares (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    press_id INTEGER,
+    headline TEXT,
+    shared_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_press_shares_player
+    ON press_shares (player_id, shared_at DESC);
 CREATE TABLE IF NOT EXISTS relationships (
     scholar_id TEXT NOT NULL,
     subject_id TEXT NOT NULL,
@@ -995,6 +1013,34 @@ class GameState:
             )
             conn.commit()
 
+    def get_press_release(self, press_id: int) -> Optional[PressRecord]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT timestamp, type, headline, body, metadata FROM press_releases WHERE id = ?",
+                (press_id,),
+            ).fetchone()
+        if not row:
+            return None
+        timestamp, type_, headline, body, metadata = row
+        release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
+        return PressRecord(timestamp=datetime.fromisoformat(timestamp), release=release)
+
+    def list_press_releases_with_ids(
+        self, limit: int | None = None, offset: int = 0
+    ) -> List[tuple[int, PressRecord]]:
+        query = "SELECT id, timestamp, type, headline, body, metadata FROM press_releases ORDER BY id DESC"
+        params: tuple = ()
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params = (limit, offset)
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(query, params).fetchall()
+        results: List[tuple[int, PressRecord]] = []
+        for press_id, ts, type_, headline, body, metadata in rows:
+            release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
+            results.append((press_id, PressRecord(timestamp=datetime.fromisoformat(ts), release=release)))
+        return results
+
     def list_press_releases(self, limit: int | None = None, offset: int = 0) -> List[PressRecord]:
         records: List[PressRecord] = []
         query = "SELECT timestamp, type, headline, body, metadata FROM press_releases ORDER BY id DESC"
@@ -1009,6 +1055,51 @@ class GameState:
             release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
             records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))
         return records
+
+    def add_scholar_nickname(
+        self,
+        *,
+        scholar_id: str,
+        player_id: str,
+        nickname: str,
+        created_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO scholar_nicknames (scholar_id, player_id, nickname, created_at) VALUES (?, ?, ?, ?)",
+                (scholar_id, player_id, nickname, created_at.isoformat()),
+            )
+            conn.commit()
+
+    def list_scholar_nicknames(self, scholar_id: str) -> List[Dict[str, str]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT player_id, nickname, created_at FROM scholar_nicknames WHERE scholar_id = ? ORDER BY created_at DESC",
+                (scholar_id,),
+            ).fetchall()
+        return [
+            {
+                "player_id": row[0],
+                "nickname": row[1],
+                "created_at": row[2],
+            }
+            for row in rows
+        ]
+
+    def record_press_share(
+        self,
+        *,
+        player_id: str,
+        press_id: Optional[int],
+        headline: str,
+        shared_at: datetime,
+    ) -> None:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO press_shares (player_id, press_id, headline, shared_at) VALUES (?, ?, ?, ?)",
+                (player_id, press_id, headline, shared_at.isoformat()),
+            )
+            conn.commit()
 
     # Offer management (Defection negotiations) ------------------------
     def save_offer(self, offer: OfferRecord) -> int:

@@ -14,7 +14,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease
+from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease, PressRecord
 from .scheduler import GazetteScheduler
 from .service import GameService
 from .telemetry import get_telemetry
@@ -475,6 +475,77 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
             return
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="set_nickname", description="Assign a nickname to a scholar")
+    @track_command
+    @app_commands.describe(
+        scholar_id="Scholar identifier (e.g., SCH-001)",
+        nickname="Nickname to record",
+    )
+    async def set_nickname(
+        interaction: discord.Interaction,
+        scholar_id: str,
+        nickname: str,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            response = service.set_scholar_nickname(
+                player_id=str(interaction.user.display_name),
+                display_name=interaction.user.display_name,
+                scholar_id=scholar_id,
+                nickname=nickname,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        existing = service.state.list_scholar_nicknames(scholar_id)[:5]
+        if existing:
+            existing_lines = [
+                f"• {entry['nickname']} — {entry['player_id']} ({entry['created_at']})"
+                for entry in existing
+            ]
+            response += "\n\nRecent nicknames:\n" + "\n".join(existing_lines)
+
+        await interaction.response.send_message(response)
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="share_press", description="Share a press release to table talk")
+    @track_command
+    @app_commands.describe(
+        press_id="Press release identifier (use /archive_link to look up IDs)",
+    )
+    async def share_press(
+        interaction: discord.Interaction,
+        press_id: int,
+    ) -> None:
+        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        try:
+            message = service.share_press_release(
+                player_id=str(interaction.user.display_name),
+                display_name=interaction.user.display_name,
+                press_id=press_id,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        target_channel_id = router.table_talk or router.gazette or router.orders
+        if target_channel_id:
+            await _post_to_channel(bot, target_channel_id, message, purpose="press_share")
+        elif interaction.channel:
+            try:
+                await interaction.channel.send(message)
+            except Exception:  # pragma: no cover - channel send failures logged
+                logger.exception("Failed to send press share to current channel")
+
+        await interaction.response.send_message(
+            f"Shared press #{press_id} to the configured table-talk channel.",
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="poach", description="Attempt to poach another player's scholar")
@@ -1284,12 +1355,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         from pathlib import Path
 
         # Search for matching press releases
-        all_press = list(service.state.list_press_releases())
-        matches = []
+        all_press = service.state.list_press_releases_with_ids()
+        matches: List[tuple[int, PressRecord]] = []
 
-        for i, record in enumerate(all_press, start=1):
+        for press_id, record in all_press:
             if headline_search.lower() in record.release.headline.lower():
-                matches.append((i, record))
+                matches.append((press_id, record))
 
         if not matches:
             await interaction.response.send_message(
@@ -1315,12 +1386,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         else:
             # Multiple matches - show first 5
             lines = [f"**Found {len(matches)} matching press releases:**\n"]
+              
             for press_id, record in matches[:5]:
                 permalink = archive.generate_permalink(record)
                 lines.append(
                     f"• {record.release.headline}\n"
                     f"  Date: {record.timestamp.strftime('%Y-%m-%d')}\n"
                     f"  Permalink: `{permalink}`\n"
+                    f"  Press ID: #{press_id}\n"
                 )
             if len(matches) > 5:
                 lines.append(f"\n...and {len(matches) - 5} more matches")
@@ -1391,6 +1464,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 engagement = product.get('engagement', {})
                 manifestos = product.get('manifestos', {})
                 archive = product.get('archive', {})
+                nicknames = product.get('nicknames', {})
+                shares = product.get('press_shares', {})
                 lines.append("\n**Product KPIs:**")
                 lines.append(
                     "• Active players (24h): {players:.0f} | Avg cmds/player {avg:.1f}".format(
@@ -1420,17 +1495,43 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         share=archive_share,
                     )
                 )
+                lines.append(
+                    "• Nicknames (7d): {events:.0f} events by {players:.0f} player(s) ({rate:.0%} adoption)".format(
+                        events=nicknames.get('nickname_events_7d', 0.0) or 0.0,
+                        players=nicknames.get('nickname_players_7d', 0.0) or 0.0,
+                        rate=nicknames.get('nickname_rate_7d', 0.0) or 0.0,
+                    )
+                )
+                lines.append(
+                    "• Press shares (7d): {events:.0f} shares by {players:.0f} player(s)".format(
+                        events=shares.get('press_shares_7d', 0.0) or 0.0,
+                        players=shares.get('press_share_players_7d', 0.0) or 0.0,
+                    )
+                )
 
             history_block = report.get('product_kpi_history', {}).get('daily', [])
+            history_summary = report.get('product_kpi_history', {}).get('summary', {})
             if history_block:
                 lines.append("\n**KPI Trend (last 7 days):**")
                 for entry in history_block[-7:]:
                     lines.append(
-                        "• {date}: players {players:.0f}, manifestos {m_events:.0f}, archive {a_events:.0f}".format(
+                        "• {date}: players {players:.0f}, manifestos {m_events:.0f}, archive {a_events:.0f}, nicknames {n_events:.0f}, shares {s_events:.0f}".format(
                             date=entry.get('date', '—'),
                             players=entry.get('active_players', 0.0) or 0.0,
                             m_events=entry.get('manifesto_events', 0.0) or 0.0,
                             a_events=entry.get('archive_events', 0.0) or 0.0,
+                            n_events=entry.get('nickname_events', 0.0) or 0.0,
+                            s_events=entry.get('press_share_events', 0.0) or 0.0,
+                        )
+                    )
+                if history_summary:
+                    lines.append(
+                        "• 30d averages — players {players:.1f}, manifestos {manif:.1f}, archive {archive:.1f}, nicknames {nick:.1f}, shares {share:.1f}".format(
+                            players=history_summary.get('active_players', {}).get('average', 0.0),
+                            manif=history_summary.get('manifesto_events', {}).get('average', 0.0),
+                            archive=history_summary.get('archive_events', {}).get('average', 0.0),
+                            nick=history_summary.get('nickname_events', {}).get('average', 0.0),
+                            share=history_summary.get('press_share_events', {}).get('average', 0.0),
                         )
                     )
 
@@ -2135,6 +2236,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     bot.tree.add_command(recruit)
     bot.tree.add_command(mentor)
     bot.tree.add_command(assign_lab)
+    bot.tree.add_command(set_nickname)
+    bot.tree.add_command(share_press)
     bot.tree.add_command(conference)
     bot.tree.add_command(symposium_vote)
     bot.tree.add_command(symposium_propose)

@@ -88,6 +88,26 @@ def recommend_thresholds(
                 (MetricType.GAME_PROGRESSION.value, "archive_lookup", start_archive),
             )
         )
+        nickname_rows = list(
+            conn.execute(
+                """
+                SELECT json_extract(tags, '$.player_id')
+                FROM metrics
+                WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (MetricType.GAME_PROGRESSION.value, "nickname_adopted", start_manifesto),
+            )
+        )
+        press_share_rows = list(
+            conn.execute(
+                """
+                SELECT timestamp
+                FROM metrics
+                WHERE metric_type = ? AND name = ? AND timestamp >= ?
+                """,
+                (MetricType.GAME_PROGRESSION.value, "press_shared", start_archive),
+            )
+        )
 
     daily_players = _bucket_daily(engagement_rows)
     player_counts = [len(players) for players in daily_players.values()]
@@ -103,11 +123,13 @@ def recommend_thresholds(
     active_player_total = len({player for players in daily_players.values() for player in players})
     manifesto_players = {row[0] for row in manifesto_rows if row and row[0]}
 
+    manifesto_recommendation = 0.0
+    nickname_recommendation = 0.0
     if active_player_total:
         adoption_ratio = len(manifesto_players) / active_player_total
         manifesto_recommendation = round(_percent_floor(adoption_ratio, 0.8), 2)
-    else:
-        manifesto_recommendation = 0.0
+        nickname_ratio = len({row for row in nickname_rows if row and row[0]}) / active_player_total
+        nickname_recommendation = round(_percent_floor(nickname_ratio, 0.8), 2)
 
     archive_events = len(archive_rows)
     if archive_events:
@@ -115,10 +137,18 @@ def recommend_thresholds(
     else:
         archive_recommendation = 0.0
 
+    press_share_events = len(press_share_rows)
+    if press_share_events:
+        press_share_recommendation = max(1.0, round(_percent_floor(press_share_events / archive_days, 0.6), 2))
+    else:
+        press_share_recommendation = 0.0
+
     return {
         "GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS": round(active_recommendation, 2),
         "GREAT_WORK_ALERT_MIN_MANIFESTO_RATE": round(manifesto_recommendation, 2),
         "GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS": round(archive_recommendation, 2),
+        "GREAT_WORK_ALERT_MIN_NICKNAME_RATE": round(nickname_recommendation, 2),
+        "GREAT_WORK_ALERT_MIN_PRESS_SHARES": round(press_share_recommendation, 2),
     }
 
 

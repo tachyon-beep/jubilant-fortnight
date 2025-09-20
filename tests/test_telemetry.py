@@ -13,6 +13,7 @@ from great_work.telemetry import (
     get_telemetry,
     track_duration
 )
+from great_work.tools.recommend_kpi_thresholds import recommend_thresholds
 from great_work.tools.recommend_seasonal_settings import recommend_settings as recommend_seasonal_settings
 
 
@@ -449,6 +450,18 @@ def test_product_kpis_and_health(monkeypatch):
             player_id="player_b",
             details={"search": "Code"},
         )
+        collector.track_game_progression(
+            event_name="nickname_adopted",
+            value=1.0,
+            player_id="player_a",
+            details={"scholar_id": "SCH-001"},
+        )
+        collector.track_game_progression(
+            event_name="press_shared",
+            value=1.0,
+            player_id="player_b",
+            details={"press_id": 1},
+        )
 
         collector.flush()
 
@@ -465,6 +478,8 @@ def test_product_kpis_and_health(monkeypatch):
         monkeypatch.setenv("GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS", "4")
         monkeypatch.setenv("GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", "0.9")
         monkeypatch.setenv("GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", "3")
+        monkeypatch.setenv("GREAT_WORK_ALERT_MIN_NICKNAME_RATE", "0.9")
+        monkeypatch.setenv("GREAT_WORK_ALERT_MIN_PRESS_SHARES", "5")
 
         report_stub = {
             "digest_health_24h": {"total_digests": 0},
@@ -480,8 +495,10 @@ def test_product_kpis_and_health(monkeypatch):
         metrics = {entry["metric"]: entry["status"] for entry in health["checks"]}
 
         assert metrics.get("active_players") == "alert"
-    assert metrics.get("manifesto_adoption") == "alert"
-    assert metrics.get("archive_usage") == "alert"
+        assert metrics.get("manifesto_adoption") == "alert"
+        assert metrics.get("archive_usage") == "alert"
+        assert metrics.get("nickname_rate") == "alert"
+        assert metrics.get("press_shares") == "alert"
 
 
 def test_product_kpi_history():
@@ -539,6 +556,34 @@ def test_product_kpi_history():
                         1.0,
                         json.dumps({"player_id": f"player_{day_offset}"}),
                         json.dumps({}),
+                        ),
+                )
+                conn.execute(
+                    """
+                        INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ts,
+                        MetricType.GAME_PROGRESSION.value,
+                        "nickname_adopted",
+                        1.0,
+                        json.dumps({"player_id": f"player_{day_offset}"}),
+                        json.dumps({}),
+                    ),
+                )
+                conn.execute(
+                    """
+                        INSERT INTO metrics (timestamp, metric_type, name, value, tags, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ts,
+                        MetricType.GAME_PROGRESSION.value,
+                        "press_shared",
+                        1.0,
+                        json.dumps({"player_id": f"player_{day_offset}"}),
+                        json.dumps({}),
                     ),
                 )
             conn.commit()
@@ -549,6 +594,8 @@ def test_product_kpi_history():
         assert daily[-1]["active_players"] == 1
         assert daily[-1]["manifesto_events"] == 1
         assert daily[-1]["archive_events"] == 1
+        assert daily[-1]["nickname_events"] == 1
+        assert daily[-1]["press_share_events"] == 1
 
 
 def test_recommend_kpi_thresholds(tmp_path):
@@ -625,6 +672,8 @@ def test_recommend_kpi_thresholds(tmp_path):
     assert recommendations["GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS"] == pytest.approx(1.87, rel=0.01)
     assert recommendations["GREAT_WORK_ALERT_MIN_MANIFESTO_RATE"] == 0.32
     assert recommendations["GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS"] == 1.0
+    assert "GREAT_WORK_ALERT_MIN_NICKNAME_RATE" in recommendations
+    assert "GREAT_WORK_ALERT_MIN_PRESS_SHARES" in recommendations
 
 
 def test_recommend_seasonal_settings(tmp_path):

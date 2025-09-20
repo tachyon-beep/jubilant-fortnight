@@ -27,6 +27,7 @@ app = FastAPI(title="The Great Work Telemetry Dashboard")
 
 MAX_QUERY_HOURS = int(os.environ.get("TELEMETRY_MAX_QUERY_HOURS", "168") or 168)
 MAX_ORDER_RECORDS = int(os.environ.get("TELEMETRY_MAX_ORDER_RECORDS", "1000") or 1000)
+MAX_HISTORY_DAYS = int(os.environ.get("TELEMETRY_MAX_HISTORY_DAYS", "120") or 120)
 
 
 def build_report() -> dict:
@@ -71,7 +72,10 @@ def build_context(report: dict) -> dict:
     engagement = product_kpis.get("engagement", {})
     manifestos = product_kpis.get("manifestos", {})
     archive = product_kpis.get("archive", {})
+    nicknames = product_kpis.get("nicknames", {})
+    shares = product_kpis.get("press_shares", {})
     product_history = report.get("product_kpi_history", {})
+    history_summary = product_history.get("summary", {})
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
@@ -89,8 +93,11 @@ def build_context(report: dict) -> dict:
         "product_engagement": engagement,
         "product_manifestos": manifestos,
         "product_archive": archive,
+        "product_nicknames": nicknames,
+        "product_shares": shares,
         "product_history": product_history.get("daily", []),
         "product_history_window": product_history.get("window_days", 0),
+        "product_history_summary": history_summary,
     }
     return context
 
@@ -106,6 +113,11 @@ def _normalise_limit(value: int) -> int:
         raise HTTPException(status_code=400, detail="limit must be positive")
     return min(value, MAX_ORDER_RECORDS)
 
+
+def _normalise_days(value: int) -> int:
+    if value <= 0:
+        raise HTTPException(status_code=400, detail="days must be positive")
+    return min(value, MAX_HISTORY_DAYS)
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
@@ -184,3 +196,16 @@ async def api_order_records_csv(order_type: Optional[str] = None, hours: int = 2
     filename = "order_backlog.csv"
     headers = {"Content-Disposition": f"attachment; filename={filename}"}
     return StreamingResponse(_row_iter(), media_type="text/csv", headers=headers)
+
+
+@app.get("/api/kpi_history", response_class=JSONResponse)
+async def api_kpi_history(days: int = 30) -> JSONResponse:
+    """Return KPI history in JSON for charts."""
+
+    normalised_days = _normalise_days(days)
+    history = collector.get_product_kpi_history_summary(days=normalised_days)
+    return JSONResponse({
+        "window_days": history.get("window_days", normalised_days),
+        "daily": history.get("daily", []),
+        "summary": history.get("summary", {}),
+    })
