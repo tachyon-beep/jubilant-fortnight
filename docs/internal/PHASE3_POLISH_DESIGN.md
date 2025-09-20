@@ -126,4 +126,28 @@ Phase 3 focuses on operational polish: actionable telemetry, resilient archive p
 1. Document dashboard container configuration presets (port mappings, sample compose entry) for operators and include guidance on interpreting symposium scoring/debt widgets and reprisal thresholds.
 2. Confirm naming conventions for the opt-in upcoming-highlights channel and integrate into onboarding docs.
 
+## Narrative Arc Completion Plan
+
+To close the remaining narrative gaps (sidecasts, defection epilogues, deep-prep sideways vignettes) we will ship the following data-driven structures and scheduling hooks:
+
+### A. Sidecast Arcs
+- **Data:** new `great_work/data/sidecast_arcs.yaml` describing archetype-specific sidecast beats with three phases: `debut`, `integration`, `spotlight`. Each phase defines fast gossip quotes, long-form briefs, optional mentorship prompts, and follow-up orders (e.g., `enqueue_order: mentorship_invite`).
+- **Scheduling:** `_maybe_spawn_sidecast` seeds the new scholar as today, then queues a sidecast follow-up order (`followup:sidecast_debut`) that runs through the dispatcher. Subsequent phases trigger after mentorship acceptance or elapsed time, emitting layered press via `MultiPressGenerator.generate_sidecast_layers` with tone-pack support.
+- **Mentorship hooks:** when a player mentors a sidecast scholar, the integration spotlight shifts to the mentor, queuing layered press that references the mentorship track and rewards the player with bespoke copy.
+
+### B. Defection Epilogues
+- **Data:** extend `great_work/data/defection_epilogues.yaml` mapping outcome (`return`, `rivalry`, `scorched_earth`) to tone, staged headlines, faction statements, and reconciliation mechanics (e.g., influence refunds, scars). Templates include optional admin alerts for high-integrity scholars.
+- **Scheduling:** when a `defection_return` follow-up resolves, swap the generic gossip for a multi-press bundle: apology letter, faction briefing, commons reactions. If the scholar refuses reconciliation, queue a rivalry order that periodically triggers gossip until resolved.
+- **Telemetry:** track epilogue outcomes via new system events so `/telemetry_report` records rates of successful returns versus rivalries.
+
+### C. Deep-Prep Sideways Vignettes
+- **Data:** new `great_work/data/sideways_vignettes.yaml` with entries keyed by expedition type + prep depth. Each defines narrative text, mechanical payload (faction shifts, opportunities, theory seeds), and optional chained follow-ups (e.g., conference, symposium topic, sidecast trigger).
+- **Integration:** `ExpeditionResolver._generate_sideways_effects` selects vignette bundles, registers tags, and enqueues follow-up press orders that surface in digest highlights. Tone packs gain `sideways_vignette` seeds for each setting.
+
+### D. Dispatcher & Press Support
+- Implement `MultiPressGenerator.generate_sidecast_layers` and `generate_defection_epilogues` helpers drawing from the new YAML assets so layered press reuses fast/long cadence settings.
+- Add dispatcher order types `sidecast_debut`, `sidecast_spotlight`, `defection_epilogue`, and `sideways_vignette_followup`, all tracked via the existing telemetry/alert pathways.
+
+With these structures in place we can populate the YAML libraries with the required copy and wire the service layer to deliver the staged narratives the HLD calls for.
+
 With hosting, dashboard medium, and cadence cadence decisions set, we can proceed into implementation planning for Phase 3 polish.

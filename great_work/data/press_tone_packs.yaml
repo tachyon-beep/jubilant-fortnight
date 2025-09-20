@@ -40,6 +40,16 @@ settings:
       callout:
         - "Verify escrow bundles before releasing access credentials."
         - "Lock audit trails; revoke compromised keycards."
+    defection_epilogue:
+      headline:
+        - "Epilogue Ledger — {scholar}"
+        - "Aftermath Bulletin — {scholar}"
+      blurb:
+        - "Dispatch summarises {scholar}'s epilogue with {former_faction} and {new_faction}."
+        - "Operators log the fallout from {scholar}'s defection arc."
+      callout:
+        - "Review outstanding reprisals and mentorship hooks."
+        - "Notify moderators if rivalry persists beyond threshold."
     symposium_resolution:
       headline:
         - "Grid Consensus: {topic}"
@@ -60,6 +70,26 @@ settings:
       callout:
         - "Review telemetry tile 'Narrative Health' before unpausing."
         - "Confirm dispatcher backlog clears before cueing new beats."
+    sidecast_followup:
+      headline:
+        - "Sidecast Dispatch — {scholar}"
+        - "Field Log Supplement — {scholar}"
+      blurb:
+        - "{scholar}'s arc with {sponsor} fans out in the layered dispatch."
+        - "Archivists slot {scholar}'s latest update beside {expedition_code}."
+      callout:
+        - "Mark pending mentorship invites before the next digest."
+        - "Flag any rivalry flare-ups for admin review."
+    sideways_vignette:
+      headline:
+        - "Archive Vignette — {scholar}"
+        - "Mission Chronicle — {scholar}"
+      blurb:
+        - "Narrative snapshots circulate from the latest sideways discovery."
+        - "Dispatchers package vignette copy for Gazette highlights."
+      callout:
+        - "Route the vignette to Gazette editors for spotlight consideration."
+        - "Tag faction analysts if rivalry threads emerge."
 
   high_fantasy:
     digest_highlight:
@@ -102,6 +132,16 @@ settings:
       callout:
         - "Stewards prepare amnesty rites or gird for reprisal."
         - "Heralds script counter-oaths before the third bell."
+    defection_epilogue:
+      headline:
+        - "Epilogue Chronicle — {scholar}"
+        - "Return Ledger — {scholar}"
+      blurb:
+        - "Chroniclers record how {scholar} squares debts with {former_faction}."
+        - "Fateweavers debate {scholar}'s bond to {new_faction}."
+      callout:
+        - "Summon mediators if rivalries persist."
+        - "Prepare songs of reconciliation or challenge."
     symposium_resolution:
       headline:
         - "Conclave Decree: {topic}"
@@ -122,6 +162,26 @@ settings:
       callout:
         - "Bards consult the great ledger ere they sing."
         - "Review the errata codex before the first verses."
+    sidecast_followup:
+      headline:
+        - "Sidecast Chronicle — {scholar}"
+        - "Courtly Ledger — {scholar}"
+      blurb:
+        - "Scribes chart {scholar}'s ascent under {sponsor}."
+        - "Heralds note {scholar}'s whispers about {expedition_code}."
+      callout:
+        - "Invite patrons to the mentorship salon."
+        - "Queue bardic verses celebrating the new alliance."
+    sideways_vignette:
+      headline:
+        - "Vignetta di Campo — {scholar}"
+        - "Cronaca Laterale — {scholar}"
+      blurb:
+        - "Narratori annotano la storia emersa dalla scoperta laterale."
+        - "I cantori preparano un resoconto pubblico della vignetta."
+      callout:
+        - "Avvisare i moderatori se la vignetta riaccende rivalità." 
+        - "Consigliare ai maestri di integrare la vignetta nei prossimi simposi."
 
   renaissance_europe_1400s:
     digest_highlight:
@@ -164,6 +224,16 @@ settings:
       callout:
         - "Curia insists escrow ledgers be reviewed before sunset."
         - "Treasury clerks audit the counter-seals before dusk."
+    defection_epilogue:
+      headline:
+        - "Epilogo Diplomatico — {scholar}"
+        - "Relazione di Ritorno — {scholar}"
+      blurb:
+        - "La Cancelleria valuta se {scholar} torna nel dogado di {former_faction}."
+        - "Memoriali analizzano il legame tra {scholar} e {new_faction}."
+      callout:
+        - "Convene the council to ratify reconciliation terms."
+        - "Archivists annotate rivalry clauses for future audits."
     symposium_resolution:
       headline:
         - "Convocazione Esito: {topic}"
@@ -184,3 +254,13 @@ settings:
       callout:
         - "Notaries consult the ledger of errata first."
         - "Archivists collate the errata folio before resuming ink."
+    sidecast_followup:
+      headline:
+        - "Gazzetta di Sidecast — {scholar}"
+        - "Supplemento di Bottega — {scholar}"
+      blurb:
+        - "{scholar} rafforza i laboratori di {sponsor}; memoriali si compilano."
+        - "Le cronache annotano il contributo di {scholar} alla missione {expedition_code}."
+      callout:
+        - "Maestri convocano il collegio per valutare il nuovo talento."
+        - "Cancelleria richiede appunti aggiornati entro vespri."

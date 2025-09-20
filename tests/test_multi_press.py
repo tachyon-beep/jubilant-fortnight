@@ -479,3 +479,43 @@ def test_generate_table_talk_layers_produces_roundup_callouts():
     roundup_metadata = roundup_layer.context["metadata"]
     assert roundup_metadata["callouts"]
     assert all(isinstance(item, str) for item in roundup_metadata["callouts"])
+
+
+def test_generate_sidecast_layers_returns_plan():
+    """Sidecast layers should draw from YAML arcs and schedule next phases."""
+
+    random.seed(7)
+    generator = MultiPressGenerator()
+    arc_key = generator.pick_sidecast_arc()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Dr. Sidecast"
+    plan = generator.generate_sidecast_layers(
+        arc_key=arc_key,
+        phase="debut",
+        scholar=scholar,
+        sponsor="Dr. Sponsor",
+        expedition_type="field",
+        expedition_code="EXP-001",
+    )
+
+    assert isinstance(plan.layers, list)
+    assert plan.layers
+    assert plan.next_phase in {"integration", "spotlight", None}
+
+
+def test_generate_defection_epilogue_layers():
+    """Defection epilogue layers should return configured press artifacts."""
+
+    generator = MultiPressGenerator()
+    layers = generator.generate_defection_epilogue_layers(
+        scenario="reconciliation",
+        scholar_name="Dr. Quill",
+        former_faction="The Academy",
+        new_faction="Industry",
+        former_employer="Professor Hale",
+    )
+
+    assert layers
+    primary = layers[0]
+    assert primary.type == "defection_epilogue"

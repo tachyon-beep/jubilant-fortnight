@@ -1,0 +1,79 @@
+sidecasts:
+  local_junior:
+    label: "Local Junior"
+    phases:
+      debut:
+        delay_hours: 6
+        gossip:
+          - "{scholar} gushes about finally getting laboratory access under {sponsor}."
+          - "{scholar} can be found shadowing {sponsor}, notebook overflowing with local trivia."
+        briefs:
+          - headline: "Hallway Buzz — {scholar} Joins the Effort"
+            body: |
+              Fresh from the dig site, {scholar} explains how they fell in with {sponsor}'s expedition.
+              The faculty lounges trade stories about {scholar}'s field instincts and the curious artefact they carried in.
+        next:
+          phase: integration
+          delay_hours: 24
+      integration:
+        delay_hours: 24
+        gossip:
+          - "Mentors remark that {scholar} already rewired half the field radios to suit their methods."
+          - "{scholar} reportedly challenged {sponsor} to let them present the next symposium briefing."
+        briefs:
+          - headline: "Integration Notes — {scholar} & {sponsor}"
+            body: |
+              Workshop transcripts show {scholar} leading late-night calibration sessions while {sponsor} frames the broader theory.
+              The archives log a spike in requests for {expedition_type} references tied to their joint work.
+        next:
+          phase: spotlight
+          delay_hours: 48
+      spotlight:
+        delay_hours: 48
+        gossip:
+          - "{scholar}'s impromptu lecture drew a crowd; rumours hint at a mentorship offer from {sponsor}."
+          - "Commons whispers say {scholar} is already drafting a manifesto about {expedition_code}."
+        briefs:
+          - headline: "Sidecast Spotlight — {scholar}"
+            body: |
+              Gazette contributors crown {scholar} the week's breakout mind. A profile traces their climb from local guide to
+              indispensable collaborator, ending with hints that {sponsor} may formalise the partnership.
+  archive_ghost:
+    label: "Archive Ghost"
+    phases:
+      debut:
+        delay_hours: 8
+        gossip:
+          - "Night shift saw {scholar} re-cataloguing artefacts while humming forgotten hymns."
+          - "{scholar} leaves annotated folios on {sponsor}'s desk, each sealed with a wax sigil."
+        briefs:
+          - headline: "Stacks Whisper — {scholar} Surfaces"
+            body: |
+              Archivists confirm the elusive {scholar} slipped into the expedition after unlocking a sealed wing.
+              Their notes cross-reference {expedition_type} anomalies with century-old theses.
+        next:
+          phase: integration
+          delay_hours: 30
+      integration:
+        delay_hours: 30
+        gossip:
+          - "Rumour has it {scholar} taught {sponsor} a ritual for calming the archive wards."
+          - "Midnight watchers spotted {scholar} coaching interns through a clandestine citation drill."
+        briefs:
+          - headline: "Reading Room Briefing — {scholar}"
+            body: |
+              Candle-lit sessions pair {scholar}'s esoteric crosslinks with {sponsor}'s agenda, producing a classified
+              dossier now circulating among trusted aides.
+        next:
+          phase: spotlight
+          delay_hours: 54
+      spotlight:
+        delay_hours: 54
+        gossip:
+          - "A sealed bulletin lists {scholar} as keynote for the next symposium preamble."
+          - "{scholar} allegedly negotiated a private audience with the College of Shadows on {sponsor}'s behalf."
+        briefs:
+          - headline: "Archive Spotlight — {scholar}"
+            body: |
+              The Gazette publishes a feature on {scholar}'s spectral scholarship, tracing how their rediscovered citations
+              may overturn entrenched theories. Insider sources claim {sponsor} wants them leading the next theory sprint.

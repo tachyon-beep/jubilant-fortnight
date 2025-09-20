@@ -11,8 +11,10 @@ from great_work.models import (
     ExpeditionOutcome,
     Player,
     ExpeditionPreparation,
+    ExpeditionResult,
     PressRelease,
 )
+from great_work.service import ExpeditionOrder
 from great_work.service import GameService
 from great_work.llm_client import LLMGenerationError
 
@@ -233,6 +235,123 @@ def test_digest_highlights_include_followup_badges(tmp_path):
     upcoming = service.upcoming_press(limit=1, within_hours=24)
     assert upcoming
     assert upcoming[0]["badges"] == ["Follow-Up", "archives"]
+
+
+def test_sidecast_followup_orders_spawn(tmp_path):
+    """Sidecast spawning should queue layered follow-up orders."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    service.ensure_player("sponsor")
+
+    order = ExpeditionOrder(
+        code="EXP-ARC",
+        player_id="sponsor",
+        expedition_type="field",
+        objective="Unearth",
+        team=[],
+        funding=[],
+        preparation=ExpeditionPreparation(),
+        prep_depth="shallow",
+        confidence=ConfidenceLevel.SUSPECT,
+        timestamp=datetime.now(timezone.utc),
+    )
+    result = ExpeditionResult(
+        roll=80,
+        modifier=10,
+        final_score=90,
+        outcome=ExpeditionOutcome.SUCCESS,
+    )
+
+    press = service._maybe_spawn_sidecast(order, result)
+    assert press is not None
+
+    followups = service.state.list_followups()
+    kinds = {entry[2] for entry in followups}
+    assert "sidecast_debut" in kinds
+
+
+def test_defection_epilogue_followup(tmp_path):
+    """Defection return follow-up should emit layered epilogue press."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    service.ensure_player("patron")
+    scholar = next(iter(service.state.all_scholars()))
+    scholar.contract["employer"] = "patron"
+    service.state.save_scholar(scholar)
+
+    now = datetime.now(timezone.utc)
+    service.state.enqueue_order(
+        "followup:defection_return",
+        actor_id=scholar.id,
+        subject_id="patron",
+        payload={
+            "former_employer": "patron",
+            "new_faction": "Industry",
+            "scenario": "reconciliation",
+        },
+        scheduled_at=now,
+    )
+
+    releases = service._resolve_followups()
+    types = {press.type for press in releases}
+    assert "defection_epilogue" in types
+    updated = service.state.get_scholar(scholar.id)
+    assert updated.contract.get("employer") == "patron"
+
+
+def test_defection_rivalry_followup(tmp_path):
+    """Defection grudge follow-up should generate rivalry coverage."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    scholar = next(iter(service.state.all_scholars()))
+    scholar.contract["employer"] = "patron"
+    service.state.save_scholar(scholar)
+
+    now = datetime.now(timezone.utc)
+    service.state.enqueue_order(
+        "followup:defection_grudge",
+        actor_id=scholar.id,
+        subject_id="patron",
+        payload={
+            "faction": "Industry",
+            "scenario": "rivalry",
+            "former_employer": "patron",
+        },
+        scheduled_at=now,
+    )
+
+    releases = service._resolve_followups()
+    types = {press.type for press in releases}
+    assert "defection_epilogue" in types
+
+
+def test_sideways_vignette_followup(tmp_path):
+    """Sideways vignette follow-up should emit narrative press."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+    scholar = next(iter(service.state.all_scholars()))
+
+    now = datetime.now(timezone.utc)
+    service.state.enqueue_order(
+        "followup:sideways_vignette",
+        actor_id=scholar.id,
+        subject_id="spectator",
+        payload={
+            "headline": "Vignette Test",
+            "body": "A detailed vignette plays out in the Gazette.",
+            "gossip": ["Observers debate the implications."],
+            "tags": ["test"],
+        },
+        scheduled_at=now,
+    )
+
+    releases = service._resolve_followups()
+    types = {press.type for press in releases}
+    assert "sideways_vignette" in types
 
 
 def test_advance_digest_with_no_events(tmp_path):

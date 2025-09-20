@@ -1233,7 +1233,11 @@ class GameService:
                 scholar_id,
                 "defection_return",
                 resolve_at,
-                {"former_employer": former_employer, "new_faction": new_faction},
+                {
+                    "former_employer": former_employer,
+                    "new_faction": new_faction,
+                    "scenario": "reconciliation",
+                },
             )
         else:
             scholar.memory.adjust_feeling(new_faction, -2.0)
@@ -1251,7 +1255,12 @@ class GameService:
                 scholar_id,
                 "defection_grudge",
                 resolve_at,
-                {"faction": new_faction, "probability": probability},
+                {
+                    "faction": new_faction,
+                    "probability": probability,
+                    "former_employer": former_employer,
+                    "scenario": "rivalry",
+                },
             )
         base_body = press.body
         persona_traits = self._resolve_scholar_traits(scholar.name)
@@ -4495,15 +4504,169 @@ class GameService:
                     result={"reason": "scholar_missing"},
                 )
                 continue
-            if kind == "defection_grudge":
-                scholar.memory.adjust_feeling(payload.get("faction", "Unknown"), -1.5)
-                quote = "The betrayal still smolders in the halls."
-            elif kind == "defection_return":
-                scholar.memory.adjust_feeling(payload.get("former_employer", "Unknown"), 1.0)
-                quote = "Rumours swirl about a tentative reconciliation."
+            if kind in {"defection_grudge", "defection_return"}:
+                scenario = payload.get("scenario")
+                if kind == "defection_grudge":
+                    scenario = scenario or "rivalry"
+                else:
+                    scenario = scenario or "reconciliation"
+
+                former_employer_id = payload.get("former_employer") or scholar.contract.get("sidecast_sponsor") or scholar.contract.get("employer")
+                former_employer = self.state.get_player(former_employer_id)
+                former_name = former_employer.display_name if former_employer else (former_employer_id or "their patron")
+
+                if scenario == "reconciliation":
+                    scholar.memory.adjust_feeling(former_employer_id or "patron", 1.5)
+                    # Return scholar to their prior patron if known
+                    if former_employer_id:
+                        scholar.contract["employer"] = former_employer_id
+                else:
+                    new_faction = payload.get("new_faction") or payload.get("faction") or scholar.contract.get("employer", "Unknown")
+                    scholar.memory.adjust_feeling(new_faction, -1.5)
+
+                new_faction_name = payload.get("new_faction") or payload.get("faction") or scholar.contract.get("employer", "Unknown")
+
+                layers = self._multi_press.generate_defection_epilogue_layers(
+                    scenario=scenario,
+                    scholar_name=scholar.name,
+                    former_faction=former_name,
+                    new_faction=new_faction_name,
+                    former_employer=former_name,
+                )
+                immediate_layers = self._apply_multi_press_layers(
+                    layers,
+                    skip_types=set(),
+                    timestamp=now,
+                    event_type="defection_epilogue",
+                )
+                releases.extend(immediate_layers)
+                self.state.append_event(
+                    Event(
+                        timestamp=now,
+                        action="defection_epilogue",
+                        payload={
+                            "scholar": scholar.id,
+                            "scenario": scenario,
+                            "former_faction": former_name,
+                            "new_faction": new_faction_name,
+                        },
+                    )
+                )
+                self.state.save_scholar(scholar)
+                self.state.clear_followup(
+                    followup_id,
+                    result={"resolution": f"defection_{scenario}"},
+                )
+                continue
             elif kind == "recruitment_grudge":
                 scholar.memory.adjust_feeling(payload.get("player", "Unknown"), -1.0)
                 quote = "The slighted scholar sharpens their public retort."
+            elif kind.startswith("sidecast_"):
+                arc_key = payload.get("arc") or scholar.contract.get("sidecast_arc") or self._multi_press.pick_sidecast_arc()
+                phase = payload.get("phase") or kind.split("_", 1)[1]
+                sponsor_id = payload.get("sponsor") or scholar.contract.get("sidecast_sponsor")
+                sponsor_player = self.state.get_player(sponsor_id) if sponsor_id else None
+                sponsor_display = sponsor_player.display_name if sponsor_player else (sponsor_id or "Patron")
+                expedition_type = payload.get("expedition_type")
+                expedition_code = payload.get("expedition_code")
+
+                plan = self._multi_press.generate_sidecast_layers(
+                    arc_key=arc_key,
+                    phase=phase,
+                    scholar=scholar,
+                    sponsor=sponsor_display,
+                    expedition_type=expedition_type,
+                    expedition_code=expedition_code,
+                )
+
+                immediate_layers = self._apply_multi_press_layers(
+                    plan.layers,
+                    skip_types=set(),
+                    timestamp=now,
+                    event_type="sidecast",
+                )
+                releases.extend(immediate_layers)
+
+                self.state.append_event(
+                    Event(
+                        timestamp=now,
+                        action="sidecast_followup",
+                        payload={
+                            "scholar": scholar.id,
+                            "arc": arc_key,
+                            "phase": phase,
+                            "sponsor": sponsor_id,
+                        },
+                    )
+                )
+
+                self.state.clear_followup(
+                    followup_id,
+                    result={"resolution": f"sidecast_{phase}"},
+                )
+
+                if plan.next_phase:
+                    next_delay = plan.next_delay_hours
+                    if next_delay is None:
+                        next_delay = self._multi_press.sidecast_phase_delay(arc_key, plan.next_phase, default_hours=36.0)
+                    scheduled_at = now + timedelta(hours=next_delay)
+                    self.state.enqueue_order(
+                        f"followup:sidecast_{plan.next_phase}",
+                        actor_id=scholar.id,
+                        subject_id=sponsor_id,
+                        payload={
+                            "arc": arc_key,
+                            "phase": plan.next_phase,
+                            "sponsor": sponsor_id,
+                            "expedition_code": expedition_code,
+                            "expedition_type": expedition_type,
+                        },
+                        scheduled_at=scheduled_at,
+                    )
+                continue
+            elif kind == "sideways_vignette":
+                headline = payload.get("headline", f"Sideways Vignette — {scholar.name}")
+                body = payload.get("body", "")
+                tags = payload.get("tags", [])
+                base_press = PressRelease(
+                    type="sideways_vignette",
+                    headline=headline,
+                    body=body,
+                    metadata={
+                        "scholar": scholar.id,
+                        "tags": tags,
+                        "discovery": payload.get("discovery"),
+                    },
+                )
+                self._archive_press(base_press, now)
+                releases.append(base_press)
+
+                gossip_entries = payload.get("gossip") or []
+                for quote in gossip_entries:
+                    ctx = GossipContext(
+                        scholar=scholar.name,
+                        quote=quote,
+                        trigger="Sideways Discovery",
+                    )
+                    gossip_press = academic_gossip(ctx)
+                    self._archive_press(gossip_press, now)
+                    releases.append(gossip_press)
+                self.state.append_event(
+                    Event(
+                        timestamp=now,
+                        action="sideways_vignette",
+                        payload={
+                            "scholar": scholar.id,
+                            "headline": headline,
+                            "tags": tags,
+                        },
+                    )
+                )
+                self.state.clear_followup(
+                    followup_id,
+                    result={"resolution": "sideways_vignette"},
+                )
+                continue
             elif kind == "evaluate_offer":
                 # Resolve offer negotiation
                 offer_id = payload.get("offer_id")
@@ -5141,6 +5304,9 @@ class GameService:
             )
         )
         scholar.contract["employer"] = order.player_id
+        arc_key = self._multi_press.pick_sidecast_arc()
+        scholar.contract["sidecast_arc"] = arc_key
+        scholar.contract["sidecast_sponsor"] = order.player_id
         self.state.save_scholar(scholar)
         ctx = GossipContext(
             scholar=scholar.name,
@@ -5154,6 +5320,22 @@ class GameService:
                 action="scholar_sidecast",
                 payload={"scholar": scholar.id, "expedition": order.code},
             )
+        )
+        # Schedule debut follow-up to introduce the sidecast arc
+        delay_hours = self._multi_press.sidecast_phase_delay(arc_key, "debut", default_hours=6.0)
+        scheduled_at = datetime.now(timezone.utc) + timedelta(hours=delay_hours)
+        self.state.enqueue_order(
+            "followup:sidecast_debut",
+            actor_id=scholar.id,
+            subject_id=order.player_id,
+            payload={
+                "arc": arc_key,
+                "phase": "debut",
+                "sponsor": order.player_id,
+                "expedition_code": order.code,
+                "expedition_type": order.expedition_type,
+            },
+            scheduled_at=scheduled_at,
         )
         return press
 

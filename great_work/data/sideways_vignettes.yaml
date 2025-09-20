@@ -1,0 +1,41 @@
+vignettes:
+  field:
+    deep:
+      - id: "field_hidden_archive"
+        headline: "Hidden Archive Unearthed"
+        body: |
+          Expedition notes describe a buried archive sealed with sigils. Scholars pore over wind-bitten ledgers and
+          unearth rival guild correspondences that may reshape faction alliances.
+        gossip:
+          - "Archivists argue over who should steward the unearthed ledgers."
+          - "Expedition delegates quietly petition to keep the archive under their patronage."
+        tags: ["archives", "field"]
+    standard:
+      - id: "field_trading_post"
+        headline: "Trading Post Rescued"
+        body: |
+          Field crews stabilize a collapsing trading post, salvaging correspondence that ties distant factions to the
+          expedition objective.
+        gossip:
+          - "Logisticians celebrate the supply windfall from the rescued post."
+        tags: ["logistics"]
+  think_tank:
+    deep:
+      - id: "think_tank_forbidden_thesis"
+        headline: "Forbidden Thesis Resurrected"
+        body: |
+          The think tank's deep-prep session reconstructs a forbidden thesis, outlining perilous methodologies that the
+          faculty banned decades ago.
+        gossip:
+          - "Committee chairs debate whether to circulate the thesis or seal it again."
+        tags: ["scholarship"]
+  great_project:
+    deep:
+      - id: "project_zephyr_engine"
+        headline: "Zephyr Engine Blueprint Recovered"
+        body: |
+          Engineers recover blueprints for the legendary Zephyr Engine, a device capable of stabilising high-altitude
+          dig operations. Implementation risks inflaming faction rivalries.
+        gossip:
+          - "Industry faction envoys lobby for exclusive access to the engine plans."
+        tags: ["industry", "innovation"]

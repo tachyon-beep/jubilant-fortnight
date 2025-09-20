@@ -30,6 +30,8 @@ from .press_tone import get_tone_seed
 _MENTORSHIP_TEMPLATES: Optional[Dict[str, Any]] = None
 _RECRUITMENT_TEMPLATES: Optional[Dict[str, Any]] = None
 _TABLE_TALK_TEMPLATES: Optional[Dict[str, Any]] = None
+_SIDECAST_ARCS: Optional[Dict[str, Any]] = None
+_DEFECTION_EPILOGUES: Optional[Dict[str, Any]] = None
 
 
 def _load_yaml_resource(filename: str) -> Dict[str, Any]:
@@ -60,6 +62,22 @@ def _load_table_talk_templates() -> Dict[str, Any]:
     if _TABLE_TALK_TEMPLATES is None:
         _TABLE_TALK_TEMPLATES = _load_yaml_resource("table_talk_press.yaml")
     return _TABLE_TALK_TEMPLATES
+
+
+def _load_sidecast_arcs() -> Dict[str, Any]:
+    global _SIDECAST_ARCS
+    if _SIDECAST_ARCS is None:
+        data = _load_yaml_resource("sidecast_arcs.yaml")
+        _SIDECAST_ARCS = data.get("sidecasts", {}) if isinstance(data, dict) else {}
+    return _SIDECAST_ARCS
+
+
+def _load_defection_epilogues() -> Dict[str, Any]:
+    global _DEFECTION_EPILOGUES
+    if _DEFECTION_EPILOGUES is None:
+        data = _load_yaml_resource("defection_epilogues.yaml")
+        _DEFECTION_EPILOGUES = data.get("epilogues", {}) if isinstance(data, dict) else {}
+    return _DEFECTION_EPILOGUES
 
 
 def mentorship_update(context: Dict[str, Any]) -> PressRelease:
@@ -106,6 +124,39 @@ def recruitment_brief(context: Dict[str, Any]) -> PressRelease:
     )
 
 
+def sidecast_brief(context: Dict[str, Any]) -> PressRelease:
+    """Generate a sidecast-focused brief."""
+
+    return PressRelease(
+        type=context.get("type", "sidecast_brief"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def defection_epilogue_release(context: Dict[str, Any]) -> PressRelease:
+    """Generate the primary defection epilogue artefact."""
+
+    return PressRelease(
+        type=context.get("type", "defection_epilogue"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def defection_epilogue_brief(context: Dict[str, Any]) -> PressRelease:
+    """Generate a faction briefing for defection fallout."""
+
+    return PressRelease(
+        type=context.get("type", "defection_epilogue_brief"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
 def table_talk_digest(context: Dict[str, Any]) -> PressRelease:
     """Generate a digest summarising table-talk reactions."""
 
@@ -146,6 +197,15 @@ class PressLayer:
     tone_seed: Optional[Dict[str, str]] = None
 
 
+@dataclass
+class SidecastPhasePlan:
+    """Plan for a sidecast phase including upcoming scheduling."""
+
+    layers: List[PressLayer]
+    next_phase: Optional[str]
+    next_delay_hours: Optional[float]
+
+
 class MultiPressGenerator:
     """Generate multi-layer press artifacts for events."""
 
@@ -170,6 +230,8 @@ class MultiPressGenerator:
         self._mentorship_templates = _load_mentorship_templates()
         self._recruitment_templates = _load_recruitment_templates()
         self._table_talk_templates = _load_table_talk_templates()
+        self._sidecast_arcs = _load_sidecast_arcs()
+        self._defection_epilogues = _load_defection_epilogues()
 
     @staticmethod
     def _load_delays(raw: Optional[str], default: List[int]) -> List[int]:
@@ -240,6 +302,237 @@ class MultiPressGenerator:
         if seed:
             return dict(seed)
         return None
+
+    def pick_sidecast_arc(self) -> str:
+        """Select a sidecast arc identifier, defaulting to the first entry."""
+
+        if not self._sidecast_arcs:
+            return "local_junior"
+        return random.choice(list(self._sidecast_arcs.keys()))
+
+    def _sidecast_phase_config(self, arc_key: str, phase: str) -> Dict[str, Any]:
+        arc = self._sidecast_arcs.get(arc_key) or {}
+        phases = arc.get("phases", {})
+        return phases.get(phase, {})
+
+    def sidecast_phase_delay(self, arc_key: str, phase: str, default_hours: float = 24.0) -> float:
+        cfg = self._sidecast_phase_config(arc_key, phase)
+        delay = cfg.get("delay_hours")
+        try:
+            return float(delay)
+        except (TypeError, ValueError):
+            return float(default_hours)
+
+    def generate_sidecast_layers(
+        self,
+        *,
+        arc_key: str,
+        phase: str,
+        scholar: Scholar,
+        sponsor: str,
+        expedition_type: Optional[str] = None,
+        expedition_code: Optional[str] = None,
+    ) -> SidecastPhasePlan:
+        """Generate multi-layer press for a sidecast phase."""
+
+        cfg = self._sidecast_phase_config(arc_key, phase)
+        tone_seed = self._tone_seed("sidecast_followup")
+        context_values = {
+            "scholar": scholar.name,
+            "sponsor": sponsor,
+            "expedition_type": (expedition_type or "the expedition").replace("_", " "),
+            "expedition_code": expedition_code or "the effort",
+        }
+        layers: List[PressLayer] = []
+
+        gossip_entries = cfg.get("gossip") or []
+        if gossip_entries:
+            fast_pool = list(gossip_entries)
+            random.shuffle(fast_pool)
+            for idx, delay in enumerate([d for d in self.fast_layer_delays if d > 0][: len(fast_pool)]):
+                template = fast_pool[idx]
+                try:
+                    quote = template.format(**context_values)
+                except (KeyError, ValueError):
+                    quote = template
+                ctx = GossipContext(
+                    scholar=scholar.name,
+                    quote=quote,
+                    trigger=f"Sidecast {phase.title()}",
+                )
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="academic_gossip",
+                        generator=academic_gossip,
+                        context=ctx,
+                        tone_seed=tone_seed,
+                    )
+                )
+
+        briefs = cfg.get("briefs") or []
+        if briefs:
+            brief_entry = briefs[0]
+            headline_tpl = brief_entry.get("headline")
+            body_templates = brief_entry.get("body") or brief_entry.get("body_templates")
+
+            def _default_headline() -> str:
+                return f"Sidecast Spotlight — {scholar.name}"
+
+            headline = self._render_template(headline_tpl, context_values, fallback=_default_headline)
+
+            def _default_body() -> str:
+                return brief_entry if isinstance(brief_entry, str) else ""
+
+            body = self._render_template(body_templates, context_values, fallback=_default_body)
+            metadata = {
+                "arc": arc_key,
+                "phase": phase,
+                "sponsor": sponsor,
+                "expedition_code": expedition_code,
+                "expedition_type": expedition_type,
+            }
+            for delay in [d for d in self.long_layer_delays if d > 0] or [720]:
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="sidecast_brief",
+                        generator=sidecast_brief,
+                        context={
+                            "headline": headline,
+                            "body": body,
+                            "metadata": metadata,
+                            "persona": sponsor,
+                            "type": "sidecast_brief",
+                        },
+                        tone_seed=tone_seed,
+                    )
+                )
+
+        next_cfg = cfg.get("next") or {}
+        next_phase = next_cfg.get("phase")
+        next_delay = next_cfg.get("delay_hours")
+        try:
+            next_delay = float(next_delay) if next_delay is not None else None
+        except (TypeError, ValueError):
+            next_delay = None
+
+        return SidecastPhasePlan(
+            layers=layers,
+            next_phase=next_phase,
+            next_delay_hours=next_delay,
+        )
+
+    def generate_defection_epilogue_layers(
+        self,
+        *,
+        scenario: str,
+        scholar_name: str,
+        former_faction: str,
+        new_faction: str,
+        former_employer: str,
+    ) -> List[PressLayer]:
+        """Generate narrative layers for defection epilogues."""
+
+        template = self._defection_epilogues.get(scenario) or self._defection_epilogues.get("reconciliation", {})
+        tone_seed = self._tone_seed("defection_epilogue")
+        context_values = {
+            "scholar": scholar_name,
+            "former_faction": former_faction,
+            "new_faction": new_faction,
+            "former_employer": former_employer,
+        }
+        layers: List[PressLayer] = []
+
+        primary = template.get("primary") or {}
+        if primary:
+            headline = primary.get("headline", "Defection Epilogue").format(**context_values)
+            body_template = primary.get("body", "")
+            try:
+                body = body_template.format(**context_values)
+            except (KeyError, ValueError):
+                body = body_template
+            metadata = {
+                "scenario": scenario,
+                "former_faction": former_faction,
+                "new_faction": new_faction,
+            }
+            layers.append(
+                PressLayer(
+                    delay_minutes=0,
+                    type="defection_epilogue",
+                    generator=defection_epilogue_release,
+                    context={
+                        "headline": headline,
+                        "body": body,
+                        "metadata": metadata,
+                        "type": "defection_epilogue",
+                    },
+                    tone_seed=tone_seed,
+                )
+            )
+
+        gossip_entries = template.get("gossip") or []
+        if gossip_entries:
+            pool = list(gossip_entries)
+            random.shuffle(pool)
+            fast_delays = [d for d in self.fast_layer_delays if d > 0]
+            for idx, template_text in enumerate(pool):
+                delay = 0 if idx == 0 else fast_delays[min(idx - 1, len(fast_delays) - 1)] if fast_delays else 0
+                template_text = pool[idx]
+                try:
+                    quote = template_text.format(**context_values)
+                except (KeyError, ValueError):
+                    quote = template_text
+                ctx = GossipContext(
+                    scholar=scholar_name,
+                    quote=quote,
+                    trigger=f"Defection {scenario}",
+                )
+                layers.append(
+                    PressLayer(
+                        delay_minutes=delay,
+                        type="academic_gossip",
+                        generator=academic_gossip,
+                        context=ctx,
+                        tone_seed=tone_seed,
+                    )
+                )
+
+        faction_brief = template.get("faction_brief") or {}
+        if faction_brief:
+            headline_tpl = faction_brief.get("headline")
+            body_tpl = faction_brief.get("body")
+            headline = headline_tpl.format(**context_values) if isinstance(headline_tpl, str) else "Faction Briefing"
+            if isinstance(body_tpl, str):
+                try:
+                    body = body_tpl.format(**context_values)
+                except (KeyError, ValueError):
+                    body = body_tpl
+            else:
+                body = ""
+            metadata = {
+                "scenario": scenario,
+                "former_faction": former_faction,
+                "new_faction": new_faction,
+            }
+            layers.append(
+                PressLayer(
+                    delay_minutes=self.long_layer_delays[0] if self.long_layer_delays else 720,
+                    type="defection_epilogue_brief",
+                    generator=defection_epilogue_brief,
+                    context={
+                        "headline": headline,
+                        "body": body,
+                        "metadata": metadata,
+                        "persona": former_employer,
+                        "type": "defection_epilogue_brief",
+                    },
+                    tone_seed=tone_seed,
+                )
+            )
+
+        return layers
 
     @staticmethod
     def _choose_option(

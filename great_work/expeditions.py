@@ -19,6 +19,7 @@ from .rng import DeterministicRNG
 
 _DATA_PATH = Path(__file__).parent / "data"
 _SIDEWAYS_EFFECT_ENTRIES: Optional[List[Dict[str, Any]]] = None
+_SIDEWAYS_VIGNETTES: Optional[Dict[str, Dict[str, List[Dict[str, Any]]]]] = None
 
 
 def _load_yaml_resource(filename: str) -> Dict[str, Any]:
@@ -36,6 +37,29 @@ def _load_sideways_effect_entries() -> List[Dict[str, Any]]:
         entries = data.get("sideways_effects", [])
         _SIDEWAYS_EFFECT_ENTRIES = entries if isinstance(entries, list) else []
     return _SIDEWAYS_EFFECT_ENTRIES
+
+
+def _load_sideways_vignettes() -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
+    global _SIDEWAYS_VIGNETTES
+    if _SIDEWAYS_VIGNETTES is None:
+        data = _load_yaml_resource("sideways_vignettes.yaml")
+        if isinstance(data, dict):
+            raw = data.get("vignettes", {})
+            if isinstance(raw, dict):
+                parsed: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+                for expedition_type, depths in raw.items():
+                    if not isinstance(depths, dict):
+                        continue
+                    parsed[expedition_type] = {
+                        depth: list(entries) if isinstance(entries, list) else []
+                        for depth, entries in depths.items()
+                    }
+                _SIDEWAYS_VIGNETTES = parsed
+            else:
+                _SIDEWAYS_VIGNETTES = {}
+        else:
+            _SIDEWAYS_VIGNETTES = {}
+    return _SIDEWAYS_VIGNETTES
 
 
 @dataclass
@@ -87,6 +111,7 @@ class ExpeditionResolver:
 
     def __init__(self, failure_tables: FailureTables | None = None) -> None:
         self._failure_tables = failure_tables or FailureTables()
+        self._sideways_vignettes = _load_sideways_vignettes()
 
     def resolve(
         self,
@@ -202,6 +227,22 @@ class ExpeditionResolver:
                         description="Landmark spawns confident theory",
                     )
                 )
+
+        vignette = self._select_sideways_vignette(rng, expedition_type, prep_depth)
+        if vignette:
+            effects.append(
+                SidewaysEffect.queue_order(
+                    order_type="followup:sideways_vignette",
+                    order_data={
+                        "headline": vignette.get("headline"),
+                        "body": vignette.get("body"),
+                        "gossip": vignette.get("gossip", []),
+                        "tags": vignette.get("tags", []),
+                        "discovery": discovery_text,
+                    },
+                    description="Sideways vignette scheduled",
+                )
+            )
 
         return effects if effects else None
 
@@ -350,6 +391,24 @@ class ExpeditionResolver:
             effects[0].payload.setdefault("followups", followups)
 
         return effects
+
+    def _select_sideways_vignette(
+        self,
+        rng: DeterministicRNG,
+        expedition_type: str,
+        prep_depth: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Select a narrative vignette for the expedition context."""
+
+        type_vignettes = self._sideways_vignettes.get(expedition_type)
+        if not type_vignettes:
+            return None
+        depth_entries = type_vignettes.get(prep_depth)
+        if not depth_entries:
+            return None
+        if not depth_entries:
+            return None
+        return rng.choice(depth_entries)
 
 
 __all__ = ["ExpeditionResolver", "FailureTables", "FailureResult"]
