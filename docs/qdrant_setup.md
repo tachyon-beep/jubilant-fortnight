@@ -12,6 +12,15 @@ Qdrant provides semantic search capabilities for The Great Work, enabling:
 
 ## Quick Start
 
+### Optional: Install Embeddings Dependencies
+
+If you plan to generate embeddings locally (rather than relying on an external service),
+install the optional extras:
+
+```bash
+pip install -e .[embeddings]
+```
+
 ### 1. Start Qdrant Service
 
 ```bash

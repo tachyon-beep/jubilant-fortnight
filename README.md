@@ -153,7 +153,7 @@ See `.env.example` for the full template, including optional Qdrant hooks.
 
 - **Local development:** `make run` after filling `.env`. Guardian is optional; set `GREAT_WORK_MODERATION_STRICT=false` when developing without it.
 - **Docker Compose:** `docker compose up -d` starts the bot, telemetry dashboard, and archive server. View logs with `docker compose logs -f bot`.
-- **Guardian sidecar:** follow [docs/deployment.md](docs/deployment.md#guardian-sidecar-operations) to fetch weights, run the sidecar, and validate via `python scripts/moderation_probe.py`.
+- **Guardian sidecar:** follow [DEPLOYMENT.md](DEPLOYMENT.md#guardian-sidecar-operations) to fetch weights, run the sidecar, and validate via `python scripts/moderation_probe.py`.
 - **Archive & GitHub Pages:** digest snapshots land in `web_archive_public/`; configure `GREAT_WORK_ARCHIVE_PAGES_*` to mirror into a Pages repository.
 
 ## Testing & Tooling
@@ -170,7 +170,7 @@ See `.env.example` for the full template, including optional Qdrant hooks.
 
 ## Operational Playbook
 
-- [Deployment Guide](docs/deployment.md)
+- [Deployment Guide](DEPLOYMENT.md)
 - [Telemetry Runbook](docs/TELEMETRY_RUNBOOK.md)
 - [Guardian Safety Plan](docs/SAFETY_PLAN.md)
 - [Implementation Plan](docs/implementation_plan.md) · [Gap Analysis](docs/gap_analysis.md)
@@ -187,7 +187,7 @@ See `.env.example` for the full template, including optional Qdrant hooks.
 
 ## Roadmap & Release Planning
 
-- Post-launch concepts live in [docs/ROADMAP.md](docs/ROADMAP.md).
+- Post-launch concepts live in [ROADMAP.md](ROADMAP.md).
 - The 1.0.0-rc1 packaging steps are tracked in [docs/RELEASE_1_0_RC_CHECKLIST.md](docs/RELEASE_1_0_RC_CHECKLIST.md).
 - Historical changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 

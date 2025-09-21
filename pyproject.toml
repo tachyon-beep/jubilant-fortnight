@@ -26,7 +26,6 @@ dependencies = [
     "pydantic>=1.10",
     "openai>=1.0",
     "qdrant-client>=1.7",
-    "sentence-transformers>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +34,10 @@ dev = [
     "pytest-asyncio>=0.21",
     "pytest-cov>=5.0",
     "ruff>=0.6",
+]
+embeddings = [
+    # Install only when working on embedding/Qdrant features
+    "sentence-transformers>=5.1.0,<6",
 ]
 
 [tool.pytest.ini_options]
