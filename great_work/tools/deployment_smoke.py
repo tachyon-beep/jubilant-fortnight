@@ -52,8 +52,31 @@ def run_checks(env: Mapping[str, str]) -> List[CheckResult]:
 
     guardian_mode = env.get("GREAT_WORK_GUARDIAN_MODE", "sidecar").lower()
     if guardian_mode == "sidecar":
-        if env.get("GREAT_WORK_GUARDIAN_URL"):
-            results.append(_status("ok", "guardian_url", "sidecar endpoint configured"))
+        guardian_url = env.get("GREAT_WORK_GUARDIAN_URL", "").strip()
+        if guardian_url:
+            enforce_https = env.get("GREAT_WORK_ENFORCE_HTTPS", "").lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if enforce_https and guardian_url.startswith("http://"):
+                severity = (
+                    "warning"
+                    if env.get("GREAT_WORK_MODERATION_STRICT", "true").lower()
+                    in {"false", "0", "off"}
+                    else "error"
+                )
+                results.append(
+                    _status(
+                        severity,
+                        "guardian_https",
+                        "Guardian URL uses http; require https in production",
+                    )
+                )
+            results.append(
+                _status("ok", "guardian_url", "sidecar endpoint configured")
+            )
         else:
             severity = (
                 "warning"
@@ -96,6 +119,25 @@ def run_checks(env: Mapping[str, str]) -> List[CheckResult]:
                 "no webhook/email configured; alerts will log locally only",
             )
         )
+
+    # LLM HTTPS check (informational)
+    llm_base = env.get("LLM_API_BASE", "").strip()
+    llm_mode = env.get("LLM_MODE", "").strip().lower()
+    enforce_https = env.get("GREAT_WORK_ENFORCE_HTTPS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if llm_base and enforce_https:
+        if llm_base.startswith("http://") and llm_mode != "mock":
+            results.append(
+                _status(
+                    "warning",
+                    "llm_https",
+                    "LLM_API_BASE uses http; prefer https in production",
+                )
+            )
 
     return results
 

@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 _RANDOM = random.Random()  # nosec B311 - pseudo-RNG acceptable for template selection
+# Optional deterministic seed for tests / reproducible runs
+_seed_env = os.getenv("GREAT_WORK_RANDOM_SEED")
+if _seed_env is not None:
+    try:
+        _RANDOM.seed(int(_seed_env))
+    except ValueError:  # pragma: no cover - defensive parsing only
+        pass
 
 
 def _random_choice(seq):

@@ -1980,17 +1980,17 @@ class GameState:
         self,
         now: datetime | None = None,
     ) -> int:
-        clause = "status = 'pending'"
+        conditions: List[str] = ["status = 'pending'"]
         params: List[object] = []
         if now is not None:
-            clause += " AND (expire_at IS NULL OR expire_at > ?)"
+            conditions.append("(expire_at IS NULL OR expire_at > ?)")
             params.append(now.isoformat())
+        where = " AND ".join(conditions)
+        query = (
+            "SELECT COUNT(*) FROM symposium_proposals WHERE " + where
+        )  # nosec B608 - constants joined; values are bound
         with closing(sqlite3.connect(self._db_path)) as conn:
-            # nosec B608 - clause fragments are constants and values are bound parameters
-            row = conn.execute(
-                f"SELECT COUNT(*) FROM symposium_proposals WHERE {clause}",
-                params,
-            ).fetchone()
+            row = conn.execute(query, params).fetchone()
         return int(row[0]) if row else 0
 
     def count_player_pending_symposium_proposals(
@@ -1999,16 +1999,17 @@ class GameState:
         *,
         now: datetime | None = None,
     ) -> int:
-        clause = "status = 'pending' AND player_id = ?"
+        conditions: List[str] = ["status = 'pending'", "player_id = ?"]
         params: List[object] = [player_id]
         if now is not None:
-            clause += " AND (expire_at IS NULL OR expire_at > ?)"
+            conditions.append("(expire_at IS NULL OR expire_at > ?)")
             params.append(now.isoformat())
+        where = " AND ".join(conditions)
+        query = (
+            "SELECT COUNT(*) FROM symposium_proposals WHERE " + where
+        )  # nosec B608 - constants joined; values are bound
         with closing(sqlite3.connect(self._db_path)) as conn:
-            row = conn.execute(
-                f"SELECT COUNT(*) FROM symposium_proposals WHERE {clause}",
-                params,
-            ).fetchone()
+            row = conn.execute(query, params).fetchone()
         return int(row[0]) if row else 0
 
     def expire_symposium_proposals(self, cutoff: datetime) -> List[int]:
@@ -2047,8 +2048,14 @@ class GameState:
             params.append(now.isoformat())
         sql += " ORDER BY priority DESC, created_at"
         if limit is not None:
-            sql += " LIMIT ?"
-            params.append(limit)
+            # Guard LIMIT to positive integers; passed as bound parameter.
+            try:
+                lim = int(limit)
+            except (TypeError, ValueError):
+                lim = None
+            if lim is not None and lim > 0:
+                sql += " LIMIT ?"
+                params.append(lim)
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(sql, params).fetchall()
         proposals: List[Dict[str, object]] = []
