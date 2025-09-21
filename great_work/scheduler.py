@@ -146,16 +146,48 @@ class GazetteScheduler:
             self.scheduler.add_job(
                 self._publish_digest, "cron", hour=hour, minute=minute
             )
+        # APScheduler expects 3-letter weekday names (mon..sun) or 0-6
         self.scheduler.add_job(
             self._host_symposium,
             "cron",
-            day_of_week=self.settings.symposium_day.lower(),
+            day_of_week=self._normalize_weekday(self.settings.symposium_day),
             hour=12,
         )
         self.scheduler.start()
         logger.info(
             "GazetteScheduler started with digests at %s", self.settings.gazette_times
         )
+
+    @staticmethod
+    def _normalize_weekday(value: str) -> str:
+        """Map various weekday notations to APScheduler-compatible 3-letter names.
+
+        Accepts full names (e.g. "Friday"), mixed case, or already short forms.
+        Returns one of: mon, tue, wed, thu, fri, sat, sun.
+        """
+        if not isinstance(value, str):  # defensive: fallback to friday
+            return "fri"
+        v = value.strip().lower()
+        mapping = {
+            "monday": "mon",
+            "mon": "mon",
+            "tuesday": "tue",
+            "tue": "tue",
+            "wednesday": "wed",
+            "wed": "wed",
+            "thursday": "thu",
+            "thu": "thu",
+            "friday": "fri",
+            "fri": "fri",
+            "saturday": "sat",
+            "sat": "sat",
+            "sunday": "sun",
+            "sun": "sun",
+        }
+        # If numeric string 0-6, pass through (mon=0 by APScheduler default)
+        if v.isdigit() and v in {str(i) for i in range(7)}:
+            return v
+        return mapping.get(v, "fri")
 
     def shutdown(self) -> None:
         self.scheduler.shutdown(wait=False)

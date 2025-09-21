@@ -12,6 +12,8 @@ services:
     volumes:
       - ./web_archive_public:/app/web_archive_public:Z
       - ./var:/app/var:Z
+      # Mount Guardian model weights for local moderation mode
+      - ./models/guardian:/app/models/guardian:Z,ro
   qdrant:
     image: qdrant/qdrant:latest
     container_name: great-work-qdrant
