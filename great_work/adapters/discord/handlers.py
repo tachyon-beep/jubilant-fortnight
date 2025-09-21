@@ -7,6 +7,7 @@ logic into the adapters package.
 from __future__ import annotations
 
 import logging
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
@@ -134,6 +135,7 @@ __all__ = [
     "_format_message",
     "_format_press",
     "make_responder",
+    "make_publishers",
 ]
 
 
@@ -183,3 +185,75 @@ def make_responder(bot: commands.Bot, router) -> "Responder":
         await _post_to_channel(bot, target_channel, public_message, purpose=purpose)
 
     return _respond_and_broadcast
+
+
+def make_publishers(bot: commands.Bot, router):
+    """Build scheduler publisher callables based on configured channels.
+
+    Returns a tuple: (publisher, admin_publisher, admin_file_publisher, upcoming_publisher)
+    where each item is either a callable or None.
+    """
+
+    publisher = None
+    admin_publisher = None
+    admin_file_publisher = None
+    upcoming_publisher = None
+
+    if getattr(router, "gazette", None) is not None:
+        def publish_gazette(press) -> asyncio.Future:
+            release = getattr(press, "release", press)
+            message = _format_press(release)
+            return asyncio.run_coroutine_threadsafe(
+                _post_to_channel(
+                    bot,
+                    router.gazette,
+                    message,
+                    purpose="gazette",
+                ),
+                bot.loop,
+            )
+
+        publisher = publish_gazette
+
+    if getattr(router, "admin", None) is not None:
+        def publish_admin(message: str) -> asyncio.Future:
+            return asyncio.run_coroutine_threadsafe(
+                _post_to_channel(
+                    bot,
+                    router.admin,
+                    message,
+                    purpose="admin",
+                ),
+                bot.loop,
+            )
+
+        def publish_admin_file(path: Path, caption: str) -> asyncio.Future:
+            return asyncio.run_coroutine_threadsafe(
+                _post_file_to_channel(
+                    bot,
+                    router.admin,
+                    path,
+                    caption=caption,
+                    purpose="admin",
+                ),
+                bot.loop,
+            )
+
+        admin_publisher = publish_admin
+        admin_file_publisher = publish_admin_file
+
+    if getattr(router, "upcoming", None) is not None:
+        def publish_upcoming(message: str) -> asyncio.Future:
+            return asyncio.run_coroutine_threadsafe(
+                _post_to_channel(
+                    bot,
+                    router.upcoming,
+                    message,
+                    purpose="upcoming",
+                ),
+                bot.loop,
+            )
+
+        upcoming_publisher = publish_upcoming
+
+    return publisher, admin_publisher, admin_file_publisher, upcoming_publisher

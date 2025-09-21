@@ -33,6 +33,7 @@ from .adapters.discord.handlers import (
     _format_message,
     _format_press,
     make_responder,
+    make_publishers,
 )
 from .adapters.discord.builders import (
     build_status_embed as _build_status_embed,
@@ -93,67 +94,12 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         if scheduler is None and any(
             x is not None for x in (router.gazette, router.admin, router.upcoming)
         ):
-            publisher = None
-            if router.gazette is not None:
-
-                def publish_gazette(press: PressRecord) -> asyncio.Future:
-                    return asyncio.run_coroutine_threadsafe(
-                        _post_to_channel(
-                            bot,
-                            router.gazette,
-                            _format_press(press),
-                            purpose="gazette",
-                        ),
-                        bot.loop,
-                    )
-
-                publisher = publish_gazette
-
-            admin_publisher = None
-            admin_file_publisher = None
-            upcoming_publisher = None
-            if router.admin is not None:
-
-                def publish_admin(message: str) -> asyncio.Future:
-                    return asyncio.run_coroutine_threadsafe(
-                        _post_to_channel(
-                            bot,
-                            router.admin,
-                            message,
-                            purpose="admin",
-                        ),
-                        bot.loop,
-                    )
-
-                def publish_admin_file(path: Path, caption: str) -> asyncio.Future:
-                    return asyncio.run_coroutine_threadsafe(
-                        _post_file_to_channel(
-                            bot,
-                            router.admin,
-                            path,
-                            caption=caption,
-                            purpose="admin",
-                        ),
-                        bot.loop,
-                    )
-
-                admin_publisher = publish_admin
-                admin_file_publisher = publish_admin_file
-            if router.upcoming is not None:
-
-                def publish_upcoming(message: str) -> asyncio.Future:
-                    return asyncio.run_coroutine_threadsafe(
-                        _post_to_channel(
-                            bot,
-                            router.upcoming,
-                            message,
-                            purpose="upcoming",
-                        ),
-                        bot.loop,
-                    )
-
-                upcoming_publisher = publish_upcoming
-
+            (
+                publisher,
+                admin_publisher,
+                admin_file_publisher,
+                upcoming_publisher,
+            ) = make_publishers(bot, router)
             scheduler = GazetteScheduler(
                 service,
                 publisher=publisher,
