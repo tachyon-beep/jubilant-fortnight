@@ -14,6 +14,7 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
 - `python -m great_work.tools.recommend_kpi_thresholds --apply` – compute KPI guardrail suggestions from recent telemetry and persist them to `telemetry.db`; add `--output telemetry_exports/kpi_thresholds.json` for an audit trail.
 - `python -m great_work.tools.export_product_metrics` – dump current KPIs, historical trends, and cohort breakdowns to `telemetry_exports/` for offline dashboards or quarterly reviews.
+- `python -m great_work.tools.simulate_seasonal_economy --config scenario.json` – rehearse seasonal commitment + mentorship tuning scenarios offline and capture timeline summaries alongside calibration snapshots.
 - `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
 - `python -m great_work.tools.calibrate_moderation` – inspect Guardian category/severity counts for tuning and override review.
 

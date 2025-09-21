@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `python -m great_work.tools.recommend_kpi_thresholds --apply` to compute KPI guardrail recommendations from recent telemetry and persist the tuned targets into `telemetry.db` (with optional JSON exports for audit trails).
 - Added `python -m great_work.tools.export_product_metrics` to dump product KPIs, historical trends, and engagement cohorts into `telemetry_exports/` for offline analysis and ops reviews.
 - Alert router now reads `GREAT_WORK_ALERT_WEBHOOK_URLS` alongside `GREAT_WORK_ALERT_WEBHOOK_URL`, enabling multi-channel fan-out without custom code.
+- Added `python -m great_work.tools.simulate_seasonal_economy` so ops can rehearse seasonal commitment + mentorship tuning scenarios offline and review calibration-style summaries before touching production settings.
 
 ## [0.9.1] - 2025-09-21 (Current – prepping 1.0.0-rc1)
 
