@@ -20,8 +20,8 @@ from .expeditions import ExpeditionResolver, FailureTables
 from .llm_client import (
     LLMGenerationError,
     LLMNotEnabledError,
-    enhance_press_release_sync,
 )
+from .services.narrative import enhance_press_release_sync
 from .models import (
     ConfidenceLevel,
     Event,
