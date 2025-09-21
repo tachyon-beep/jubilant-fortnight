@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-from ..telemetry import MetricEvent, MetricType, TelemetryCollector
+from ..telemetry import DEFAULT_TELEMETRY_DB, MetricEvent, MetricType, TelemetryCollector
 
 
 def _append_event(
@@ -126,8 +126,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--telemetry-db",
         type=Path,
-        default=Path("telemetry.db"),
-        help="Path to telemetry SQLite database (default: telemetry.db).",
+        default=DEFAULT_TELEMETRY_DB,
+        help=f"Path to telemetry SQLite database (default: {DEFAULT_TELEMETRY_DB}).",
     )
     parser.add_argument(
         "--players",

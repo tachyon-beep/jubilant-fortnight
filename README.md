@@ -124,7 +124,7 @@ Set whichever IDs match your server; informational commands broadcast to the fir
 
 ### Telemetry & alerts
 
-`python -m great_work.tools.recommend_kpi_thresholds --apply` persists guardrails into `telemetry.db`. Environment overrides remain useful for experiments.
+`python -m great_work.tools.recommend_kpi_thresholds --apply` persists guardrails into `var/telemetry/telemetry.db` (the default telemetry store). Environment overrides remain useful for experiments.
 
 ```
 GREAT_WORK_ALERT_WEBHOOK_URLS=https://ops.example/webhook,https://oncall.example/webhook

@@ -9,7 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
 
-from ..telemetry import MetricType, TelemetryCollector
+from ..telemetry import DEFAULT_TELEMETRY_DB, MetricType, TelemetryCollector
 
 
 def _bucket_daily(records: Iterable[Tuple[float, str]]) -> Dict[str, set[str]]:
@@ -195,8 +195,8 @@ def main() -> None:
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path("telemetry.db"),
-        help="Path to telemetry SQLite database (default: telemetry.db).",
+        default=DEFAULT_TELEMETRY_DB,
+        help=f"Path to telemetry SQLite database (default: {DEFAULT_TELEMETRY_DB}).",
     )
     parser.add_argument(
         "--engagement-days",

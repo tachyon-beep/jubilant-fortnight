@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-from ..telemetry import TelemetryCollector
+from ..telemetry import DEFAULT_TELEMETRY_DB, TelemetryCollector
 
 
 def export_metrics(
@@ -70,8 +70,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--telemetry-db",
         type=Path,
-        default=Path("telemetry.db"),
-        help="Path to telemetry SQLite database (default: telemetry.db).",
+        default=DEFAULT_TELEMETRY_DB,
+        help=f"Path to telemetry SQLite database (default: {DEFAULT_TELEMETRY_DB}).",
     )
     parser.add_argument(
         "--output-dir",

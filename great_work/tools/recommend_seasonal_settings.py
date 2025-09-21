@@ -6,7 +6,7 @@ import statistics
 from pathlib import Path
 from typing import Dict
 
-from ..telemetry import MetricType, TelemetryCollector
+from ..telemetry import DEFAULT_TELEMETRY_DB, MetricType, TelemetryCollector
 
 
 def recommend_settings(db_path: Path, days: int = 30) -> Dict[str, float]:
@@ -85,7 +85,12 @@ def recommend_settings(db_path: Path, days: int = 30) -> Dict[str, float]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Recommend seasonal commitment tuning values.")
-    parser.add_argument("--db", type=Path, default=Path("telemetry.db"), help="Path to telemetry database")
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=DEFAULT_TELEMETRY_DB,
+        help=f"Path to telemetry database (default: {DEFAULT_TELEMETRY_DB}).",
+    )
     parser.add_argument("--days", type=int, default=30, help="Lookback window in days (default: 30)")
     args = parser.parse_args()
 

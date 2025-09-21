@@ -10,7 +10,7 @@ from typing import Optional
 from ..analytics import collect_calibration_snapshot, write_calibration_snapshot
 from ..config import get_settings
 from ..service import GameService
-from ..telemetry import TelemetryCollector
+from ..telemetry import DEFAULT_TELEMETRY_DB, TelemetryCollector
 
 
 def _parse_args() -> argparse.Namespace:
@@ -24,8 +24,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--telemetry-db",
         type=Path,
-        default=Path("telemetry.db"),
-        help="Path to the telemetry SQLite database (default: telemetry.db).",
+        default=DEFAULT_TELEMETRY_DB,
+        help=f"Path to the telemetry SQLite database (default: {DEFAULT_TELEMETRY_DB}).",
     )
     parser.add_argument(
         "--output-dir",

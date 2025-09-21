@@ -72,6 +72,9 @@ class MetricType(Enum):
     ORDER_STATE = "order_state"
 
 
+DEFAULT_TELEMETRY_DB = Path("var") / "telemetry" / "telemetry.db"
+
+
 @dataclass
 class MetricEvent:
     """Individual metric event."""
@@ -88,7 +91,9 @@ class TelemetryCollector:
 
     def __init__(self, db_path: Optional[Path] = None):
         """Initialize telemetry collector with database storage."""
-        self.db_path = db_path or Path("telemetry.db")
+        self.db_path = Path(db_path) if db_path is not None else DEFAULT_TELEMETRY_DB
+        if self.db_path.parent != Path("."):
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
         self._start_time = time.time()
         self._metrics_buffer: List[MetricEvent] = []

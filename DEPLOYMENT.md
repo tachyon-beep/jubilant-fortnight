@@ -111,7 +111,7 @@ Mount the `web_archive_public/` volume so the scheduler can sync exports (defaul
 
 ## 3. Telemetry Dashboard
 
-The optional `telemetry-dashboard` service reads `telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). It bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
+The optional `telemetry-dashboard` service reads `var/telemetry/telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). It bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
 
 - Default port: `8081`
 - Environment requirements: same `.env` file (or a subset with `TELEMETRY_DB_PATH`)
@@ -166,10 +166,10 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 
 ### KPI Calibration Workflow
 
-1. Export recent telemetry (or run the server with `telemetry.db` mounted) and execute:
+1. Export recent telemetry (or run the server with `var/telemetry/telemetry.db` mounted) and execute:
 
    ```bash
-   python -m great_work.tools.recommend_kpi_thresholds --db telemetry.db
+   python -m great_work.tools.recommend_kpi_thresholds --db var/telemetry/telemetry.db
    ```
 
    The script samples command usage, manifesto adoption, nickname adoption, archive lookups, and press shares, then prints recommended environment variables (scaled from recent activity). Use the `--engagement-days`, `--manifesto-days`, and `--archive-days` flags to widen or narrow the analysis window.
@@ -182,7 +182,7 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 1. Analyse recent seasonal debt with:
 
    ```bash
-   python -m great_work.tools.recommend_seasonal_settings --db telemetry.db --days 30
+   python -m great_work.tools.recommend_seasonal_settings --db var/telemetry/telemetry.db --days 30
    ```
 
    Review the average/median outstanding debt and the suggested knobs (base cost, reprisal threshold, `GREAT_WORK_ALERT_MAX_SEASONAL_DEBT`).
@@ -197,7 +197,7 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 4. The telemetry dashboard exposes the most recent snapshot at `/api/calibration_snapshot` and surfaces key totals at the top of the UI.
 5. Use the dashboard’s dispatcher filter form (or call `/api/orders?event=poll&min_pending=3`) to pull JSON/CSV samples during live triage.
 
-Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `telemetry.db` with deterministic sample data when rehearsing the workflow before live players arrive.
+Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `var/telemetry/telemetry.db` with deterministic sample data when rehearsing the workflow before live players arrive.
 
 ### Guardian Sidecar Operations
 

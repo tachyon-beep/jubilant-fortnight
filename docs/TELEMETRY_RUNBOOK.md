@@ -8,15 +8,15 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 
 - `/telemetry_report` – one-shot health snapshot inside Discord (admin only).
 - `ops/telemetry-dashboard` – historical charts for digests, queue depth, and command usage (run via `make telemetry-dashboard`).
-- `sqlite3 telemetry.db` – direct access if you need to export raw metrics.
+- `sqlite3 var/telemetry/telemetry.db` – direct access if you need to export raw metrics.
 - `/gw_admin calibration_snapshot` – capture a calibration snapshot JSON and archive it in the admin channel.
 - `python -m great_work.tools.export_calibration_snapshot` – export the same snapshot on disk (supports summary-only mode and retention pruning).
 - `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
-- `python -m great_work.tools.recommend_kpi_thresholds --apply` – compute KPI guardrail suggestions from recent telemetry and persist them to `telemetry.db`; add `--output telemetry_exports/kpi_thresholds.json` for an audit trail.
+- `python -m great_work.tools.recommend_kpi_thresholds --apply` – compute KPI guardrail suggestions from recent telemetry and persist them to `var/telemetry/telemetry.db`; add `--output telemetry_exports/kpi_thresholds.json` for an audit trail.
 - `python -m great_work.tools.export_product_metrics` – dump current KPIs, historical trends, and cohort breakdowns to `telemetry_exports/` for offline dashboards or quarterly reviews.
 - `python -m great_work.tools.simulate_seasonal_economy --config scenario.json` – rehearse seasonal commitment + mentorship tuning scenarios offline and capture timeline summaries alongside calibration snapshots.
 - `/gw_admin moderation_recent` – surface the last N Guardian decisions plus hashed payloads for fast override review; pair with `/gw_admin add_moderation_override` to admit or block specific hashes.
-- `python -m great_work.tools.calibrate_moderation --hours 168 --telemetry-db telemetry.db` – summarise Guardian category counts and latency before adjusting policy thresholds.
+- `python -m great_work.tools.calibrate_moderation --hours 168 --telemetry-db var/telemetry/telemetry.db` – summarise Guardian category counts and latency before adjusting policy thresholds.
 - `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
 - `python -m great_work.tools.calibrate_moderation` – inspect Guardian category/severity counts for tuning and override review.
 
@@ -66,11 +66,11 @@ export GREAT_WORK_ALERT_MAX_QUEUE=8
 
 All thresholds are evaluated as warnings at 75 % of the configured value before escalating to alerts.
 
-Canonical KPI targets live in the `kpi_targets` table inside `telemetry.db`. Use either the calibration CLI (`python -m great_work.tools.recommend_kpi_thresholds --apply`) or a short Python shell to upsert new values:
+Canonical KPI targets live in the `kpi_targets` table inside `var/telemetry/telemetry.db`. Use either the calibration CLI (`python -m great_work.tools.recommend_kpi_thresholds --apply`) or a short Python shell to upsert new values:
 
 ```python
 from great_work.telemetry import TelemetryCollector
-collector = TelemetryCollector("telemetry.db")
+collector = TelemetryCollector("var/telemetry/telemetry.db")
 collector.set_kpi_target("active_players", target=6, warning=4, notes="Beta baseline")
 ```
 
