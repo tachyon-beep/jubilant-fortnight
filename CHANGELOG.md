@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Alert router now reads `GREAT_WORK_ALERT_WEBHOOK_URLS` alongside `GREAT_WORK_ALERT_WEBHOOK_URL`, enabling multi-channel fan-out without custom code.
 - Added `python -m great_work.tools.simulate_seasonal_economy` so ops can rehearse seasonal commitment + mentorship tuning scenarios offline and review calibration-style summaries before touching production settings.
 - Expanded Guardian safety plan with incident response tables, override review cadence, and quarterly drill guidance; deployment docs now include Guardian env configuration and operational steps.
+- Added `python -m great_work.tools.deployment_smoke` and accompanying tests to validate required environment variables, channel routing, Guardian configuration, and alert fan-out before launching a deployment.
 
 ## [0.9.1] - 2025-09-21 (Current – prepping 1.0.0-rc1)
 

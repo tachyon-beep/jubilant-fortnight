@@ -193,6 +193,16 @@ Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `
 4. **Incident response:** if `moderation_sidecar_offline` fires, restart the sidecar and decide whether to set `GREAT_WORK_MODERATION_STRICT=false` temporarily or pause the game via `/gw_admin pause_game reason:"guardian offline"`. After recovery, audit overrides with `/gw_admin moderation_overrides`.
 5. **Manual probes:** run `python scripts/moderation_probe.py --text "sample" --category HAP` to validate the policy before re-enabling strict mode.
 
+### Preflight Smoke Check
+
+Before launching a new environment run:
+
+```bash
+python -m great_work.tools.deployment_smoke
+```
+
+The command reports missing tokens, channel routing gaps, Guardian misconfiguration, and alert routing coverage. Resolve any **error** rows before starting the bot; **warning** rows highlight optional but recommended settings (e.g., public channel mirroring or alert webhooks).
+
 ## 4. Archive Publishing
 
 - The scheduler exports HTML to `web_archive/` each digest, syncs it into `web_archive_public/`, and uploads ZIP snapshots to the admin channel.
