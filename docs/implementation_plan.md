@@ -165,6 +165,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 - Maintain unit coverage for new service methods and data-layer helpers.
 - Add integration tests when wiring multi-layer press or LLM calls to prevent regressions.
 - Extend snapshot checks for archive output when automated publishing is introduced.
+- CI now runs `python -m great_work.tools.deployment_smoke` alongside the pytest suite, and smoke tests cover ChannelRouter routing plus Gazette scheduler job registration to catch configuration regressions early.
 
 ## Success Metrics – **Partially Implemented**
 

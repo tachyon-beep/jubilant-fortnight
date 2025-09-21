@@ -2235,13 +2235,13 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 reason=reason,
             )
             message = f"{press.headline}\n{press.body}"
-        await interaction.response.send_message(message)
-        await _post_to_channel(bot, router.gazette, message, purpose="admin action")
-    except ValueError as exc:
-        await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.response.send_message(message)
+            await _post_to_channel(bot, router.gazette, message, purpose="admin action")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            await _flush_admin_notifications()
+            return
         await _flush_admin_notifications()
-        return
-    await _flush_admin_notifications()
 
     @gw_admin.command(
         name="create_seasonal_commitment",
@@ -2590,9 +2590,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 ephemeral=True,
             )
         else:
-            await interaction.response.send_message(f"```
-{content}
-```", ephemeral=True)
+            formatted = f"```\n{content}\n```"
+            await interaction.response.send_message(formatted, ephemeral=True)
         await _flush_admin_notifications()
 
     @gw_admin.command(name="cancel_order", description="Cancel a dispatcher order")
@@ -2667,9 +2666,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 ephemeral=True,
             )
         else:
-            await interaction.response.send_message(f"```
-{content}
-```", ephemeral=True)
+            formatted = f"```\n{content}\n```"
+            await interaction.response.send_message(formatted, ephemeral=True)
 
     @gw_admin.command(
         name="add_moderation_override",
@@ -2778,9 +2776,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 ephemeral=True,
             )
         else:
-            await interaction.response.send_message(f"```
-{content}
-```", ephemeral=True)
+            formatted = f"```\n{content}\n```"
+            await interaction.response.send_message(formatted, ephemeral=True)
 
     @gw_admin.command(
         name="calibration_snapshot",
