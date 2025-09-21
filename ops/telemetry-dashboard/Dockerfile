@@ -6,7 +6,6 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock* requirements.txt* /tmp/deps/ 2>/dev/null || true
 COPY ops/telemetry-dashboard/requirements.txt /tmp/dashboard-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/dashboard-requirements.txt
 
