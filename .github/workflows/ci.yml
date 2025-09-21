@@ -56,8 +56,8 @@ jobs:
           api-token: ${{ secrets.CODACY_API_TOKEN }}
           coverage-reports: coverage.xml
           organization-provider: gh
-          username: tachyon-beep
-          project-name: great-work
+          username: ${{ github.repository_owner }}
+          project-name: ${{ github.event.repository.name }}
 
       - name: Skip Codacy upload (token missing)
         if: ${{ secrets.CODACY_API_TOKEN == '' }}
