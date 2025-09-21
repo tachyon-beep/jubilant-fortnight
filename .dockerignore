@@ -15,6 +15,7 @@ web_archive/
 web_archive_public/
 qdrant_storage/
 ops/
+!ops/telemetry-dashboard/**
 tests/
 docs/
 models/

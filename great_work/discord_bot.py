@@ -14,7 +14,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import discord
 from discord import app_commands
-from discord.app_commands import Range
 from discord.ext import commands
 
 from .analytics import collect_calibration_snapshot, write_calibration_snapshot
@@ -610,7 +609,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     async def recruit_odds(
         interaction: discord.Interaction,
         scholar_id: str,
-        base_chance: Range[float, 0.0, 1.0] = 0.6,
+        base_chance: discord.app_commands.Range[float, 0.0, 1.0] = 0.6,
     ) -> None:
         player_id = str(interaction.user.display_name)
         service.ensure_player(player_id, interaction.user.display_name)
@@ -679,7 +678,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @app_commands.describe(limit="Number of recent theories to include in the snapshot (default 8)")
     async def theory_reference(
         interaction: discord.Interaction,
-        limit: Range[int, 1, 20] = 8,
+        limit: discord.app_commands.Range[int, 1, 20] = 8,
     ) -> None:
         snapshot = service.theory_reference(limit=limit)
         theories = snapshot.get("theories", [])

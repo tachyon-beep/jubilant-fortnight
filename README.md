@@ -126,7 +126,7 @@ Set whichever IDs match your server; informational commands broadcast to the fir
 
 `python -m great_work.tools.recommend_kpi_thresholds --apply` persists guardrails into `var/telemetry/telemetry.db` (the default telemetry store). Environment overrides remain useful for experiments.
 
-```
+```text
 GREAT_WORK_ALERT_WEBHOOK_URLS=https://ops.example/webhook,https://oncall.example/webhook
 GREAT_WORK_ALERT_COOLDOWN_SECONDS=300
 GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS=3
@@ -139,7 +139,7 @@ GREAT_WORK_ALERT_MIN_PRESS_SHARES=1
 
 ### Archive & calibration
 
-```
+```text
 GREAT_WORK_ARCHIVE_PUBLISH_DIR=web_archive_public
 GREAT_WORK_ARCHIVE_PAGES_ENABLED=true
 GREAT_WORK_ARCHIVE_PAGES_DIR=/opt/the-great-work-pages
@@ -154,7 +154,7 @@ GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS=true
 
 ### LLM (optional)
 
-```
+```text
 LLM_API_BASE=https://api.openai.com/v1
 LLM_API_KEY=
 LLM_MODEL_NAME=gpt-4o-mini
@@ -174,7 +174,7 @@ See `.env.example` for the full template.
 
 Enable semantic search and future retrieval features with Qdrant + embeddings.
 
-```
+```text
 # Qdrant connection
 QDRANT_URL=http://localhost:6333
 COLLECTION_NAME=great-work-knowledge
@@ -188,7 +188,7 @@ GREAT_WORK_QDRANT_INDEXING=true
 
 Basic operations (see docs/QDRANT_SETUP.md):
 
-```
+```text
 # Start Qdrant locally
 docker-compose up -d qdrant
 
