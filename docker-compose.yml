@@ -1,7 +1,7 @@
 services:
   bot:
     build: .
-    container_name: great-work-bot
+    container_name: the-great-work-bot
     restart: unless-stopped
     depends_on:
       - qdrant
@@ -16,7 +16,7 @@ services:
       - ./models/guardian:/app/models/guardian:Z,ro
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: great-work-qdrant
+    container_name: the-great-work-qdrant
     restart: unless-stopped
     ports:
       - "6333:6333"
