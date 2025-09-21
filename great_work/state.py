@@ -110,6 +110,19 @@ CREATE TABLE IF NOT EXISTS followups (
     payload TEXT NOT NULL,
     resolve_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS moderation_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text_hash TEXT NOT NULL,
+    surface TEXT,
+    stage TEXT,
+    category TEXT,
+    notes TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_moderation_overrides_hash
+    ON moderation_overrides (text_hash);
 CREATE TABLE IF NOT EXISTS timeline (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     current_year INTEGER NOT NULL,
@@ -726,6 +739,83 @@ class GameState:
             )
             followups.append((int(order_id), actor_id or "", kind, resolve_at, payload))
         return followups
+
+    # Moderation overrides ---------------------------------------------
+    def add_moderation_override(
+        self,
+        *,
+        text_hash: str,
+        surface: Optional[str],
+        stage: Optional[str],
+        category: Optional[str],
+        notes: Optional[str],
+        created_by: Optional[str],
+        expires_at: Optional[datetime],
+        now: Optional[datetime] = None,
+    ) -> int:
+        created_ts = (now or datetime.now(timezone.utc)).isoformat()
+        expires_ts = expires_at.isoformat() if expires_at else None
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                """INSERT INTO moderation_overrides
+                       (text_hash, surface, stage, category, notes, created_by, created_at, expires_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    text_hash,
+                    surface,
+                    stage,
+                    category,
+                    notes,
+                    created_by,
+                    created_ts,
+                    expires_ts,
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    def remove_moderation_override(self, override_id: int) -> bool:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            cursor = conn.execute(
+                "DELETE FROM moderation_overrides WHERE id = ?",
+                (override_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_moderation_overrides(
+        self,
+        *,
+        include_expired: bool = False,
+        now: Optional[datetime] = None,
+    ) -> List[Dict[str, object]]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT id, text_hash, surface, stage, category, notes, created_by, created_at, expires_at FROM moderation_overrides ORDER BY created_at DESC"
+            ).fetchall()
+        overrides: List[Dict[str, object]] = []
+        current_time = now or datetime.now(timezone.utc)
+        for row in rows:
+            expires_at = datetime.fromisoformat(row[8]) if row[8] else None
+            if not include_expired and expires_at is not None and expires_at < current_time:
+                continue
+            overrides.append(
+                {
+                    "id": int(row[0]),
+                    "text_hash": row[1],
+                    "surface": row[2],
+                    "stage": row[3],
+                    "category": row[4],
+                    "notes": row[5],
+                    "created_by": row[6],
+                    "created_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                    "expires_at": expires_at,
+                }
+            )
+        return overrides
+
+    def active_moderation_overrides(self, now: Optional[datetime] = None) -> List[Dict[str, object]]:
+        return self.list_moderation_overrides(include_expired=False, now=now)
 
     # Scheduled press --------------------------------------------------
     def enqueue_press_release(

@@ -68,6 +68,7 @@ class MetricType(Enum):
     PRESS_CADENCE = "press_cadence"
     DIGEST = "digest"
     QUEUE_DEPTH = "queue_depth"
+    MODERATION = "moderation"
     ORDER_STATE = "order_state"
 
 
@@ -1149,6 +1150,84 @@ class TelemetryCollector:
 
         return records
 
+    def track_moderation_event(
+        self,
+        *,
+        surface: str,
+        stage: str,
+        category: str,
+        severity: str,
+        actor: Optional[str],
+        text_hash: Optional[str],
+        source: Optional[str] = None,
+    ) -> None:
+        tags = {
+            "surface": surface,
+            "stage": stage,
+            "severity": severity,
+        }
+        if actor:
+            tags["actor"] = actor
+        if text_hash:
+            tags["text_hash"] = text_hash
+        if source:
+            tags["source"] = source
+
+        self.record(
+            MetricType.MODERATION,
+            category,
+            1.0,
+            tags=tags,
+        )
+
+    def get_moderation_summary(self, hours: int = 24) -> Dict[str, Any]:
+        window_start = time.time() - (hours * 3600)
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                    SELECT
+                        name,
+                        json_extract(tags, '$.stage') AS stage,
+                        json_extract(tags, '$.surface') AS surface,
+                        json_extract(tags, '$.severity') AS severity,
+                        COUNT(*)
+                    FROM metrics
+                    WHERE metric_type = ? AND timestamp >= ?
+                    GROUP BY name, stage, surface, severity
+                """,
+                (MetricType.MODERATION.value, window_start),
+            ).fetchall()
+
+        summary: Dict[str, Any] = {
+            "hours": hours,
+            "totals": {
+                "count": 0,
+                "by_severity": {},
+                "by_category": {},
+                "by_stage": {},
+            },
+            "breakdown": [],
+        }
+
+        for category, stage, surface, severity, count in rows:
+            count = int(count or 0)
+            summary["totals"]["count"] += count
+            summary["totals"]["by_category"][category] = summary["totals"]["by_category"].get(category, 0) + count
+            summary["totals"]["by_stage"][stage] = summary["totals"]["by_stage"].get(stage, 0) + count
+            summary["totals"]["by_severity"][severity] = summary["totals"]["by_severity"].get(severity, 0) + count
+            summary["breakdown"].append(
+                {
+                    "category": category,
+                    "stage": stage,
+                    "surface": surface,
+                    "severity": severity,
+                    "count": count,
+                }
+            )
+
+        summary["breakdown"].sort(key=lambda item: (-item["count"], item["category"]))
+        return summary
+
     def get_product_kpis(
         self,
         *,
@@ -1657,6 +1736,7 @@ class TelemetryCollector:
             "product_kpi_history": self.get_product_kpi_history_summary(),
             "engagement_cohorts": self.get_engagement_cohorts(),
             "kpi_targets": self.get_kpi_targets(),
+            "moderation_24h": self.get_moderation_summary(24),
         }
 
         # Add overall statistics

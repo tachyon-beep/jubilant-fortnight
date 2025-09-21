@@ -122,10 +122,11 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| Fully Implemented | 1 | 20% |
-| Not Implemented | 4 | 80% |
+| Fully Implemented | 2 | 40% |
+| Partially Implemented | 2 | 40% |
+| Not Implemented | 1 | 20% |
 
-**Notes:** Code remains MIT-licensed, yet narrative asset licensing, blocklists, manual review guidelines, and MPL/CC licenses are still missing.【F:LICENSE†L1-L21】【F:docs/HLD.md†L354-L410】
+**Notes:** Core code remains MIT-licensed and narrative assets now ship under CC BY 4.0 with attribution guidance in `docs/NARRATIVE_LICENSE.md`. Guardian moderation supports hashed overrides via `/gw_admin moderation_overrides` and `python -m great_work.tools.manage_orders followups migrate`, but additional manual review workflows and external audits are scheduled post-playtest.【F:LICENSE†L1-L21】【F:docs/NARRATIVE_LICENSE.md†L1-L120】【F:docs/SAFETY_PLAN.md†L60-L120】
 
 ### Success Criteria and Iteration (4 requirements)
 

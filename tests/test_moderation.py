@@ -32,6 +32,7 @@ def test_prefilter_blocks_obvious_terms(monkeypatch):
     )
     assert decision.allowed is False
     assert decision.category == "blocklist"
+    assert decision.text_hash is not None
 
 
 def test_guardian_invoked_when_suspect(monkeypatch):
@@ -56,6 +57,7 @@ def test_guardian_invoked_when_suspect(monkeypatch):
     assert decision.allowed is False
     assert decision.category == "Hate"
     assert decision.metadata["source"] == "guardian"
+    assert decision.text_hash is not None
 
 
 def test_guardian_disabled_allows_content(monkeypatch):
@@ -67,3 +69,31 @@ def test_guardian_disabled_allows_content(monkeypatch):
         "Just a normal message", surface="test", actor="player", stage="player_input"
     )
     assert decision.allowed is True
+    assert decision.text_hash is not None
+
+
+def test_allowlist_override(monkeypatch):
+    moderator = GuardianModerator()
+    moderator._enabled = True
+
+    text = "This content might be flagged"
+    text_hash = moderator.compute_hash(text)
+    moderator.load_allowlist(
+        [
+            {
+                "text_hash": text_hash,
+                "surface": "press",
+                "stage": "llm_output",
+                "category": "Hate",
+            }
+        ]
+    )
+
+    decision = moderator.review(
+        text,
+        surface="press",
+        actor=None,
+        stage="llm_output",
+    )
+    assert decision.allowed is True
+    assert decision.metadata["source"] == "allowlist"

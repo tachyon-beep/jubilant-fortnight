@@ -65,10 +65,16 @@ _Last updated: 2025-09-30_
 - **Runbook additions:**
   - Document restart steps for the Guardian sidecar (systemd service name, Docker compose target).
   - Provide a sample payload for manual validation (`python scripts/moderation_probe.py --text "example"`).
-  - Outline escalation path when moderation rejects legitimate player content (manual override, whitelist phrases, etc.).
+  - Outline escalation path when moderation rejects legitimate player content. Use `/gw_admin moderation_recent` to retrieve the hashed content, then `/gw_admin add_moderation_override` (with the supplied hash) to whitelist specific cases. Overrides persist in the `moderation_overrides` table and can be reviewed via `/gw_admin moderation_overrides` or `python -m great_work.tools.manage_orders followups migrate` for dry-run reports.
 - **Testing:**
   - Add contract tests that mock the Guardian RPC and confirm the bot blocks/approves text as expected.
   - Include regression samples for each category to guard against policy drift.
+
+## Calibration & Overrides
+
+- Run `python -m great_work.tools.calibrate_moderation --hours 168 --telemetry-db telemetry.db` weekly to summarise Guardian categories, stages, and severity counts. Use the output to adjust `GREAT_WORK_GUARDIAN_CATEGORIES`, blocklists, or prefilter heuristics.
+- `/gw_admin list_orders` surfaces dispatcher backlogs; combine with `/gw_admin moderation_recent` to trace whether moderation delays are causing order congestion.
+- `python -m great_work.tools.manage_orders summary --json` provides a machine-readable snapshot of pending orders, while `python -m great_work.tools.manage_orders followups migrate --dry-run` previews conversion of legacy follow-ups should any remain.
 
 ## Roadmap Considerations
 

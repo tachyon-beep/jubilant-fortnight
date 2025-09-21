@@ -2419,6 +2419,161 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         await interaction.response.send_message(response, ephemeral=True)
         await _flush_admin_notifications()
 
+    @gw_admin.command(name="moderation_overrides", description="List moderation overrides")
+    @track_command
+    @app_commands.describe(
+        include_expired="Include expired overrides",
+        as_file="Attach the results as a text file",
+    )
+    async def admin_moderation_overrides(
+        interaction: discord.Interaction,
+        include_expired: bool = False,
+        as_file: bool = False,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        overrides = service.list_moderation_overrides(include_expired=include_expired)
+        if not overrides:
+            await interaction.response.send_message("No moderation overrides configured.", ephemeral=True)
+            return
+
+        lines = ["#id | hash | stage | surface | category | expires | notes"]
+        for entry in overrides:
+            lines.append(
+                f"#{entry['id']} | {entry.get('text_hash', '')[:12]} | {entry.get('stage') or 'any'} | "
+                f"{entry.get('surface') or 'any'} | {entry.get('category') or 'any'} | "
+                f"{entry.get('expires_at') or 'never'} | {entry.get('notes') or ''}"
+            )
+        content = "\n".join(lines)
+        if as_file or len(content) > 1800:
+            buffer = io.BytesIO(content.encode("utf-8"))
+            buffer.seek(0)
+            await interaction.response.send_message(
+                "Moderation overrides exported.",
+                file=discord.File(buffer, filename="moderation_overrides.txt"),
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(f"```
+{content}
+```", ephemeral=True)
+
+    @gw_admin.command(
+        name="add_moderation_override",
+        description="Allow specific moderated content via hash",
+    )
+    @track_command
+    @app_commands.describe(
+        text_hash="Hashed text identifier (from moderation alert)",
+        surface="Limit override to this surface (optional)",
+        stage="Limit override to this stage (player_input/llm_output)",
+        category="Optional Guardian category",
+        notes="Operator notes",
+        expires_hours="Expiration in hours (0 for no expiry)",
+    )
+    async def admin_add_moderation_override(
+        interaction: discord.Interaction,
+        text_hash: str,
+        surface: Optional[str] = None,
+        stage: Optional[str] = None,
+        category: Optional[str] = None,
+        notes: Optional[str] = None,
+        expires_hours: Optional[float] = None,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            entry = service.add_moderation_override(
+                text_hash=text_hash.strip(),
+                surface=surface or None,
+                stage=stage or None,
+                category=category or None,
+                notes=notes,
+                created_by=interaction.user.display_name,
+                duration_hours=expires_hours,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+
+        await interaction.response.send_message(
+            f"Added override #{entry['id']} for {text_hash[:12]} (expires {entry['expires_at'] or 'never'}).",
+            ephemeral=True,
+        )
+
+    @gw_admin.command(name="remove_moderation_override", description="Remove a moderation override")
+    @track_command
+    async def admin_remove_moderation_override(
+        interaction: discord.Interaction,
+        override_id: int,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        if service.remove_moderation_override(override_id):
+            await interaction.response.send_message(
+                f"Removed moderation override #{override_id}.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"Override #{override_id} not found.", ephemeral=True
+            )
+
+    @gw_admin.command(name="moderation_recent", description="Show recent moderation events")
+    @track_command
+    @app_commands.describe(limit="Number of events to display (1-20)")
+    async def admin_recent_moderation(
+        interaction: discord.Interaction,
+        limit: int = 10,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        limit = max(1, min(limit, 20))
+        events = service.recent_moderation_events(limit=limit)
+        if not events:
+            await interaction.response.send_message("No moderation events recorded yet.", ephemeral=True)
+            return
+
+        lines = ["timestamp | stage | surface | severity | category | hash | actor | reason"]
+        for event in events:
+            lines.append(
+                f"{event.get('timestamp')} | {event.get('stage')} | {event.get('surface')} | "
+                f"{event.get('severity')} | {event.get('category') or '—'} | {event.get('text_hash')[:12]} | "
+                f"{event.get('actor') or '—'} | {event.get('reason') or ''}"
+            )
+        content = "\n".join(lines)
+        if len(content) > 1800:
+            buffer = io.BytesIO(content.encode("utf-8"))
+            buffer.seek(0)
+            await interaction.response.send_message(
+                "Recent moderation events exported.",
+                file=discord.File(buffer, filename="moderation_events.txt"),
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(f"```
+{content}
+```", ephemeral=True)
+
     @gw_admin.command(
         name="calibration_snapshot",
         description="Generate and upload a calibration snapshot for tuning",

@@ -5,12 +5,12 @@ import logging
 import os
 import random
 import time
+import threading
 from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-import threading
 
 from .config import Settings, get_settings
 from .expeditions import ExpeditionResolver, FailureTables
@@ -184,7 +184,9 @@ class GameService:
         self._admin_notifications: deque[str] = deque()
         self._telemetry = get_telemetry()
         self._latest_symposium_scoring: List[Dict[str, object]] = []
+        self._moderation_log: deque[Dict[str, Any]] = deque(maxlen=50)
         self._moderator = GuardianModerator()
+        self._load_moderation_overrides()
         self._auto_seed = auto_seed
         if auto_seed:
             if not any(True for _ in self.state.all_scholars()):
@@ -216,11 +218,27 @@ class GameService:
         actor: Optional[str],
         decision: ModerationDecision,
         telemetry_event: str,
+        text: str,
+        stage: str,
     ) -> None:
         detail = decision.reason or "Content blocked by moderation"
         actor_label = actor or "unknown actor"
-        note = f"🛡️ Moderation blocked {surface} from {actor_label}: {detail}"
+        text_hash = decision.text_hash or GuardianModerator.compute_hash(text)
+        snippet = text.strip().replace("\n", " ")[:140]
+        note = (
+            f"🛡️ Moderation blocked {surface} from {actor_label}: {detail}\n"
+            f"hash={text_hash[:12]} stage={stage} snippet=\"{snippet}\""
+        )
         self._queue_admin_notification(note)
+        self._record_moderation_event(
+            severity=decision.severity,
+            decision=decision,
+            text_hash=text_hash,
+            surface=surface,
+            actor=actor,
+            stage=stage,
+            text=text,
+        )
         try:
             self._telemetry.track_system_event(
                 telemetry_event,
@@ -229,6 +247,46 @@ class GameService:
             )
         except Exception:  # pragma: no cover - telemetry should not fail moderation flow
             logger.debug("Telemetry tracking for moderation block failed", exc_info=True)
+
+    def _record_moderation_event(
+        self,
+        *,
+        severity: str,
+        decision: ModerationDecision,
+        text_hash: str,
+        surface: str,
+        actor: Optional[str],
+        stage: str,
+        text: str,
+    ) -> None:
+        timestamp = datetime.now(timezone.utc)
+        snippet = text.strip().replace("\n", " ")[:140]
+        metadata = decision.metadata or {}
+        event = {
+            "timestamp": timestamp,
+            "severity": severity,
+            "surface": surface,
+            "actor": actor,
+            "stage": stage,
+            "category": decision.category,
+            "reason": decision.reason,
+            "text_hash": text_hash,
+            "metadata": metadata,
+            "snippet": snippet,
+        }
+        self._moderation_log.appendleft(event)
+        try:
+            self._telemetry.track_moderation_event(
+                surface=surface,
+                stage=stage,
+                category=decision.category or "unspecified",
+                severity=severity,
+                actor=actor,
+                text_hash=text_hash,
+                source=metadata.get("source"),
+            )
+        except Exception:  # pragma: no cover - telemetry failure should not block flow
+            logger.debug("Telemetry tracking for moderation event failed", exc_info=True)
 
     def _moderate_player_text(
         self,
@@ -245,20 +303,26 @@ class GameService:
             actor=actor,
             stage="player_input",
         )
+        text_hash = decision.text_hash or GuardianModerator.compute_hash(text.strip())
         if not decision.allowed:
             self._handle_blocked_content(
                 surface=surface,
                 actor=actor,
                 decision=decision,
                 telemetry_event="alert_moderation_player_blocked",
+                text=text,
+                stage="player_input",
             )
             raise GameService.ModerationRejectedError(decision.reason or "Content blocked")
         if decision.severity == "warn":
-            logger.info(
-                "Moderation warning for %s by %s: %s",
-                surface,
-                actor,
-                decision.metadata,
+            self._record_moderation_event(
+                severity="warn",
+                decision=decision,
+                text_hash=text_hash,
+                surface=surface,
+                actor=actor,
+                stage="player_input",
+                text=text,
             )
 
     def _moderate_generated_text(
@@ -275,12 +339,17 @@ class GameService:
             actor=actor,
             stage="llm_output",
         )
+        text_hash = decision.text_hash or GuardianModerator.compute_hash(generated.strip())
         if decision.allowed:
             if decision.severity == "warn":
-                logger.info(
-                    "Moderation warning for generated %s: %s",
-                    surface,
-                    decision.metadata,
+                self._record_moderation_event(
+                    severity="warn",
+                    decision=decision,
+                    text_hash=text_hash,
+                    surface=surface,
+                    actor=actor,
+                    stage="llm_output",
+                    text=generated,
                 )
             return generated, decision
 
@@ -289,6 +358,8 @@ class GameService:
             actor=actor,
             decision=decision,
             telemetry_event="alert_moderation_llm_blocked",
+            text=generated,
+            stage="llm_output",
         )
         return fallback, decision
 
@@ -5279,6 +5350,98 @@ class GameService:
 
         return summary
 
+    def list_moderation_overrides(
+        self,
+        *,
+        include_expired: bool = False,
+    ) -> List[Dict[str, Any]]:
+        overrides = self.state.list_moderation_overrides(include_expired=include_expired)
+        results: List[Dict[str, Any]] = []
+        for override in overrides:
+            entry = dict(override)
+            created_at = entry.get("created_at")
+            if isinstance(created_at, datetime):
+                entry["created_at"] = created_at.isoformat()
+            expires_at = entry.get("expires_at")
+            if isinstance(expires_at, datetime):
+                entry["expires_at"] = expires_at.isoformat()
+            results.append(entry)
+        return results
+
+    def add_moderation_override(
+        self,
+        *,
+        text_hash: str,
+        surface: Optional[str],
+        stage: Optional[str],
+        category: Optional[str],
+        notes: Optional[str],
+        created_by: Optional[str],
+        duration_hours: Optional[float],
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        expires_at = None
+        if duration_hours and duration_hours > 0:
+            expires_at = now + timedelta(hours=duration_hours)
+        override_id = self.state.add_moderation_override(
+            text_hash=text_hash,
+            surface=surface,
+            stage=stage,
+            category=category,
+            notes=notes,
+            created_by=created_by,
+            expires_at=expires_at,
+            now=now,
+        )
+        entry = {
+            "id": override_id,
+            "text_hash": text_hash,
+            "surface": surface,
+            "stage": stage,
+            "category": category,
+            "notes": notes,
+            "created_by": created_by,
+            "created_at": now.isoformat(),
+            "expires_at": expires_at.isoformat() if expires_at else None,
+        }
+        self._moderator.add_allowlist_entry(
+            {
+                "text_hash": text_hash,
+                "surface": surface,
+                "stage": stage,
+                "category": category,
+                "expires_at": entry["expires_at"],
+            }
+        )
+        self._queue_admin_notification(
+            f"✅ Added moderation override #{override_id} for {text_hash[:12]} (stage={stage or 'any'}, category={category or 'any'})"
+        )
+        return entry
+
+    def remove_moderation_override(self, override_id: int) -> bool:
+        overrides = self.state.list_moderation_overrides(include_expired=True)
+        entry = next((item for item in overrides if item.get("id") == override_id), None)
+        if not entry:
+            return False
+        removed = self.state.remove_moderation_override(override_id)
+        if removed:
+            self._moderator.remove_allowlist_entry(entry.get("text_hash", ""))
+            self._queue_admin_notification(
+                f"🧹 Removed moderation override #{override_id} ({entry.get('text_hash', '')[:12]})"
+            )
+        return removed
+
+    def recent_moderation_events(self, limit: int = 10) -> List[Dict[str, Any]]:
+        limited = list(self._moderation_log)[:limit]
+        results: List[Dict[str, Any]] = []
+        for event in limited:
+            entry = dict(event)
+            ts = entry.get("timestamp")
+            if isinstance(ts, datetime):
+                entry["timestamp"] = ts.isoformat()
+            results.append(entry)
+        return results
+
     def pause_game(
         self,
         reason: Optional[str] = None,
@@ -5599,6 +5762,22 @@ class GameService:
                     payload={"id": scholar.id, "name": scholar.name},
                 )
             )
+
+    def _load_moderation_overrides(self) -> None:
+        overrides = self.state.active_moderation_overrides()
+        sanitized: List[Dict[str, Any]] = []
+        for entry in overrides:
+            expires_at = entry.get("expires_at")
+            sanitized.append(
+                {
+                    "text_hash": entry.get("text_hash"),
+                    "surface": entry.get("surface"),
+                    "stage": entry.get("stage"),
+                    "category": entry.get("category"),
+                    "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else None,
+                }
+            )
+        self._moderator.load_allowlist(sanitized)
 
     def _progress_careers(self) -> List[PressRelease]:
         """Progress careers only for scholars with active mentorships."""

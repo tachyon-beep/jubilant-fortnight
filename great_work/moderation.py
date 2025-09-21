@@ -8,8 +8,10 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ class ModerationDecision:
     category: Optional[str] = None
     metadata: Dict[str, Any] | None = None
     raw: Any | None = None
+    text_hash: Optional[str] = None
 
 
 class GuardianModerator:
@@ -81,6 +84,7 @@ class GuardianModerator:
         )
         self._blocklist = {term.lower() for term in self._DEFAULT_BLOCKLIST}
         self._suspect_patterns = {term.lower() for term in self._DEFAULT_SUSPECT_PATTERNS}
+        self._allowlist: Dict[str, Dict[str, Any]] = {}
 
         self._local_model_path: Optional[Path] = None
         self._local_pipeline = None
@@ -103,6 +107,60 @@ class GuardianModerator:
     def enabled(self) -> bool:
         return self._enabled
 
+    @staticmethod
+    def compute_hash(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def load_allowlist(self, entries: Iterable[Dict[str, Any]]) -> None:
+        self._allowlist = {}
+        for entry in entries:
+            text_hash = entry.get("text_hash")
+            if not text_hash:
+                continue
+            self._allowlist[text_hash] = dict(entry)
+
+    def add_allowlist_entry(self, entry: Dict[str, Any]) -> None:
+        text_hash = entry.get("text_hash")
+        if not text_hash:
+            return
+        self._allowlist[text_hash] = dict(entry)
+
+    def remove_allowlist_entry(self, text_hash: str) -> None:
+        self._allowlist.pop(text_hash, None)
+
+    def _is_allowlisted(
+        self,
+        *,
+        text_hash: str,
+        surface: str,
+        stage: str,
+        category: Optional[str],
+        now: Optional[datetime] = None,
+    ) -> bool:
+        entry = self._allowlist.get(text_hash)
+        if not entry:
+            return False
+        expires_at = entry.get("expires_at")
+        if expires_at:
+            try:
+                expires_dt = datetime.fromisoformat(expires_at)
+            except ValueError:
+                expires_dt = None
+            if expires_dt is not None:
+                current = now or datetime.now(timezone.utc)
+                if expires_dt < current:
+                    return False
+        stage_override = entry.get("stage")
+        if stage_override and stage_override != stage:
+            return False
+        surface_override = entry.get("surface")
+        if surface_override and surface_override != surface:
+            return False
+        category_override = entry.get("category")
+        if category_override and category and category_override != category:
+            return False
+        return True
+
     def review(
         self,
         text: str,
@@ -115,7 +173,25 @@ class GuardianModerator:
 
         cleaned = text.strip()
         if not cleaned:
-            return ModerationDecision(True)
+            return ModerationDecision(True, metadata={"suspect": False}, text_hash=self.compute_hash(""))
+
+        text_hash = self.compute_hash(cleaned)
+        now = datetime.now(timezone.utc)
+        if self._is_allowlisted(
+            text_hash=text_hash,
+            surface=surface,
+            stage=stage,
+            category=None,
+            now=now,
+        ):
+            metadata = {
+                "surface": surface,
+                "actor": actor,
+                "stage": stage,
+                "source": "allowlist",
+                "text_hash": text_hash,
+            }
+            return ModerationDecision(True, severity="allow", metadata=metadata, text_hash=text_hash)
 
         prefilter_decision = self._prefilter(cleaned)
         if not prefilter_decision.allowed:
@@ -126,8 +202,10 @@ class GuardianModerator:
                     "actor": actor,
                     "stage": stage,
                     "source": "prefilter",
+                    "text_hash": text_hash,
                 }
             )
+            prefilter_decision.text_hash = text_hash
             return prefilter_decision
 
         should_call_guardian = self._always_call_guardian or prefilter_decision.metadata.get(
@@ -135,30 +213,56 @@ class GuardianModerator:
         )
 
         if not self.enabled:
-            return ModerationDecision(True)
+            return ModerationDecision(True, metadata={"suspect": prefilter_decision.metadata.get("suspect", False), "text_hash": text_hash}, text_hash=text_hash)
 
         if not should_call_guardian:
-            return ModerationDecision(True)
+            return ModerationDecision(True, metadata={"suspect": False, "text_hash": text_hash}, text_hash=text_hash)
 
         if self._mode == "local":
             response = self._score_local(cleaned)
         else:
             response = self._call_guardian(cleaned, surface=surface, actor=actor, stage=stage)
         if response is None:
-            return ModerationDecision(True)
+            return ModerationDecision(True, metadata={"suspect": True, "text_hash": text_hash}, text_hash=text_hash)
 
         violations = [entry for entry in response if entry.get("label", "").lower().startswith("y")]
         if not violations:
-            return ModerationDecision(True, raw=response)
+            metadata = {
+                "surface": surface,
+                "actor": actor,
+                "stage": stage,
+                "source": "guardian" if self._mode != "local" else "guardian_local",
+                "violations": violations,
+                "text_hash": text_hash,
+            }
+            return ModerationDecision(True, severity="allow", metadata=metadata, raw=response, text_hash=text_hash)
 
         top = violations[0]
         reason = top.get("category", "guardian_flagged")
+        if self._is_allowlisted(
+            text_hash=text_hash,
+            surface=surface,
+            stage=stage,
+            category=reason,
+            now=now,
+        ):
+            metadata = {
+                "surface": surface,
+                "actor": actor,
+                "stage": stage,
+                "source": "allowlist",
+                "text_hash": text_hash,
+                "overridden_category": reason,
+            }
+            return ModerationDecision(True, severity="allow", metadata=metadata, raw=response, text_hash=text_hash)
+
         metadata = {
             "surface": surface,
             "actor": actor,
             "stage": stage,
             "source": "guardian" if self._mode != "local" else "guardian_local",
             "violations": violations,
+            "text_hash": text_hash,
         }
         return ModerationDecision(
             allowed=False,
@@ -167,6 +271,7 @@ class GuardianModerator:
             category=reason,
             metadata=metadata,
             raw=response,
+            text_hash=text_hash,
         )
 
     # ------------------------------------------------------------------

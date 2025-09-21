@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -63,3 +64,25 @@ def test_manage_orders_summary(tmp_path, capsys) -> None:
     payload = json.loads(mock_print.call_args.args[0])
     assert payload["total"] == 1
     assert payload["by_type"] == {"mentorship_activation": 1}
+
+
+def test_moderation_override_roundtrip(tmp_path) -> None:
+    state = _init_state(tmp_path)
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    override_id = state.add_moderation_override(
+        text_hash="abc123",
+        surface="press",
+        stage="llm_output",
+        category="Hate",
+        notes="test",
+        created_by="mod",
+        expires_at=now + timedelta(hours=2),
+        now=now,
+    )
+    overrides = state.list_moderation_overrides()
+    assert len(overrides) == 1
+    entry = overrides[0]
+    assert entry["id"] == override_id
+    assert entry["text_hash"] == "abc123"
+    assert state.remove_moderation_override(override_id) is True
+    assert not state.list_moderation_overrides()

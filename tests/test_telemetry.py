@@ -271,6 +271,34 @@ def test_get_order_backlog_events_filters_and_limits():
         assert completed and all(record["event"] == "update:completed" for record in completed)
 
 
+def test_track_moderation_event_summary(tmp_path):
+    collector = TelemetryCollector(Path(tmp_path) / "moderation.db")
+    collector.track_moderation_event(
+        surface="press",
+        stage="llm_output",
+        category="Hate",
+        severity="block",
+        actor="mod",
+        text_hash="abc",
+        source="guardian",
+    )
+    collector.track_moderation_event(
+        surface="status",
+        stage="player_input",
+        category="Profanity",
+        severity="warn",
+        actor="player",
+        text_hash="def",
+        source="prefilter",
+    )
+    collector.flush()
+
+    summary = collector.get_moderation_summary(hours=1)
+    assert summary["totals"]["count"] == 2
+    assert summary["totals"]["by_category"]["Hate"] == 1
+    assert summary["totals"]["by_severity"]["block"] == 1
+
+
 def test_track_system_event_alert_routing(monkeypatch):
     """Alert-prefixed system events trigger the alert router with cooldown handling."""
     monkeypatch.setenv("GREAT_WORK_ALERT_COOLDOWN_SECONDS", "60")

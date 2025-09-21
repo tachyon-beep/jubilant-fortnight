@@ -102,7 +102,7 @@ Last Updated: 2025-09-21 (Guardian moderation, seasonal telemetry)
 
 ## 9. LLM Narrative Integration – **Partial / Safety backlog**
    - `LLMClient` now orchestrates expedition launches/resolutions, defection negotiations, symposium updates, mentorship beats, theory submissions, table-talk posts, and admin notices with persona prompts, retries, pause detection, and metadata captured in press records.【F:great_work/service.py†L300-L1080】【F:great_work/service.py†L553-L704】【F:great_work/service.py†L631-L704】【F:great_work/llm_client.py†L1-L400】【F:tests/test_game_service.py†L80-L196】【F:tests/test_symposium.py†L20-L69】
-   - **Remaining work:** calibrate Guardian categories/thresholds, surface moderation override tooling for operators, and expand the pause/resume playbook around LLM failures.
+   - Moderation tooling now exposes hashed overrides via `/gw_admin moderation_overrides` and `python -m great_work.tools.manage_orders`, with calibration summaries available through `python -m great_work.tools.calibrate_moderation`. **Remaining work:** tune Guardian thresholds against live scores and expand the pause/resume playbook once playtest data arrives.
 
 ## 10. Multi-layer Press Integration – **Partial / Template backlog**
    - Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, and admin flows invoke `MultiPressGenerator`, queuing delayed gossip, faction statements, and analysis pieces that publish over time via the scheduled press queue, with digest highlights summarising upcoming drops.【F:great_work/service.py†L300-L2470】【F:great_work/multi_press.py†L320-L1120】【F:great_work/state.py†L344-L720】

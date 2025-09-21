@@ -5,6 +5,7 @@ This guide outlines the configuration required to run The Great Work in producti
 Terminology:
 - Orders dispatcher — shared delayed-action queue backed by the `orders` table.
 - Gazette scheduler — APScheduler jobs that run digests and weekly symposia.
+- Narrative assets (YAML copy and tone packs) ship under CC BY 4.0; review `docs/NARRATIVE_LICENSE.md` before publishing new content to ensure attribution requirements are met.
 
 ## 1. Environment Variables
 
