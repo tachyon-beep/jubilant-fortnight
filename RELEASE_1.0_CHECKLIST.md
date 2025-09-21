@@ -13,7 +13,6 @@
 ### Configuration Files
 - ✅ `.env.example` - Environment variable template
 - ✅ `docker-compose.yml` - Container orchestration
-- ✅ `.codacy.yml` - Code quality configuration
 - ✅ `.markdownlint.json` - Markdown linting rules
 - ✅ `.mcp.json` - MCP configuration
 
@@ -43,7 +42,7 @@
 ### Development Notes
 - ❌ `PRODUCTION_BUGS_FOUND.md` - Internal development notes
 - ❌ `TEST_CLEANUP_SUMMARY.md` - Internal test cleanup notes
-- ❌ `AGENTS.md` - Internal AI agent notes (or move to .claude/)
+- ❌ `AGENTS.md` - Internal AI agent notes (move to docs/archive/ if still needed)
 
 ### IDE Configuration
 - ❌ `.vscode/` - VS Code settings (user-specific)
