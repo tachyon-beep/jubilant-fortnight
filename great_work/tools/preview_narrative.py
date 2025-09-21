@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
-
-import yaml
+from typing import Any, Dict, List, Sequence
 
 from .validate_narrative import (
-    CANONICAL_PATHS,
     _load_yaml,
 )
 

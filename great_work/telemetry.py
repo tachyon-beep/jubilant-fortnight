@@ -1122,6 +1122,7 @@ class TelemetryCollector:
             where_clause += " AND json_extract(tags, '$.event') = ?"
             params.append(event)
 
+        # nosec B608 - where clause built from constant fragments and uses bound parameters
         query = f"""
             SELECT
                 name,

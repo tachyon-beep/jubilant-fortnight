@@ -1,18 +1,18 @@
 """Tests for LLM client integration."""
-import pytest
 import asyncio
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from great_work.llm_client import (
-    LLMConfig,
-    LLMClient,
     ContentModerator,
+    LLMClient,
+    LLMConfig,
+    LLMGenerationError,
     SafetyLevel,
     enhance_press_release,
-    enhance_press_release_sync,
     get_llm_client,
-    LLMGenerationError,
 )
 
 
@@ -44,8 +44,8 @@ def test_llm_config_defaults():
     assert config.api_key == "not-needed-for-local"
     assert config.model_name == "local-model"
     assert config.temperature == 0.8
-    assert config.use_fallback_templates == True
-    assert config.safety_enabled == True
+    assert config.use_fallback_templates
+    assert config.safety_enabled
     assert config.mock_mode is False
     assert config.retry_schedule is None
 

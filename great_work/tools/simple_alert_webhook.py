@@ -37,8 +37,8 @@ class AlertWebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"{\"status\": \"ok\"}")
 
-    def log_message(self, format: str, *args) -> None:  # noqa: A003 - signature fixed by BaseHTTPRequestHandler
-        logger.debug("HTTP: " + format, *args)
+    def log_message(self, message_format: str, *args) -> None:  # BaseHTTPRequestHandler calls this with positional args
+        logger.debug("HTTP: " + message_format, *args)
 
 
 def run_server(host: str, port: int) -> None:

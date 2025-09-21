@@ -1,7 +1,7 @@
 """Test conference system implementation."""
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
 
 from great_work.models import ConfidenceLevel
 from great_work.service import GameService

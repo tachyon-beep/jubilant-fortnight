@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import time
 
 import pytest
 
@@ -25,9 +25,6 @@ class DummyService:
 
     def upcoming_press(self, *, limit: int = 5, within_hours: int = 48) -> list[dict]:  # pragma: no cover - stub
         return []
-
-    def create_digest_highlights(self, *, now=None, limit: int = 5, within_hours: int = 24):  # pragma: no cover - stub
-        return None
 
     def create_digest_highlights(self, *, now=None, limit: int = 5, within_hours: int = 24):  # pragma: no cover - stub
         return None

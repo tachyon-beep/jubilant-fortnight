@@ -6,19 +6,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from great_work.llm_client import LLMGenerationError
 from great_work.models import (
     ConfidenceLevel,
     ExpeditionOutcome,
-    Player,
     ExpeditionPreparation,
     ExpeditionResult,
+    Player,
     PressRelease,
     Scholar,
     ScholarStats,
 )
-from great_work.service import ExpeditionOrder
-from great_work.service import GameService
-from great_work.llm_client import LLMGenerationError
+from great_work.service import ExpeditionOrder, GameService
 
 os.environ.setdefault("LLM_MODE", "mock")
 

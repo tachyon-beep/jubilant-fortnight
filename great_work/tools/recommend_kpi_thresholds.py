@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, Tuple

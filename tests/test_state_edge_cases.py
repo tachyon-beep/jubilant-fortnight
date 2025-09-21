@@ -23,7 +23,7 @@ from great_work.state import GameState
 def test_gamestate_init_creates_database_structure(tmp_path):
     """GameState initialization should create all required tables."""
     db_path = tmp_path / "test.db"
-    state = GameState(db_path=db_path, start_year=1923)
+    GameState(db_path=db_path, start_year=1923)
 
     # Verify database structure
     with sqlite3.connect(db_path) as conn:

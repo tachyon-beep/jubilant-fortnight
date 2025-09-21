@@ -1,7 +1,7 @@
 """Tests for recruitment odds preview and calculations."""
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import pytest
 

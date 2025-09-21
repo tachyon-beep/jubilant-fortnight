@@ -60,8 +60,6 @@ def test_cli_output(tmp_path: Path, monkeypatch) -> None:
         ],
     }))
 
-    outputs: dict[str, Path] = {}
-
     def fake_parse_args():
         return type(
             "Args",

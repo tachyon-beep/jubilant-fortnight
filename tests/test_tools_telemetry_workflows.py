@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 
 from great_work.telemetry import TelemetryCollector
-from great_work.tools import generate_sample_telemetry as generate_sample_module
 from great_work.tools import export_product_metrics as export_product_metrics_module
+from great_work.tools import generate_sample_telemetry as generate_sample_module
 from great_work.tools.recommend_kpi_thresholds import (
     apply_thresholds,
     recommend_thresholds,

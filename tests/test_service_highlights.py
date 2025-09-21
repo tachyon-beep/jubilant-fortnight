@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from great_work.models import PressRelease
 from great_work.service import GameService
 
-
 os.environ.setdefault("LLM_MODE", "mock")
 
 

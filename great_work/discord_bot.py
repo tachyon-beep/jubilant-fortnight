@@ -1,23 +1,23 @@
 """Discord bot entry point for The Great Work."""
 from __future__ import annotations
 
+import asyncio
+import atexit
 import io
 import json
-import atexit
-import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .analytics import collect_calibration_snapshot, write_calibration_snapshot
-from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease, PressRecord
+from .models import ConfidenceLevel, ExpeditionPreparation, PressRecord, PressRelease
 from .scheduler import GazetteScheduler
 from .service import GameService
 from .telemetry import get_telemetry
@@ -405,49 +405,64 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         if scheduler is None and any(x is not None for x in (router.gazette, router.admin, router.upcoming)):
             publisher = None
             if router.gazette is not None:
-                publisher = lambda press: asyncio.run_coroutine_threadsafe(
-                    _post_to_channel(
-                        bot,
-                        router.gazette,
-                        _format_press(press),
-                        purpose="gazette",
-                    ),
-                    bot.loop,
-                )
+
+                def publish_gazette(press: PressRecord) -> asyncio.Future:
+                    return asyncio.run_coroutine_threadsafe(
+                        _post_to_channel(
+                            bot,
+                            router.gazette,
+                            _format_press(press),
+                            purpose="gazette",
+                        ),
+                        bot.loop,
+                    )
+
+                publisher = publish_gazette
 
             admin_publisher = None
             admin_file_publisher = None
             upcoming_publisher = None
             if router.admin is not None:
-                admin_publisher = lambda message: asyncio.run_coroutine_threadsafe(
-                    _post_to_channel(
-                        bot,
-                        router.admin,
-                        message,
-                        purpose="admin",
-                    ),
-                    bot.loop,
-                )
-                admin_file_publisher = lambda path, caption: asyncio.run_coroutine_threadsafe(
-                    _post_file_to_channel(
-                        bot,
-                        router.admin,
-                        path,
-                        caption=caption,
-                        purpose="admin",
-                    ),
-                    bot.loop,
-                )
+
+                def publish_admin(message: str) -> asyncio.Future:
+                    return asyncio.run_coroutine_threadsafe(
+                        _post_to_channel(
+                            bot,
+                            router.admin,
+                            message,
+                            purpose="admin",
+                        ),
+                        bot.loop,
+                    )
+
+                def publish_admin_file(path: Path, caption: str) -> asyncio.Future:
+                    return asyncio.run_coroutine_threadsafe(
+                        _post_file_to_channel(
+                            bot,
+                            router.admin,
+                            path,
+                            caption=caption,
+                            purpose="admin",
+                        ),
+                        bot.loop,
+                    )
+
+                admin_publisher = publish_admin
+                admin_file_publisher = publish_admin_file
             if router.upcoming is not None:
-                upcoming_publisher = lambda message: asyncio.run_coroutine_threadsafe(
-                    _post_to_channel(
-                        bot,
-                        router.upcoming,
-                        message,
-                        purpose="upcoming",
-                    ),
-                    bot.loop,
-                )
+
+                def publish_upcoming(message: str) -> asyncio.Future:
+                    return asyncio.run_coroutine_threadsafe(
+                        _post_to_channel(
+                            bot,
+                            router.upcoming,
+                            message,
+                            purpose="upcoming",
+                        ),
+                        bot.loop,
+                    )
+
+                upcoming_publisher = publish_upcoming
 
             scheduler = GazetteScheduler(
                 service,
@@ -1713,8 +1728,9 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @track_command
     async def archive_link(interaction: discord.Interaction, headline_search: str) -> None:
         """Return permalink for specific press release matching the search term."""
-        from .web_archive import WebArchive
         from pathlib import Path
+
+        from .web_archive import WebArchive
 
         # Search for matching press releases
         all_press = service.state.list_press_releases_with_ids()

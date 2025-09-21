@@ -7,7 +7,6 @@ from typing import Any, Dict
 
 import yaml
 
-
 DEFAULT_SETTINGS_PATH = Path(__file__).parent / "data" / "settings.yaml"
 
 

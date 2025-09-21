@@ -1,20 +1,21 @@
 """High-level game service orchestrating commands."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import random
-import time
 import threading
-from collections import deque, defaultdict
-import hashlib
+import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .config import Settings, get_settings
 from .expeditions import ExpeditionResolver, FailureTables
+from .llm_client import LLMGenerationError, LLMNotEnabledError, enhance_press_release_sync
 from .models import (
     ConfidenceLevel,
     Event,
@@ -24,46 +25,44 @@ from .models import (
     MemoryFact,
     OfferRecord,
     Player,
-    Scholar,
     PressRecord,
     PressRelease,
+    Scholar,
     SidewaysEffectType,
     TheoryRecord,
 )
+from .moderation import GuardianModerator, ModerationDecision
+from .multi_press import MultiPressGenerator
 from .press import (
+    ArchiveEndowmentContext,
     BulletinContext,
+    DefectionContext,
+    ExpeditionContext,
+    FactionInvestmentContext,
+    FactionProjectUpdateContext,
     GossipContext,
     OutcomeContext,
-    ExpeditionContext,
     RecruitmentContext,
-    DefectionContext,
     SeasonalCommitmentContext,
-    FactionProjectUpdateContext,
-    FactionInvestmentContext,
-    ArchiveEndowmentContext,
     academic_bulletin,
     academic_gossip,
+    archive_endowment,
     defection_notice,
     discovery_report,
-    recruitment_report,
-    retraction_notice,
-    research_manifesto,
-    seasonal_commitment_update,
-    seasonal_commitment_complete,
-    faction_project_update,
-    faction_project_complete,
     faction_investment,
-    archive_endowment,
+    faction_project_complete,
+    faction_project_update,
+    recruitment_report,
+    research_manifesto,
+    retraction_notice,
+    seasonal_commitment_complete,
+    seasonal_commitment_update,
 )
-from .multi_press import MultiPressGenerator
+from .press_tone import get_tone_seed
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
 from .telemetry import get_telemetry
-from .llm_client import enhance_press_release_sync, LLMGenerationError, LLMNotEnabledError
-from .moderation import GuardianModerator, ModerationDecision
-from .press_tone import get_tone_seed
-
 
 logger = logging.getLogger(__name__)
 
@@ -2956,6 +2955,9 @@ class GameService:
             supporters=supporters,
             opposition=opposition,
         )
+        supporter_names = [s.name for s in self.state.all_scholars() if s.id in supporters]
+        opposition_names = [s.name for s in self.state.all_scholars() if s.id in opposition]
+
         self.state.enqueue_order(
             "conference_resolution",
             actor_id=player_id,
@@ -2966,15 +2968,14 @@ class GameService:
                 "confidence": confidence.value,
                 "supporters": supporters,
                 "opposition": opposition,
+                "supporter_names": supporter_names,
+                "opposition_names": opposition_names,
             },
             source_table="conferences",
             source_id=code,
         )
 
         # Generate press release
-        supporter_names = [s.name for s in self.state.all_scholars() if s.id in supporters]
-        opposition_names = [s.name for s in self.state.all_scholars() if s.id in opposition]
-
         quote = f"Conference {code} announced to debate: {theory.theory}"
         press = academic_gossip(
             GossipContext(
@@ -2997,6 +2998,8 @@ class GameService:
                     "confidence": confidence.value,
                     "supporters": supporters,
                     "opposition": opposition,
+                    "supporter_names": supporter_names,
+                    "opposition_names": opposition_names,
                 },
             )
         )

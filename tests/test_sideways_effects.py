@@ -1,8 +1,9 @@
 """Tests for sideways discovery mechanical effects."""
 import os
-import pytest
 from datetime import datetime, timezone
 from typing import List
+
+import pytest
 
 from great_work.expeditions import ExpeditionResolver, FailureTables
 from great_work.models import (
@@ -13,7 +14,7 @@ from great_work.models import (
     SidewaysEffectType,
 )
 from great_work.rng import DeterministicRNG
-from great_work.service import GameService, ExpeditionOrder
+from great_work.service import ExpeditionOrder, GameService
 from great_work.state import GameState
 
 
@@ -37,7 +38,6 @@ class TestSidewaysEffectGeneration:
 
     def test_think_tank_shallow_generates_theory(self):
         """Test that shallow think tank discovery spawns a theory."""
-        rng = DeterministicRNG(42)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=10,
@@ -75,7 +75,6 @@ class TestSidewaysEffectGeneration:
 
     def test_think_tank_deep_generates_conference(self):
         """Test that deep think tank discovery schedules a conference."""
-        rng = DeterministicRNG(43)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=10,
@@ -103,7 +102,6 @@ class TestSidewaysEffectGeneration:
 
     def test_field_shallow_generates_opportunity(self):
         """Test that shallow field discovery creates government opportunity."""
-        rng = DeterministicRNG(44)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=0,
@@ -132,7 +130,6 @@ class TestSidewaysEffectGeneration:
 
     def test_landmark_discovery_major_effects(self):
         """Test that landmark discoveries have major mechanical effects."""
-        rng = DeterministicRNG(45)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=20,
@@ -213,10 +210,11 @@ class TestSidewaysEffectApplication:
             confidence=ConfidenceLevel.SUSPECT,
             prep_depth="shallow",
         )
+        assert press is not None
 
         # Get the player state before resolution
         player = test_service.state.get_player("alice")
-        initial_academic = player.influence.get("Academic", 0)
+        assert player is not None
 
         # Resolve expeditions - this should apply any sideways effects
         releases = test_service.resolve_expeditions()
@@ -236,10 +234,6 @@ class TestSidewaysEffectApplication:
         # Ensure some scholars exist for the expedition
         test_service._ensure_roster()
 
-        # Count initial theories
-        initial_theories = test_service.state.list_theories()
-        initial_count = len(initial_theories)
-
         # Launch expedition that might spawn theories
         scholars = list(test_service.state.all_scholars())[:3]
         team = [s.id for s in scholars]
@@ -256,6 +250,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Check if any theories were spawned (depends on RNG outcome)
         new_theories = test_service.state.list_theories()
@@ -270,7 +265,6 @@ class TestSidewaysEffectApplication:
         test_service._ensure_roster()
 
         player = test_service.state.get_player("charlie")
-        initial_rep = player.reputation
 
         # Launch great project (more likely to have reputation effects)
         scholars = list(test_service.state.all_scholars())[:3]
@@ -292,6 +286,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Check player reputation is still valid
         updated_player = test_service.state.get_player("charlie")
@@ -304,9 +299,6 @@ class TestSidewaysEffectApplication:
         test_service.ensure_player("diana")
         # Ensure some scholars exist for the expedition
         test_service._ensure_roster()
-
-        # Count initial followups
-        initial_followups = test_service.state.list_followups()
 
         # Launch field expedition (can create opportunities)
         scholars = list(test_service.state.all_scholars())[:3]
@@ -324,6 +316,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Just verify the system works - we can't control outcomes
         new_followups = test_service.state.list_followups()
@@ -341,7 +334,6 @@ class TestIntegrationWithExpeditions:
         test_service._ensure_roster()
 
         # Launch expedition
-        player = test_service.state.get_player("eve")
         scholars = list(test_service.state.all_scholars())[:3]
         team = [s.id for s in scholars]
 
@@ -360,7 +352,6 @@ class TestIntegrationWithExpeditions:
         # Get expedition code
         expeditions = list(test_service._pending_expeditions.keys())
         assert len(expeditions) > 0
-        exp_code = expeditions[0]
 
         # Resolve expedition (this should apply sideways effects)
         releases = test_service.resolve_expeditions()

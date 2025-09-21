@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from great_work.expeditions import ExpeditionResolver
-from great_work.models import SidewaysEffectType, ExpeditionPreparation
+from great_work.models import ExpeditionPreparation, SidewaysEffectType
 from great_work.rng import DeterministicRNG
 
 

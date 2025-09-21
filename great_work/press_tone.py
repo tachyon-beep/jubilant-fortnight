@@ -4,9 +4,15 @@ from __future__ import annotations
 import os
 import random
 from pathlib import Path
-from typing import Dict, Optional, Union, List
+from typing import Dict, List, Optional, Union
 
 import yaml
+
+_RANDOM = random.Random()  # nosec B311 - pseudo-RNG acceptable for tone sampling
+
+
+def _random_choice(seq):
+    return _RANDOM.choice(seq)
 
 
 _TONE_PACK_PATH = Path(__file__).parent / "data" / "press_tone_packs.yaml"
@@ -80,7 +86,7 @@ class ToneLibrary:
                 choices = [item for item in value if item]
                 if not choices:
                     continue
-                resolved[key] = random.choice(choices)
+                resolved[key] = _random_choice(choices)
             else:
                 if value:
                     resolved[key] = value

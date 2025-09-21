@@ -1,16 +1,16 @@
 """Tests for web archive generation."""
 from __future__ import annotations
 
-import tempfile
 import hashlib
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from great_work.models import PressRecord, PressRelease, Scholar, Memory, MemoryFact, ScholarStats
+from great_work.models import Memory, MemoryFact, PressRecord, PressRelease, Scholar, ScholarStats
 from great_work.state import GameState
-from great_work.web_archive import WebArchive, ArchivePage
+from great_work.web_archive import ArchivePage, WebArchive
 
 
 @pytest.fixture

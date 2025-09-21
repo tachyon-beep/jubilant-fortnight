@@ -1,8 +1,8 @@
 """Test admin tools implementation."""
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
-import os
 
 from great_work.models import ConfidenceLevel, ExpeditionPreparation
 from great_work.service import GameService
@@ -95,6 +95,7 @@ def test_admin_tools():
                 political_friction=0,
             )
         )
+        assert expedition_press is not None
 
         # Now cancel it
         press = service.admin_cancel_expedition(

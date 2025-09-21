@@ -5,10 +5,9 @@ import argparse
 import sys
 from numbers import Real
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, List, Sequence
 
 import yaml
-
 
 DEFAULT_FILES = [
     Path("great_work/data/press_tone_packs.yaml"),

@@ -5,9 +5,9 @@ import hashlib
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Dict, List
-from html import escape
 
 from .models import Event, PressRecord, Scholar
 from .state import GameState

@@ -5,23 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from great_work.multi_press import (
-    PressDepth,
-    PressLayer,
-    MultiPressGenerator
-)
-from great_work.models import (
-    Scholar,
-    ExpeditionResult,
-    ExpeditionOutcome,
-    PressRelease
-)
-from great_work.press import (
-    ExpeditionContext,
-    OutcomeContext,
-    DefectionContext,
-    BulletinContext
-)
+from great_work.models import ExpeditionOutcome, ExpeditionResult, PressRelease, Scholar
+from great_work.multi_press import MultiPressGenerator, PressDepth, PressLayer
+from great_work.press import BulletinContext, DefectionContext, ExpeditionContext, OutcomeContext
 
 
 def test_press_depth_determination():
@@ -153,11 +139,11 @@ def test_generate_defection_layers():
     assert layers[0].delay_minutes == 0
 
     # Should include colleague reactions
-    gossip_layers = [l for l in layers if l.type == "academic_gossip"]
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
     assert len(gossip_layers) > 0
 
     # Should include faction statements for extensive coverage
-    statement_layers = [l for l in layers if l.type == "faction_statement"]
+    statement_layers = [layer for layer in layers if layer.type == "faction_statement"]
     assert len(statement_layers) > 0
 
 
@@ -228,11 +214,11 @@ def test_generate_conference_layers():
     assert layers[0].delay_minutes == 0
 
     # Should have debate quotes for non-minimal depth
-    gossip_layers = [l for l in layers if l.type == "academic_gossip"]
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
     assert len(gossip_layers) > 0
 
     # Should have outcome for extensive depth
-    outcome_layers = [l for l in layers if l.type == "conference_outcome"]
+    outcome_layers = [layer for layer in layers if layer.type == "conference_outcome"]
     assert len(outcome_layers) > 0
 
 

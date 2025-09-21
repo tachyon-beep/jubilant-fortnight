@@ -28,6 +28,7 @@ class DeterministicRNG:
 
     def __init__(self, seed: int) -> None:
         self._seed = seed & 0xFFFFFFFF
+        # nosec B311 - deterministic pseudo-RNG acceptable for game mechanics
         self._random = random.Random(self._seed)
 
     @property

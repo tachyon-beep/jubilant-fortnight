@@ -1,17 +1,17 @@
 """Moderation utilities for player-facing and generated content."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
-import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
-import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +320,11 @@ class GuardianModerator:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         request = urllib.request.Request(self._endpoint, data=data, headers=headers)
+        parsed_endpoint = urllib.parse.urlparse(self._endpoint)
+        if parsed_endpoint.scheme not in {"http", "https"}:
+            logger.error("Unsupported Guardian endpoint scheme: %s", parsed_endpoint.scheme)
+            return None
+
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read().decode("utf-8")

@@ -1,17 +1,24 @@
 """LLM integration for narrative generation with OpenAI-compatible API."""
 from __future__ import annotations
 
-import os
+import asyncio
 import logging
+import os
 import random
 import threading
-from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+_RANDOM = random.Random()  # nosec B311 - pseudo-RNG acceptable for template selection
+
+
+def _random_choice(seq):
+    return _RANDOM.choice(seq)
 
 
 class LLMGenerationError(RuntimeError):
@@ -245,7 +252,6 @@ Be concise but flavorful. Maximum 2-3 sentences."""
     def _fallback_template(self, context: Dict[str, Any]) -> str:
         """Generate fallback text when LLM is unavailable."""
         # Extract key information from context
-        event_type = context.get("type", "event")
         player = context.get("player", "Unknown")
         action = context.get("action", "performed an action")
 
@@ -256,7 +262,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
             f"In today's developments, {player} {action}.",
         ]
 
-        return random.choice(templates)
+        return _random_choice(templates)
 
     def _mock_generation(self, prompt: str, context: Dict[str, Any], persona_name: Optional[str]) -> str:
         """Return deterministic text in mock mode."""
@@ -279,7 +285,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
             persona_traits=persona_traits,
         )
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(coro)
 

@@ -5,7 +5,6 @@ import os
 
 from great_work.service import GameService
 
-
 os.environ.setdefault("LLM_MODE", "mock")
 
 

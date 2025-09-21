@@ -1,16 +1,21 @@
 """Tests covering the high level game service orchestration."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from great_work.models import ConfidenceLevel, ExpeditionOutcome, ExpeditionPreparation, OfferRecord, PressRelease
-from great_work.service import GameService
+from great_work.models import (
+    ConfidenceLevel,
+    ExpeditionOutcome,
+    ExpeditionPreparation,
+    OfferRecord,
+    PressRelease,
+)
 from great_work.moderation import ModerationDecision
+from great_work.service import GameService
 
 
 def build_service(tmp_path):

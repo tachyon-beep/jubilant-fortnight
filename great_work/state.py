@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections import Counter
 from contextlib import closing
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -21,6 +22,8 @@ from .models import (
 )
 from .scholars import ScholarRepository
 from .telemetry import get_telemetry
+
+logger = logging.getLogger(__name__)
 
 _DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
@@ -1098,7 +1101,7 @@ class GameState:
                     try:
                         self._admin_notifier(f"{prefix}{message}")
                     except Exception:  # pragma: no cover - admin notifications should not break flow
-                        pass
+                        logger.exception("Failed to deliver admin notification: %s", message)
 
     def export_events(self) -> List[Event]:
         events: List[Event] = []
@@ -1900,6 +1903,7 @@ class GameState:
             clause += " AND (expire_at IS NULL OR expire_at > ?)"
             params.append(now.isoformat())
         with closing(sqlite3.connect(self._db_path)) as conn:
+            # nosec B608 - clause fragments are constants and values are bound parameters
             row = conn.execute(
                 f"SELECT COUNT(*) FROM symposium_proposals WHERE {clause}",
                 params,

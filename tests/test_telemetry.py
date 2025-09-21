@@ -1,20 +1,23 @@
 """Tests for telemetry and metrics tracking."""
-import pytest
+import json
 import tempfile
 import time
-import json
 from pathlib import Path
+
+import pytest
 
 from great_work.alerting import AlertRouter, set_alert_router
 from great_work.telemetry import (
-    MetricType,
     MetricEvent,
+    MetricType,
     TelemetryCollector,
     get_telemetry,
-    track_duration
+    track_duration,
 )
 from great_work.tools.recommend_kpi_thresholds import recommend_thresholds
-from great_work.tools.recommend_seasonal_settings import recommend_settings as recommend_seasonal_settings
+from great_work.tools.recommend_seasonal_settings import (
+    recommend_settings as recommend_seasonal_settings,
+)
 
 
 def test_metric_event_creation():
@@ -694,7 +697,6 @@ def test_recommend_kpi_thresholds(tmp_path):
 
     import sqlite3
     import time
-    from great_work.tools.recommend_kpi_thresholds import recommend_thresholds
 
     now = time.time()
 

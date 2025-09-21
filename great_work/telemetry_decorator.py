@@ -1,9 +1,10 @@
 """Discord command telemetry decorator."""
 from __future__ import annotations
 
-import time
 import functools
-from typing import Callable, Any
+import time
+from typing import Any, Callable
+
 import discord
 
 from .telemetry import get_telemetry

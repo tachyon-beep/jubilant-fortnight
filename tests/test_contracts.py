@@ -1,7 +1,7 @@
 """Tests for contract upkeep influence sinks."""
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from great_work.service import GameService
 

@@ -5,7 +5,7 @@ import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from ..service import GameService
 from ..telemetry import TelemetryCollector

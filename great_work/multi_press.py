@@ -3,28 +3,46 @@ from __future__ import annotations
 
 import os
 import random
-from pathlib import Path
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import yaml
 
-from .models import PressRelease, Scholar, ExpeditionOutcome
+from .models import ExpeditionOutcome, PressRelease, Scholar
 from .press import (
     BulletinContext,
-    ExpeditionContext,
-    OutcomeContext,
-    GossipContext,
     DefectionContext,
+    ExpeditionContext,
+    GossipContext,
+    OutcomeContext,
     academic_bulletin,
-    research_manifesto,
-    discovery_report,
-    retraction_notice,
     academic_gossip,
     defection_notice,
+    discovery_report,
+    research_manifesto,
+    retraction_notice,
 )
 from .press_tone import get_tone_seed
+
+_RANDOM = random.Random()  # nosec B311 - pseudo-RNG acceptable for narrative variety
+
+
+def _random_choice(seq):
+    return _RANDOM.choice(seq)
+
+
+def _random_shuffle(seq):
+    _RANDOM.shuffle(seq)
+
+
+def _random_sample(population, k):
+    return _RANDOM.sample(population, k)
+
+
+def _random_randint(a: int, b: int) -> int:
+    return _RANDOM.randint(a, b)
 
 
 _MENTORSHIP_TEMPLATES: Optional[Dict[str, Any]] = None
@@ -339,7 +357,7 @@ class MultiPressGenerator:
 
         if not self._sidecast_arcs:
             return "local_junior"
-        return random.choice(list(self._sidecast_arcs.keys()))
+        return _random_choice(list(self._sidecast_arcs.keys()))
 
     def _sidecast_phase_config(self, arc_key: str, phase: str) -> Dict[str, Any]:
         arc = self._sidecast_arcs.get(arc_key) or {}
@@ -379,7 +397,7 @@ class MultiPressGenerator:
         gossip_entries = cfg.get("gossip") or []
         if gossip_entries:
             fast_pool = list(gossip_entries)
-            random.shuffle(fast_pool)
+            _random_shuffle(fast_pool)
             for idx, delay in enumerate([d for d in self.fast_layer_delays if d > 0][: len(fast_pool)]):
                 template = fast_pool[idx]
                 try:
@@ -506,7 +524,7 @@ class MultiPressGenerator:
         gossip_entries = template.get("gossip") or []
         if gossip_entries:
             pool = list(gossip_entries)
-            random.shuffle(pool)
+            _random_shuffle(pool)
             fast_delays = [d for d in self.fast_layer_delays if d > 0]
             for idx, template_text in enumerate(pool):
                 delay = 0 if idx == 0 else fast_delays[min(idx - 1, len(fast_delays) - 1)] if fast_delays else 0
@@ -581,7 +599,7 @@ class MultiPressGenerator:
             candidates = [opt for opt in options if opt]
             if not candidates:
                 return default
-            return random.choice(candidates)
+            return _random_choice(candidates)
         return default
 
     def _render_template(
@@ -617,7 +635,7 @@ class MultiPressGenerator:
         unique_templates = [tpl for tpl in templates if tpl]
         if not unique_templates:
             return []
-        random.shuffle(unique_templates)
+        _random_shuffle(unique_templates)
         rendered: List[str] = []
         for template in unique_templates[:limit]:
             try:
@@ -678,8 +696,8 @@ class MultiPressGenerator:
                 PressDepth.BREAKING: 6
             }.get(depth, 2)
 
-            for i, scholar in enumerate(random.sample(scholars, min(num_reactions, len(scholars)))):
-                emotion = random.choice(["enthusiasm", "skepticism", "concern", "admiration", "curiosity"])
+            for i, scholar in enumerate(_random_sample(scholars, min(num_reactions, len(scholars)))):
+                emotion = _random_choice(["enthusiasm", "skepticism", "concern", "admiration", "curiosity"])
                 quote = self._generate_reaction_quote(
                     scholar.name,
                     expedition_ctx.objective,
@@ -743,7 +761,7 @@ class MultiPressGenerator:
 
         layers: List[PressLayer] = []
         safe_scholars = scholars[:]
-        random.shuffle(safe_scholars)
+        _random_shuffle(safe_scholars)
 
         if phase == "launch":
             # Curate teaser reactions (delayed)
@@ -834,7 +852,7 @@ class MultiPressGenerator:
         if not isinstance(briefs, list) or not briefs:
             return None
 
-        template = random.choice(briefs)
+        template = _random_choice(briefs)
         headline_template = template.get("headline")
         body_template = template.get("body")
         if not isinstance(headline_template, str) or not isinstance(body_template, str):
@@ -984,7 +1002,7 @@ class MultiPressGenerator:
 
         # Opening announcement
         bulletin_ctx = BulletinContext(
-            bulletin_number=random.randint(1000, 9999),
+            bulletin_number=_random_randint(1000, 9999),
             player=participants[0] if participants else "Unknown",
             theory=theory,
             confidence=confidence,
@@ -1098,7 +1116,7 @@ class MultiPressGenerator:
         fast_templates = phase_cfg.get("fast") or fast_quotes.get(phase, []) or []
         if fast_templates and safe_fast:
             fast_pool = list(fast_templates)
-            random.shuffle(fast_pool)
+            _random_shuffle(fast_pool)
             for idx, delay in enumerate(safe_fast):
                 template = fast_pool[idx % len(fast_pool)]
                 quote = template.format(**context_values)
@@ -1122,7 +1140,7 @@ class MultiPressGenerator:
             headline_template = phase_cfg.get("headline", "Mentorship Briefing: {scholar}")
             headline = headline_template.format(**context_values)
             long_pool = list(long_templates)
-            random.shuffle(long_pool)
+            _random_shuffle(long_pool)
             use_custom_templates = bool(phase_cfg.get("long"))
             for idx, delay in enumerate(safe_long):
                 template = long_pool[idx % len(long_pool)]
@@ -1174,7 +1192,7 @@ class MultiPressGenerator:
 
         safe_fast = [delay for delay in self.fast_layer_delays if delay > 0]
         audience = [obs for obs in observers if obs.id != scholar.id]
-        random.shuffle(audience)
+        _random_shuffle(audience)
         reactions: List[Dict[str, str]] = []
         chance_pct = f"{chance:.0%}"
         outcome_text = "accepts" if success else "declines"
@@ -1364,7 +1382,7 @@ class MultiPressGenerator:
         templates = (self._table_talk_templates or {}).get("table_talk", {})
 
         audience = scholars[:]
-        random.shuffle(audience)
+        _random_shuffle(audience)
         reactions: List[Dict[str, str]] = []
         snippet = message if len(message) <= 120 else message[:117] + "..."
         topic_hint = message.splitlines()[0][:60] if message else "table talk"
@@ -1628,7 +1646,7 @@ class MultiPressGenerator:
             ]
         }
 
-        return random.choice(quotes.get(emotion, ["No comment at this time."]))
+        return _random_choice(quotes.get(emotion, ["No comment at this time."]))
 
     def _generate_symposium_reaction(
         self,
@@ -1651,7 +1669,7 @@ class MultiPressGenerator:
             f"{scholar_name} notes that with {winning_share:.0%} backing, the academy must act decisively on '{topic}'.",
             f"{scholar_name} believes the {option_text} majority on '{topic}' reflects a broader shift in priorities.",
         ]
-        return random.choice(sentiments)
+        return _random_choice(sentiments)
 
     def _generate_defection_reaction(
         self,
@@ -1668,7 +1686,7 @@ class MultiPressGenerator:
             "Loyalty means nothing in today's academic climate, apparently.",
             f"I wish {defector} well in their new position with {new_faction}.",
         ]
-        return random.choice(reactions)
+        return _random_choice(reactions)
 
     def _generate_conference_quote(
         self,
@@ -1710,7 +1728,7 @@ class MultiPressGenerator:
                 f"{commentator} hears {scholar_name} demanded more than {faction} could promise.",
                 f"The lab gossip is that {scholar_name} never intended to leave their current patron.",
             ]
-        return random.choice(options)
+        return _random_choice(options)
 
     def _generate_table_talk_reaction(
         self,
@@ -1736,7 +1754,7 @@ class MultiPressGenerator:
             sentiments.append(
                 f"{commentator} summarises the lengthy missive from {speaker} for the busy scholars."
             )
-        return random.choice(sentiments)
+        return _random_choice(sentiments)
 
     def _find_colleagues(
         self,
@@ -1746,7 +1764,7 @@ class MultiPressGenerator:
     ) -> List[Scholar]:
         """Find colleagues of a scholar (simplified - random selection)."""
         others = [s for s in all_scholars if s.name != scholar.name]
-        return random.sample(others, min(max_colleagues, len(others)))
+        return _random_sample(others, min(max_colleagues, len(others)))
 
     def _generate_analysis_layer(
         self,

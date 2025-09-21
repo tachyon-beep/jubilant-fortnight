@@ -1,7 +1,7 @@
 """Tests for table-talk layered press."""
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from great_work.service import GameService
 

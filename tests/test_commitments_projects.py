@@ -1,8 +1,8 @@
 """Tests for seasonal commitments and faction projects."""
 from __future__ import annotations
 
-from dataclasses import replace
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
