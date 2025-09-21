@@ -9,6 +9,9 @@ This log records documentation shuffles performed while preparing the 1.0.0-rc1 
 | `docs/post_1_0/GAME_ENHANCEMENTS.md` | Consolidated into `docs/ROADMAP.md` (Gameplay & Narrative Enhancements section). |
 | `docs/post_1_0/TELEMETRY_COHORT_COMPARISONS.md` | Consolidated into `docs/ROADMAP.md` (Telemetry Cohort Comparisons). |
 | `docs/post_1_0/USER_TELEMETRY.md` | Consolidated into `docs/ROADMAP.md` (Player Telemetry Portal). |
+| `docs/ai/` | Removed (no longer used for prompt experiments). |
+| `docs/DESIGN_COMMITMENT.md` | Removed (superseded by refreshed `docs/HLD.md` & roadmap). |
+
 
 ## Planned Archive (review after RC sign-off)
 
@@ -18,4 +21,3 @@ This log records documentation shuffles performed while preparing the 1.0.0-rc1 
 | `docs/internal/` scratch notes (if any remain) | Verify relevance; move notable content into `docs/ROADMAP.md` or delete. |
 
 Update this log whenever additional documents are merged, moved, or scheduled for deletion.
-
