@@ -1,5 +1,6 @@
 # The Great Work
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/ad797baa099b49e9b858d388a7948f5f)](https://app.codacy.com/gh/tachyon-beep/great-work?utm_source=github.com&utm_medium=referral&utm_content=tachyon-beep/great-work&utm_campaign=Badge_Grade)
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue)](https://github.com/tachyon-beep/jubilant-fortnight)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 ![Tests](https://img.shields.io/badge/tests-284%20passing-brightgreen)
