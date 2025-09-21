@@ -1,29 +1,55 @@
 #!/usr/bin/env python3
-"""Qdrant vector database manager for The Great Work."""
+"""Qdrant vector database manager for The Great Work.
+
+Adds embedding support via sentence-transformers and upserts vectors.
+"""
 
 import json
 import logging
-from typing import Dict, List
+import os
+from typing import Dict, List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, VectorParams, PointStruct
+
+try:
+    from sentence_transformers import SentenceTransformer
+except Exception as e:  # pragma: no cover - import error surfaced at runtime if used
+    SentenceTransformer = None  # type: ignore[assignment]
+    _st_import_error = e
 
 logger = logging.getLogger(__name__)
 
 # Default configuration matching .mcp.json
 QDRANT_URL = "http://localhost:6333"
 COLLECTION_NAME = "great-work-knowledge"
-VECTOR_SIZE = 384  # for sentence-transformers/all-MiniLM-L6-v2
+DEFAULT_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 
 class QdrantManager:
     """Manages Qdrant collections for The Great Work game knowledge."""
 
-    def __init__(self, url: str = QDRANT_URL, collection: str = COLLECTION_NAME):
-        """Initialize Qdrant client and collection settings."""
+    def __init__(
+        self,
+        url: str = QDRANT_URL,
+        collection: str = COLLECTION_NAME,
+        model_name: str = DEFAULT_MODEL,
+    ):
+        """Initialize Qdrant client, embedding model, and collection settings."""
         self.client = QdrantClient(url=url)
         self.collection_name = collection
-        self.vector_size = VECTOR_SIZE
+        if SentenceTransformer is None:
+            raise RuntimeError(
+                f"sentence-transformers not available: {_st_import_error}. "
+                "Install dependencies and retry."
+            )
+        self.model_name = model_name
+        self.model = SentenceTransformer(self.model_name)
+        try:
+            self.vector_size = int(self.model.get_sentence_embedding_dimension())
+        except Exception:
+            # Fallback if attribute missing (older versions)
+            self.vector_size = len(self.model.encode(["test"], normalize_embeddings=True)[0])
 
     def setup_collection(self) -> bool:
         """Create or verify the knowledge collection exists."""
@@ -50,9 +76,18 @@ class QdrantManager:
             logger.error(f"Failed to setup collection: {e}")
             raise
 
-    def index_game_knowledge(self) -> None:
-        """Index core game knowledge into Qdrant."""
-        knowledge_items = [
+    def _embed(self, text: str) -> List[float]:
+        """Encode text into an embedding vector."""
+        vec = self.model.encode(text, normalize_embeddings=True)
+        return vec.tolist() if hasattr(vec, "tolist") else list(vec)
+
+    def _point(self, pid: int | str, vector: List[float], payload: Dict) -> PointStruct:
+        return PointStruct(id=pid, vector=vector, payload=payload)
+
+    def index_game_knowledge(self, items: Optional[List[Dict]] = None) -> None:
+        """Index core game knowledge into Qdrant with embeddings."""
+        self.setup_collection()
+        knowledge_items = items or [
             {
                 "id": 1,
                 "category": "mechanics",
@@ -115,17 +150,66 @@ class QdrantManager:
             },
         ]
 
-        # Note: In production, you'd use an actual embedding model
-        # For setup, we're just storing the metadata
-        logger.info(f"Ready to index {len(knowledge_items)} knowledge items")
-        logger.info("Note: Actual vector embeddings require the embedding model to be running")
+        points: List[PointStruct] = []
+        for item in knowledge_items:
+            text = f"{item.get('title', '')}\n\n{item.get('content', '')}"
+            vector = self._embed(text)
+            points.append(self._point(item["id"], vector, payload=item))
+
+        try:
+            self.client.upsert(collection_name=self.collection_name, points=points)
+            logger.info("Indexed %d knowledge items into Qdrant", len(points))
+        except Exception as e:
+            logger.error(f"Failed to index knowledge: {e}")
+            raise
 
     def search(self, query: str, limit: int = 5) -> List[Dict]:
-        """Search the knowledge base (requires embedding service)."""
-        # This would use the embedding model specified in .mcp.json
-        # For now, it's a placeholder
-        logger.info(f"Search query: {query}")
-        return []
+        """Semantic search over indexed items using vector similarity."""
+        try:
+            query_vec = self._embed(query)
+            results = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vec,
+                limit=limit,
+            )
+            out: List[Dict] = []
+            for r in results:
+                out.append({
+                    "id": getattr(r, "id", None),
+                    "score": getattr(r, "score", None),
+                    "payload": getattr(r, "payload", None),
+                })
+            return out
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
+
+    def store_press(
+        self,
+        press_id: str | int,
+        headline: str,
+        content: str,
+        metadata: Optional[Dict] = None,
+    ) -> None:
+        """Store a press release as an embedded point in Qdrant."""
+        self.setup_collection()
+        payload = {
+            "id": str(press_id),
+            "category": "press",
+            "title": headline,
+            "content": content,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        text = f"{headline}\n\n{content}"
+        vector = self._embed(text)
+        point = self._point(press_id, vector, payload=payload)
+        try:
+            self.client.upsert(collection_name=self.collection_name, points=[point])
+            logger.info("Stored press %s", press_id)
+        except Exception as e:
+            logger.error(f"Failed to store press: {e}")
+            raise
 
     def get_stats(self) -> Dict:
         """Get collection statistics."""
@@ -148,7 +232,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="Manage Qdrant for The Great Work")
     parser.add_argument("--setup", action="store_true", help="Setup collection")
-    parser.add_argument("--index", action="store_true", help="Index game knowledge")
+    parser.add_argument("--index", action="store_true", help="Index game knowledge with embeddings")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="SentenceTransformer model name")
     parser.add_argument("--stats", action="store_true", help="Show collection stats")
     parser.add_argument("--url", default=QDRANT_URL, help="Qdrant URL")
     parser.add_argument("--collection", default=COLLECTION_NAME, help="Collection name")
@@ -156,7 +241,7 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-    manager = QdrantManager(url=args.url, collection=args.collection)
+    manager = QdrantManager(url=args.url, collection=args.collection, model_name=args.model)
 
     if args.setup:
         manager.setup_collection()

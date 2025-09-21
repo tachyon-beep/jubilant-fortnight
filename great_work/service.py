@@ -7,6 +7,7 @@ import random
 import time
 import threading
 from collections import deque, defaultdict
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -188,6 +189,11 @@ class GameService:
         self._moderator = GuardianModerator()
         self._load_moderation_overrides()
         self._auto_seed = auto_seed
+        # Qdrant auto-indexing (disabled by default; enable via env)
+        idx_env = os.getenv("GREAT_WORK_QDRANT_INDEXING", "").lower()
+        self._qdrant_indexing_enabled = idx_env in {"1", "true", "yes", "on"}
+        self._qdrant_manager = None
+        self._qdrant_unavailable_reason: Optional[str] = None
         if auto_seed:
             if not any(True for _ in self.state.all_scholars()):
                 self.state.seed_base_scholars()
@@ -5797,6 +5803,52 @@ class GameService:
     # Internal helpers --------------------------------------------------
     def _archive_press(self, press: PressRelease, timestamp: datetime) -> None:
         self.state.record_press_release(PressRecord(timestamp=timestamp, release=press))
+        # Optionally index the press release into Qdrant for semantic search
+        self._maybe_index_press(press, timestamp)
+
+    def _maybe_index_press(self, press: PressRelease, timestamp: datetime) -> None:
+        if not getattr(self, "_qdrant_indexing_enabled", False):
+            return
+        if self._qdrant_unavailable_reason is not None:
+            return
+        try:
+            manager = self._get_qdrant_manager()
+            if manager is None:
+                return
+            # Build a stable id for Qdrant separate from DB id
+            h = hashlib.sha1(
+                f"{timestamp.isoformat()}|{press.type}|{press.headline}|{press.body[:200]}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()[:40]
+            press_id = f"press-{h}"
+            content = press.body
+            metadata = dict(press.metadata)
+            meta_ts = metadata.setdefault("metadata", {}) if isinstance(metadata, dict) else {}
+            if isinstance(meta_ts, dict):
+                meta_ts.setdefault("timestamp", timestamp.isoformat())
+            manager.store_press(press_id=press_id, headline=press.headline, content=content, metadata=metadata)
+        except Exception as e:  # pragma: no cover - integration failures should not break game
+            reason = str(e)
+            self._qdrant_unavailable_reason = reason
+            self._queue_admin_notification(
+                f"🔎 Qdrant indexing disabled due to error: {reason}"
+            )
+
+    def _get_qdrant_manager(self):  # type: ignore[no-untyped-def]
+        if self._qdrant_manager is not None:
+            return self._qdrant_manager
+        try:
+            from .tools.qdrant_manager import QdrantManager  # lazy import
+
+            self._qdrant_manager = QdrantManager()
+            return self._qdrant_manager
+        except Exception as e:  # pragma: no cover - avoid breaking flows
+            self._qdrant_unavailable_reason = str(e)
+            self._queue_admin_notification(
+                f"🔎 Qdrant indexing unavailable: {self._qdrant_unavailable_reason}"
+            )
+            return None
 
     def _initial_generated_counter(self) -> int:
         max_index = 0

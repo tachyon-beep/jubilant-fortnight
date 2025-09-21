@@ -12,15 +12,6 @@ Qdrant provides semantic search capabilities for The Great Work, enabling:
 
 ## Quick Start
 
-### Optional: Install Embeddings Dependencies
-
-If you plan to generate embeddings locally (rather than relying on an external service),
-install the optional extras:
-
-```bash
-pip install -e .[embeddings]
-```
-
 ### 1. Start Qdrant Service
 
 ```bash
@@ -138,6 +129,11 @@ qdrant.store_press(
 
 # Search for related content
 results = qdrant.search("Bronze Age discoveries by Fieldstone")
+
+# Enable auto-indexing of press (GameService)
+# Set in your environment before running the bot or tests:
+#   export GREAT_WORK_QDRANT_INDEXING=true
+# GameService will embed and upsert each new press release into Qdrant automatically.
 ```
 
 ## Administration
