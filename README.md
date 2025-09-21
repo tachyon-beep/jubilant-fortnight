@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue)](https://github.com/tachyon-beep/jubilant-fortnight)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-![Tests](https://img.shields.io/badge/tests-283%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-284%20passing-brightgreen)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/23ff623516b548409a9b28c0e6490fed)](https://app.codacy.com/gh/tachyon-beep/jubilant-fortnight/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Codacy Badge](https://app.codacy.com/project/badge/Coverage/23ff623516b548409a9b28c0e6490fed)](https://app.codacy.com/gh/tachyon-beep/jubilant-fortnight/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -21,6 +21,7 @@ The Great Work is an asynchronous, fully public research drama played entirely t
 8. [Contributing](#contributing)
 9. [Roadmap & Release Planning](#roadmap--release-planning)
 10. [License](#license)
+11. [User Guide](docs/USER_GUIDE.md)
 
 ## Features at a Glance
 
@@ -41,7 +42,7 @@ The Great Work is an asynchronous, fully public research drama played entirely t
 | Domain | Scholars, expeditions, offers, press templates, YAML assets. | `models.py`, `state.py`, `expeditions.py`, `press.py`, `data/` |
 | Data/Ops | SQLite persistence, telemetry DB, archive export, operational CLIs. | `GameState`, `telemetry.db`, `web_archive/`, `great_work/tools/` |
 
-Further reading: [High-Level Design](docs/design/HLD.md) · [System Architecture](docs/design/SYSTEM_ARCHITECTURE.md).
+Further reading: [High-Level Design](docs/design/HLD.md) · [System Architecture](docs/design/SYSTEM_ARCHITECTURE.md) · [User Guide](docs/USER_GUIDE.md).
 
 ## Quick Start
 

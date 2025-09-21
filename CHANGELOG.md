@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.1] - 2025-09-21 (Current – prepping 1.0.0-rc1)
 
+## [1.0.0-rc1] - 2025-09-21
+
+### Highlights
+
+- Containerized bot with Dockerfile and compose `bot` service; Guardian local mode supported via mounted weights.
+- Qdrant + embeddings enabled by default in production envs; press auto-indexing is opt-in via env.
+- Scheduler: normalized symposium weekday names for APScheduler 3.11; daily Gazette digests and weekly symposium scheduled reliably.
+- Deployment docs tidied; new User Guide (install, start a game, how to play) added.
+- Discord command annotations qualified for runtime evaluation; startup crashes resolved.
+
+### Operational
+
+- Deployment smoke test green on container: token/app_id, channels, Guardian local path; only alert webhooks optional.
+- Telemetry dashboard builds and runs; endpoints `/api/kpi_history` and `/api/calibration_snapshot` serve JSON.
+
+
 ### Core Gameplay Features
 
 - **Scholar System**: 20-30 memorable scholars with unique personalities, memories, and relationships
