@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
 - Informational commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) now publish summaries to the configured public channels while preserving ephemeral confirmations for the caller.
 - `/status` surfaces faction sentiment derived from persisted mentorship and sidecast histories so players and operators can audit relationship shifts.
 - Telemetry now persists KPI targets (which automatically override alert thresholds), reports engagement cohorts (new vs returning players), and surfaces symposium participation mixes in `/telemetry_report` and the dashboard, including updated FastAPI views/templates.
@@ -30,9 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.1] - 2025-09-21 (Current – prepping 1.0.0-rc1)
 
-### Added
-
-#### Core Gameplay Features
+### Core Gameplay Features
 
 - **Scholar System**: 20-30 memorable scholars with unique personalities, memories, and relationships
 - **Expedition Mechanics**: Three expedition types (think tanks, field expeditions, great projects) with d100 resolution
@@ -42,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Conference Mechanics**: Public theory debates with reputation wagering
 - **Symposium Voting**: Weekly community topics with player participation
 
-#### Advanced Features
+### Advanced Features
 
 - **Contract Negotiations**: Multi-stage poaching system with influence escrow via `/poach`, `/counter`, `/view_offers`
 - **Sideways Discovery Effects**: Expeditions trigger mechanical consequences (faction shifts, theories, grudges)
@@ -101,8 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0] - 2024-12-19 (Pre-release)
 
-### Added
-
 - Sprint 3 features: LLM integration, telemetry, multi-layer press
 - Sprint 2 features: Contracts, sideways effects, web archive
 - Sprint 1 features: Mentorship, conferences, symposiums, admin tools
@@ -114,8 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minor markdown formatting issues (resolved via Codacy patch)
 
 ## [0.1.0] - 2024-09-01 (Initial Development)
-
-### Added
 
 - Basic Discord bot framework
 - Scholar generation system

@@ -3,6 +3,7 @@
 This guide outlines the configuration required to run The Great Work in production, including Discord channel routing, telemetry alerts, archive hosting, and optional LLM setup.
 
 Terminology:
+
 - Orders dispatcher — shared delayed-action queue backed by the `orders` table.
 - Gazette scheduler — APScheduler jobs that run digests and weekly symposia.
 - Narrative assets (YAML copy and tone packs) ship under CC BY 4.0; review `docs/NARRATIVE_LICENSE.md` before publishing new content to ensure attribution requirements are met.
@@ -235,6 +236,7 @@ The game pauses automatically if the LLM fails repeatedly; monitor admin notific
 - Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an IPC/gRPC endpoint. See `docs/SAFETY_PLAN.md` for architecture and operational guidance.
 - Leave the script unused if you prefer an alternate moderation provider—the repository ships without any large binaries by default.
 - Optional environment knobs:
+
   ```env
   GREAT_WORK_GUARDIAN_MODE=sidecar      # or local
   GREAT_WORK_GUARDIAN_URL=http://localhost:8088/moderate

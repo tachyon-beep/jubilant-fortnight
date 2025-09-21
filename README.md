@@ -3,7 +3,8 @@
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue)](https://github.com/your-repo/the-great-work)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 ![Tests](https://img.shields.io/badge/tests-283%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-70%25-yellow)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/23ff623516b548409a9b28c0e6490fed)](https://app.codacy.com/gh/tachyon-beep/jubilant-fortnight/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Coverage/23ff623516b548409a9b28c0e6490fed)](https://app.codacy.com/gh/tachyon-beep/jubilant-fortnight/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 The Great Work is an asynchronous, fully public research drama played entirely through Discord. Players guide scholars, publish bold theories, and orchestrate expeditions where spectacular failure still creates story.
@@ -44,32 +45,43 @@ Further reading: [High-Level Design](docs/HLD.md) · [System Architecture](docs/
 ## Quick Start
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/your-repo/the-great-work.git
    cd the-great-work
    ```
+
 2. **Create a virtual environment**
+
    ```bash
    python3.12 -m venv .venv
    source .venv/bin/activate  # Windows: .venv\Scripts\activate
    pip install -e .[dev]
    ```
+
 3. **Configure environment variables**
+
    ```bash
    cp .env.example .env
    # Edit .env with your Discord token, channel IDs, etc.
    ```
+
 4. **Seed the database**
+
    ```bash
    make seed
    # or: python -m great_work.tools.seed_db great_work.db
    ```
+
 5. **Run smoke checks & tests (recommended)**
+
    ```bash
    python -m great_work.tools.deployment_smoke
    pytest -q
    ```
+
 6. **Start the bot**
+
    ```bash
    make run
    # or: python -m great_work.discord_bot
