@@ -22,8 +22,6 @@ GREAT_WORK_CHANNEL_TABLE_TALK=channel_id_for_table_talk
 GREAT_WORK_CHANNEL_ADMIN=channel_id_for_admin_notifications
 GREAT_WORK_CHANNEL_UPCOMING=channel_id_for_optional_upcoming_highlights
 
-- Informational slash commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror their output to the first available channel in this list: `GREAT_WORK_CHANNEL_TABLE_TALK`, `GREAT_WORK_CHANNEL_GAZETTE`, `GREAT_WORK_CHANNEL_UPCOMING`, `GREAT_WORK_CHANNEL_ORDERS`. Configure at least one of these so transparency requirements are met.
-
 # Telemetry & Alerts (tune per deployment)
 GREAT_WORK_ALERT_MAX_DIGEST_MS=5000          # alert if digest exceeds 5s
 GREAT_WORK_ALERT_MAX_QUEUE=12               # alert if scheduled press backlog exceeds 12 items
@@ -55,11 +53,16 @@ GREAT_WORK_PRESS_SETTING=post_cyberpunk_collapse  # or high_fantasy, renaissance
 # LLM Configuration (optional)
 LLM_API_BASE=http://localhost:5000/v1
 LLM_API_KEY=not-needed-for-local
-LLM_MODEL=local-model
+LLM_MODEL_NAME=local-model
+LLM_TEMPERATURE=0.8
+LLM_MAX_TOKENS=500
 LLM_TIMEOUT=30
 LLM_RETRY_ATTEMPTS=3
 LLM_RETRY_SCHEDULE=1,3,10,30                # seconds between retries
 LLM_USE_FALLBACK=true
+LLM_SAFETY_ENABLED=true
+LLM_BATCH_SIZE=10
+LLM_MODE=           # set to "mock" to bypass calls in dev
 
 # Guardian Sidecar Moderation
 GREAT_WORK_GUARDIAN_MODE=sidecar             # sidecar (HTTP RPC) or local
@@ -76,7 +79,17 @@ GREAT_WORK_ARCHIVE_PAGES_SUBDIR=archive             # Subdirectory inside the pa
 GREAT_WORK_ARCHIVE_PAGES_NOJEKYLL=true              # Emit .nojekyll marker on publish
 GREAT_WORK_ARCHIVE_PAGES_ENABLED=true               # Toggle GitHub Pages mirroring
 GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=512               # Alert threshold for local snapshots
+
+# Embeddings & Qdrant (optional)
+# Enable semantic search and knowledge indexing
+GREAT_WORK_QDRANT_INDEXING=false
+# EMBEDDING_MODEL defaults to sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+# Qdrant service URL used by tools/CLIs (override via --url as needed)
+# QDRANT_URL=http://localhost:6333
 ```
+
+Informational slash commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror their output to the first available channel in this list: `GREAT_WORK_CHANNEL_TABLE_TALK`, `GREAT_WORK_CHANNEL_GAZETTE`, `GREAT_WORK_CHANNEL_UPCOMING`, `GREAT_WORK_CHANNEL_ORDERS`. Configure at least one of these so transparency requirements are met.
 
 Adjust the alert numbers to match your cadence; for example, if you expect long digests, raise `GREAT_WORK_ALERT_MAX_DIGEST_MS`. When the queue builds up, the orders dispatcher metrics and admin notifications help the operator intervene.
 
@@ -84,14 +97,14 @@ Adjust the alert numbers to match your cadence; for example, if you expect long 
 
 The repository ships with a `docker-compose.yml` that includes:
 
-- `qdrant`: vector DB for future embedding features (optional)
+- `qdrant`: vector DB for embeddings and semantic search (optional)
 - `archive_server`: nginx serving `web_archive_public/`
 - `telemetry_dashboard` (optional): FastAPI dashboard for telemetry visuals
 
-Start everything:
+Start supporting services:
 
 ```bash
-docker compose up -d archive_server telemetry_dashboard
+docker compose up -d archive_server telemetry_dashboard qdrant
 ```
 
 Mount the `web_archive_public/` volume so the scheduler can sync exports (default path works out of the box). The nginx container listens on port 8080 by default; expose it or reverse proxy it as needed and open firewall access, e.g. `sudo ufw allow 8081/tcp` if you remap ports.
@@ -192,7 +205,13 @@ Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `
 2. **Sidecar service:** deploy the guardian container (`docker compose up guardian-sidecar`) or start the systemd unit; the service must expose a `/score` endpoint that accepts JSON payloads `{ "category": "HAP", "text": "..." }`.
 3. **Health checks:** confirm `/health` returns `ok` and that `/gw_admin moderation_recent` shows steady Guardian latency in `/telemetry_report`.
 4. **Incident response:** if `moderation_sidecar_offline` fires, restart the sidecar and decide whether to set `GREAT_WORK_MODERATION_STRICT=false` temporarily or pause the game via `/gw_admin pause_game reason:"guardian offline"`. After recovery, audit overrides with `/gw_admin moderation_overrides`.
-5. **Manual probes:** run `python scripts/moderation_probe.py --text "sample" --category HAP` to validate the policy before re-enabling strict mode.
+5. **Manual probes:** send a sample to the sidecar directly, e.g.
+
+   ```bash
+   curl -sS -X POST "$GREAT_WORK_GUARDIAN_URL" \
+     -H 'Content-Type: application/json' \
+     -d '{"text": "sample text", "categories": ["HAP"]}' | jq .
+   ```
 
 ### Preflight Smoke Check
 
@@ -213,7 +232,7 @@ The command reports missing tokens, channel routing gaps, Guardian misconfigurat
 - Set `GREAT_WORK_ARCHIVE_BASE_URL` to match the public path (e.g., `/my-org/great-work/archive`) so generated permalinks resolve correctly on Pages.
 - Snapshots are now monitored via `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`; when the total ZIP size exceeds the limit the scheduler notifies the admin channel and records telemetry.
 - Configure `GREAT_WORK_ALERT_WEBHOOK_URL` and optional email settings (`GREAT_WORK_ALERT_EMAIL_*`) so guardrail hits reach your operations channels even when no one is watching Discord; leave them blank to rely on console logs only. For local smoke tests you can run `python -m great_work.tools.simple_alert_webhook --port 8085` and target `http://localhost:8085` to inspect payloads.
-- Refer to `docs/internal/ARCHIVE_OPERATIONS.md` for recovery steps, GitHub Pages workflow details, and manual export instructions.
+  For recovery steps, GitHub Pages workflow details, and manual export instructions, keep an internal runbook aligned with your hosting setup.
 - Optional: enable the `Publish Archive to Pages` GitHub Action to auto-commit/push updates. Seed the `gh-pages` branch once, then run the workflow (push-trigger or manual dispatch) whenever `web_archive_public/` contains fresh exports.
 - `settings.yaml` also exposes `archive_publishing.github_pages` defaults so deployments can enable/disable Pages mirroring without environment overrides.
 - Configure `GREAT_WORK_ALERT_WEBHOOK_URL` plus cooldown/muting (and optional email) variables to forward guardrail hits to the operations webhook of your choice (Discord/Slack/etc.). When unset, alerts log to the bot console only.
@@ -225,7 +244,7 @@ Set `LLM_MODE=mock` in development to bypass live LLM calls. For production use 
 ```env
 LLM_API_BASE=http://your-llm-host:port/v1
 LLM_API_KEY=your_key
-LLM_MODEL=your_model
+LLM_MODEL_NAME=your_model
 ```
 
 The game pauses automatically if the LLM fails repeatedly; monitor admin notifications and `/telemetry_report` for pause/resume events.
@@ -233,22 +252,22 @@ The game pauses automatically if the LLM fails repeatedly; monitor admin notific
 ## 6. Moderation Sidecar
 
 - Download Granite Guardian weights with `python -m great_work.tools.download_guardian_model --target ./models/guardian` (defaults to `ibm-granite/granite-guardian-3.2-3b-a800m`; requires `pip install huggingface_hub`). Authentication follows the standard Hugging Face token flow; pass `--token` explicitly or rely on cached credentials.
-- Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an IPC/gRPC endpoint. See `docs/SAFETY_PLAN.md` for architecture and operational guidance.
+- Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an HTTP endpoint. See `docs/archive/SAFETY_PLAN.md` for architecture and operational guidance.
 - Leave the script unused if you prefer an alternate moderation provider—the repository ships without any large binaries by default.
 - Optional environment knobs:
 
   ```env
   GREAT_WORK_GUARDIAN_MODE=sidecar      # or local
-  GREAT_WORK_GUARDIAN_URL=http://localhost:8088/moderate
+  GREAT_WORK_GUARDIAN_URL=http://localhost:8085/score
   GREAT_WORK_GUARDIAN_ENABLED=true
   GREAT_WORK_GUARDIAN_LOCAL_PATH=./models/guardian   # when using local mode
-  GREAT_WORK_GUARDIAN_CATEGORIES=Hate,Abuse,Profanity,Sexual,Violence,Self-Harm,Illicit
+  GREAT_WORK_GUARDIAN_CATEGORIES=HAP,sexual,violence,self-harm,illicit
   ```
 
-## 6. Firewall & Networking Checklist
+## 7. Firewall & Networking Checklist
 
 - Open Discord outbound access (HTTPS).
-- Expose only the ports you need (e.g., `archive_server` 8080, telemetry dashboard 8082) and restrict via firewall rules (`ufw`, security groups, etc.).
+- Expose only the ports you need (e.g., `archive_server` 8080, telemetry dashboard 8081) and restrict via firewall rules (`ufw`, security groups, etc.).
 - Secure `.env`/secrets (`DISCORD_TOKEN`, `LLM_API_KEY`).
 
 With these settings and services in place, operators can launch the bot, review telemetry, and serve the archive with minimal manual intervention.
