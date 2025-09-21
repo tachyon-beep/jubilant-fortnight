@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import textwrap
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -25,145 +24,22 @@ from .scheduler import GazetteScheduler
 from .service import GameService
 from .telemetry import get_telemetry
 from .telemetry_decorator import track_command
+from .adapters.discord.bot import ChannelRouter
+from .adapters.discord.handlers import (
+    _post_to_channel,
+    _post_embed_to_channel,
+    _post_file_to_channel,
+    _clamp_text,
+    _format_message,
+    _format_press,
+)
+from .adapters.discord.builders import (
+    build_status_embed as _build_status_embed,
+    build_theory_reference_embed,
+)
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class ChannelRouter:
-    """Configures which Discord channels receive automated posts."""
-
-    orders: Optional[int]
-    gazette: Optional[int]
-    table_talk: Optional[int]
-    admin: Optional[int]
-    upcoming: Optional[int]
-
-    @staticmethod
-    def from_env() -> "ChannelRouter":
-        def _parse(env_key: str) -> Optional[int]:
-            value = os.environ.get(env_key)
-            if not value:
-                return None
-            try:
-                return int(value)
-            except ValueError:
-                logger.warning("Invalid channel id %s for %s", value, env_key)
-                return None
-
-        return ChannelRouter(
-            orders=_parse("GREAT_WORK_CHANNEL_ORDERS"),
-            gazette=_parse("GREAT_WORK_CHANNEL_GAZETTE"),
-            table_talk=_parse("GREAT_WORK_CHANNEL_TABLE_TALK"),
-            admin=_parse("GREAT_WORK_CHANNEL_ADMIN"),
-            upcoming=_parse("GREAT_WORK_CHANNEL_UPCOMING"),
-        )
-
-
-async def _post_to_channel(
-    bot: commands.Bot,
-    channel_id: Optional[int],
-    content: str,
-    *,
-    purpose: str,
-) -> None:
-    """Send content to a configured channel if possible."""
-
-    if channel_id is None:
-        logger.debug("Skipping %s post; channel not configured", purpose)
-        return
-    channel = bot.get_channel(channel_id)
-    if channel is None:
-        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
-        return
-    try:
-        await channel.send(content)
-    except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to send %s message", purpose)
-
-
-async def _post_embed_to_channel(
-    bot: commands.Bot,
-    channel_id: Optional[int],
-    *,
-    embed: discord.Embed,
-    content: Optional[str],
-    purpose: str,
-) -> None:
-    if channel_id is None:
-        logger.debug("Skipping %s embed post; channel not configured", purpose)
-        return
-    channel = bot.get_channel(channel_id)
-    if channel is None:
-        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
-        return
-    try:
-        await channel.send(content=content, embed=embed)
-    except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to send %s embed", purpose)
-
-
-async def _post_file_to_channel(
-    bot: commands.Bot,
-    channel_id: Optional[int],
-    file_path: Path,
-    *,
-    caption: str,
-    purpose: str,
-) -> None:
-    """Send a file attachment to a configured channel."""
-
-    if channel_id is None:
-        logger.debug("Skipping %s file post; channel not configured", purpose)
-        return
-    channel = bot.get_channel(channel_id)
-    if channel is None:
-        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
-        return
-    try:
-        await channel.send(content=caption, file=discord.File(str(file_path)))
-    except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to send %s file message", purpose)
-
-
-_MAX_MESSAGE_LENGTH = 1900
-
-
-def _clamp_text(text: str) -> str:
-    """Ensure Discord-compatible message length."""
-
-    if len(text) <= _MAX_MESSAGE_LENGTH:
-        return text
-    return text[: _MAX_MESSAGE_LENGTH - 1].rstrip() + "…"
-
-
-def _format_message(lines: Iterable[str]) -> str:
-    """Join message lines and clamp to Discord limits."""
-
-    message = "\n".join(line for line in lines if line is not None)
-    return _clamp_text(message)
-
-
-def _format_press(press: PressRelease) -> str:
-    lines = [f"**{press.headline}**"]
-    metadata = press.metadata or {}
-    scheduled = (
-        metadata.get("scheduled", {})
-        if isinstance(metadata.get("scheduled"), dict)
-        else {}
-    )
-    release_at = scheduled.get("release_at")
-    if isinstance(release_at, datetime):  # pragma: no cover - typically stored as str
-        release_label = release_at.strftime("%Y-%m-%d %H:%M")
-    else:
-        release_label = release_at
-    if release_label:
-        lines.append(f"_Scheduled for {release_label}_")
-    source = metadata.get("surface") or metadata.get("type")
-    if source:
-        lines.append(f"_{source}_")
-    lines.append(press.body)
-    return "\n".join(lines)
 
 
 def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> commands.Bot:
@@ -246,168 +122,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         for note in notes:
             await _post_to_channel(bot, router.admin, note, purpose="admin")
 
-    def _build_status_embed(data: Dict[str, Any]) -> discord.Embed:
-        embed = discord.Embed(
-            title=f"Status — {data['display_name']}",
-            colour=discord.Color.blurple(),
-            timestamp=datetime.now(timezone.utc),
-        )
-        embed.add_field(
-            name="Reputation",
-            value=f"{data['reputation']} (cap {data['influence_cap']})",
-            inline=False,
-        )
-
-        influence_lines = [
-            f"{faction.capitalize()}: {value}"
-            for faction, value in sorted(data["influence"].items())
-        ]
-        influence_text = "\n".join(influence_lines) if influence_lines else "None"
-        embed.add_field(name="Influence", value=influence_text, inline=False)
-
-        cooldowns = data.get("cooldowns") or {}
-        if cooldowns:
-            cooldown_lines = [
-                f"{key}: {value} digests" for key, value in cooldowns.items()
-            ]
-            embed.add_field(
-                name="Cooldowns",
-                value="\n".join(cooldown_lines),
-                inline=False,
-            )
-
-        thresholds = data.get("thresholds") or {}
-        if thresholds:
-            threshold_lines = [
-                f"{action}: rep ≥ {value}"
-                for action, value in sorted(thresholds.items())
-            ]
-            embed.add_field(
-                name="Action Thresholds",
-                value="\n".join(threshold_lines),
-                inline=False,
-            )
-
-        contracts = data.get("contracts", {})
-        if contracts:
-            contract_lines = []
-            for faction, payload in sorted(contracts.items()):
-                contract_lines.append(
-                    f"{faction.capitalize()}: {payload.get('scholars', 0)} scholar(s), upkeep {payload.get('upkeep', 0)}, debt {payload.get('outstanding', 0)}"
-                )
-            embed.add_field(
-                name="Contract Upkeep",
-                value="\n".join(contract_lines),
-                inline=False,
-            )
-
-        sentiments = data.get("faction_sentiments") or {}
-        if sentiments:
-            sentiment_lines = []
-            for faction, payload in sorted(sentiments.items()):
-                avg = payload.get("average", 0.0)
-                count = payload.get("count", 0)
-                sentiment_lines.append(
-                    f"{faction.capitalize()}: Δ {avg:+.2f} ({count} scholar{'s' if count != 1 else ''})"
-                )
-            embed.add_field(
-                name="Faction Sentiment",
-                value="\n".join(sentiment_lines),
-                inline=False,
-            )
-
-        relationships = data.get("relationships") or []
-        if relationships:
-            relationship_lines = []
-            for entry in relationships[:5]:
-                feeling = entry.get("feeling", 0.0)
-                summary_parts: List[str] = []
-                if entry.get("active_mentorship"):
-                    summary_parts.append("active mentorship")
-                elif entry.get("last_mentorship_event"):
-                    summary_parts.append(entry["last_mentorship_event"])
-                track = entry.get("track")
-                tier = entry.get("tier")
-                if track:
-                    summary_parts.append(f"track {track}{'/' + tier if tier else ''}")
-                sidecast = entry.get("sidecast_arc")
-                if sidecast:
-                    phase = entry.get("last_sidecast_phase") or "ongoing"
-                    summary_parts.append(f"sidecast {sidecast} ({phase})")
-                summary = ", ".join(summary_parts) if summary_parts else "relationship"
-                timeline = []
-                for item in entry.get("history", [])[:2]:
-                    stamp = item.get("timestamp")
-                    if stamp and isinstance(stamp, str):
-                        stamp_display = stamp.split("T")[0]
-                    else:
-                        stamp_display = "recent"
-                    if item.get("type") == "mentorship":
-                        timeline.append(
-                            f"{stamp_display}: mentorship {item.get('event')}"
-                        )
-                    else:
-                        timeline.append(
-                            f"{stamp_display}: sidecast {item.get('phase')}"
-                        )
-                history_text = " | ".join(timeline)
-                line = f"{entry['scholar']}: Δ {feeling:+.1f} ({summary})"
-                if history_text:
-                    line += f"\n   {history_text}"
-                relationship_lines.append(line)
-            if len(relationships) > 5:
-                relationship_lines.append(f"… plus {len(relationships) - 5} more")
-            embed.add_field(
-                name="Mentorship & Sidecasts",
-                value="\n".join(relationship_lines),
-                inline=False,
-            )
-
-        commitments = data.get("commitments") or []
-        if commitments:
-            commitment_lines = []
-            for entry in commitments[:4]:
-                relationship_pct = entry.get("relationship_modifier", 0.0) * 100
-                end_at = entry.get("end_at")
-                if isinstance(end_at, datetime):
-                    end_text = end_at.strftime("%Y-%m-%d")
-                else:
-                    end_text = str(end_at) if end_at else "ongoing"
-                commitment_lines.append(
-                    f"{(entry.get('faction') or 'Unaligned').capitalize()}: {entry.get('status', 'active')} (Δ {relationship_pct:+.1f}%, ends {end_text})"
-                )
-            embed.add_field(
-                name="Seasonal Commitments",
-                value="\n".join(commitment_lines),
-                inline=False,
-            )
-
-        investments = data.get("investments") or []
-        if investments:
-            invest_lines = [
-                f"{entry.get('faction', 'unknown').capitalize()}: {entry.get('amount', 0)} influence"
-                for entry in investments[:4]
-            ]
-            embed.add_field(
-                name="Investments",
-                value="\n".join(invest_lines),
-                inline=False,
-            )
-
-        endowments = data.get("archive_endowments") or []
-        if endowments:
-            endow_lines = [
-                f"{entry.get('program', 'program')}: {entry.get('amount', 0)} influence"
-                for entry in endowments[:4]
-            ]
-            embed.add_field(
-                name="Archive Endowments",
-                value="\n".join(endow_lines),
-                inline=False,
-            )
-
-        embed.set_footer(text="Status generated via /status")
-        return embed
+    # _build_status_embed now imported from adapters.discord.builders
 
     @bot.event
     async def on_ready() -> None:
@@ -727,68 +442,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _flush_admin_notifications()
             return
 
-        embed = discord.Embed(
-            title="Theory Reference",
-            colour=discord.Color.purple(),
-            timestamp=datetime.now(timezone.utc),
-        )
-        summary = (
-            f"Active {snapshot.get('active', 0)} • Expired {snapshot.get('expired', 0)} • "
-            f"Unscheduled {snapshot.get('unscheduled', 0)}"
-        )
-        embed.description = summary + "\nPin this snapshot for quick theory lookups."
-
-        for entry in theories:
-            supporters = entry.get("supporters") or []
-            if supporters:
-                supporter_preview = ", ".join(supporters[:4])
-                remaining_supporters = len(supporters) - 4
-                if remaining_supporters > 0:
-                    supporter_preview += f" … +{remaining_supporters}"
-            else:
-                supporter_preview = "—"
-
-            days_remaining = entry.get("days_remaining")
-            status = entry.get("status", "unscheduled")
-            if status == "active":
-                if days_remaining is None:
-                    status_text = "Active"
-                elif days_remaining > 1:
-                    status_text = f"Active • {days_remaining}d remaining"
-                elif days_remaining == 1:
-                    status_text = "Active • 1d remaining"
-                elif days_remaining == 0:
-                    status_text = "Active • resolves today"
-                else:
-                    status_text = "Active"
-            elif status == "expired":
-                status_text = "Expired"
-            else:
-                status_text = "Unscheduled"
-
-            theory_text = _clamp_text(entry.get("theory", ""))
-            confidence_text = entry.get(
-                "confidence_display", entry.get("confidence", "")
-            ).strip()
-            field_lines = [theory_text]
-            if confidence_text:
-                field_lines.append(f"Confidence: {confidence_text}")
-            field_lines.append(
-                f"Deadline: {entry.get('deadline_display', '—')} ({status_text})"
-            )
-            field_lines.append(f"Supporters: {supporter_preview}")
-            field_lines.append(f"Submitted: {entry.get('submitted_display', '—')}")
-
-            field_value = _clamp_text("\n".join(field_lines))[:1024]
-            embed.add_field(
-                name=(
-                    f"[{entry.get('id')}] {entry.get('player_display')}"
-                    if entry.get("player_display")
-                    else f"Theory {entry.get('id')}"
-                ),
-                value=field_value,
-                inline=False,
-            )
+        embed = build_theory_reference_embed(snapshot)
 
         header = f"/theory_reference requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
