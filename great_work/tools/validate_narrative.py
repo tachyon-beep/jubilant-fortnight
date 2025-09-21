@@ -5,9 +5,11 @@ import argparse
 import sys
 from numbers import Real
 from pathlib import Path
-from typing import Any, List, Sequence
+from typing import Any, List, Sequence, Tuple
 
 import yaml
+
+from .qdrant_helpers import fetch_related_press_snippets
 
 DEFAULT_FILES = [
     Path("great_work/data/press_tone_packs.yaml"),
@@ -446,24 +448,64 @@ def _match_canonical(path: Path) -> Path | None:
     return None
 
 
-def validate_file(path: Path) -> List[str]:
-    canonical = _match_canonical(path)
-    if canonical is None:
-        return [f"No validator registered for {path}"]
-    resolver = CANONICAL_PATHS[canonical]
-    data = _load_yaml(Path.cwd() / canonical)
-    return resolver(canonical, data)
-
-
-def validate_files(paths: Sequence[Path]) -> List[str]:
+def validate_files(
+    paths: Sequence[Path],
+    *,
+    collect_related: bool = False,
+) -> Tuple[List[str], List[Tuple[Path, str]]]:
     errors: List[str] = []
+    related_inputs: List[Tuple[Path, str]] = []
     for path in paths:
         resolved = path if path.is_absolute() else Path.cwd() / path
         if not resolved.exists():
             errors.append(f"{path}: file not found")
             continue
-        errors.extend(validate_file(resolved))
-    return errors
+        canonical = _match_canonical(resolved)
+        if canonical is None:
+            errors.append(f"No validator registered for {resolved}")
+            continue
+        data = _load_yaml(Path.cwd() / canonical)
+        errors.extend(CANONICAL_PATHS[canonical](canonical, data))
+        if collect_related:
+            summary = _summarise_for_related(data)
+            if summary.strip():
+                related_inputs.append((canonical, summary))
+    return errors, related_inputs
+
+
+def _summarise_for_related(data: Any, max_chars: int = 800) -> str:
+    try:
+        dump = yaml.safe_dump(data, sort_keys=False)
+    except Exception:
+        dump = str(data)
+    dump = dump.replace("\n", " ")
+    if len(dump) > max_chars:
+        dump = dump[: max_chars - 1].rstrip() + "…"
+    return dump
+
+
+def _print_related_suggestions(
+    entries: Sequence[Tuple[Path, str]],
+    *,
+    limit: int,
+) -> None:
+    if not entries:
+        return
+    warned = False
+    for canonical, summary in entries:
+        try:
+            snippets = fetch_related_press_snippets(summary, limit=limit)
+        except RuntimeError as exc:
+            if not warned:
+                print(f"[Qdrant] {exc}", file=sys.stderr)
+                warned = True
+            break
+        if not snippets:
+            continue
+        print(f"{canonical}: related press suggestions:")
+        for snippet in snippets:
+            print(f"  - {snippet}")
+        print()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -482,7 +524,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Validate the canonical set of narrative YAML assets",
     )
 
+    parser.add_argument(
+        "--with-related",
+        action="store_true",
+        help="After validation, show semantically similar press releases via Qdrant.",
+    )
+    parser.add_argument(
+        "--related-limit",
+        type=int,
+        default=3,
+        help="Maximum number of related press suggestions per file (default: 3).",
+    )
+
     args = parser.parse_args(argv)
+    related_limit = max(1, args.related_limit)
     targets: List[Path]
     if args.paths:
         targets = [path for path in args.paths]
@@ -491,13 +546,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:  # pragma: no cover - defensive fallback
         targets = []
 
-    errors = validate_files(targets)
+    errors, related_entries = validate_files(
+        targets,
+        collect_related=args.with_related,
+    )
     if errors:
         for message in errors:
             print(message, file=sys.stderr)
+        if args.with_related:
+            _print_related_suggestions(related_entries, limit=related_limit)
         return 1
 
     print("Narrative validation passed for", len(targets), "file(s).")
+    if args.with_related:
+        _print_related_suggestions(related_entries, limit=related_limit)
     return 0
 
 

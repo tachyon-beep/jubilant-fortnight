@@ -136,6 +136,9 @@ results = qdrant.search("Bronze Age discoveries by Fieldstone")
 # GameService will embed and upsert each new press release into Qdrant automatically.
 # When enabled, the LLM press enhancer fetches these related releases to ground new copy with prior discoveries.
 # Discord admins can run `/gw_admin search_press query:"…"` to inspect semantic matches in real time.
+# Author tooling can surface Qdrant suggestions via:
+#   python -m great_work.tools.preview_narrative --with-related
+#   python -m great_work.tools.validate_narrative --all --with-related
 ```
 
 ## Administration

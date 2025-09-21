@@ -174,7 +174,7 @@ landmark_preparations:
   in templates.
 - `strengths_text` and `frictions_text` arrive as pre-joined fragments (e.g., `Think tank modelling +8`).
   Focus on why those strengths or risks matter for the reveal rather than repeating raw numbers.
-- Preview with `python -m great_work.tools.preview_narrative landmark-prep` and keep lines ≤100 characters.
+- Preview with `python -m great_work.tools.preview_narrative landmark-prep` and keep lines ≤100 characters. Add `--with-related` to surface semantically similar press pulled from Qdrant while drafting.
 
 ### 4.8 Seasonal Commitments (programmatic)
 
@@ -282,7 +282,7 @@ Tone packs rotate headlines, blurbs, and callouts per aesthetic.
 Run tests from the project root with the virtual environment active:
 
 - Static validation: `python -m great_work.tools.validate_narrative --all`
-- Narrative preview: `python -m great_work.tools.preview_narrative` (or pass a specific surface, e.g., `-- recruitment`)
+- Narrative preview: `python -m great_work.tools.preview_narrative` (or pass a specific surface, e.g., `-- recruitment`). Combine with `--with-related` for quick “you might also reference…” suggestions when Qdrant is running.
 - Layered narrative sanity: `./.venv/bin/python -m pytest tests/test_multi_press.py -q`
 - Sidecast + vignette flows: `./.venv/bin/python -m pytest tests/test_service_edge_cases.py -k "sidecast or vignette" -q`
 - Mentorship lifecycle: `./.venv/bin/python -m pytest tests/test_mentorship.py -q`

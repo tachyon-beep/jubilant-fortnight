@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
+import textwrap
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
-from .validate_narrative import (
-    _load_yaml,
-)
+from .qdrant_helpers import fetch_related_press_snippets
+from .validate_narrative import _load_yaml
 
 
 class SafeDict(dict):
@@ -250,6 +251,25 @@ def run_previewer(name: str) -> List[str]:
     return renderer(data)
 
 
+def _related_snippets_from_lines(
+    lines: Sequence[str],
+    *,
+    limit: int,
+    warned: Dict[str, bool],
+) -> List[str]:
+    text = " ".join(line for line in lines if line and not line.startswith("=="))
+    if not text.strip():
+        return []
+    query = textwrap.shorten(text, width=600, placeholder="…")
+    try:
+        return fetch_related_press_snippets(query, limit=limit)
+    except RuntimeError as exc:
+        if not warned.get("qdrant"):
+            print(f"[Qdrant] {exc}", file=sys.stderr)
+            warned["qdrant"] = True
+        return []
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render sample previews for narrative YAML")
     parser.add_argument(
@@ -257,16 +277,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         nargs="*",
         help="Surface keys to preview (e.g., tone-packs, recruitment). Defaults to all.",
     )
+    parser.add_argument(
+        "--with-related",
+        action="store_true",
+        help="Fetch related press releases from Qdrant for additional context.",
+    )
+    parser.add_argument(
+        "--related-limit",
+        type=int,
+        default=3,
+        help="Maximum number of related press suggestions to display (default: 3).",
+    )
 
     args = parser.parse_args(argv)
+    related_limit = max(1, args.related_limit)
     targets = args.surface or list(PREVIEWERS.keys())
     for name in targets:
         if name not in PREVIEWERS:
             print(f"Unknown surface '{name}'. Available: {', '.join(PREVIEWERS)}")
             return 1
 
+    warned: Dict[str, bool] = {}
     for name in targets:
-        for line in run_previewer(name):
+        lines = list(run_previewer(name))
+        if args.with_related:
+            related = _related_snippets_from_lines(
+                lines,
+                limit=related_limit,
+                warned=warned,
+            )
+            if related:
+                lines.append("")
+                lines.append("Related press (semantic search):")
+                lines.extend(f"- {item}" for item in related)
+                lines.append("")
+        for line in lines:
             print(line)
     return 0
 
