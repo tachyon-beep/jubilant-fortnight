@@ -173,6 +173,7 @@ See `.env.example` for the full template.
 ### Embeddings & Qdrant (optional)
 
 Enable semantic search and future retrieval features with Qdrant + embeddings.
+When indexing is enabled, the LLM press enhancer automatically pulls the top related press releases from Qdrant to provide richer, continuity-aware copy.
 
 ```text
 # Qdrant connection

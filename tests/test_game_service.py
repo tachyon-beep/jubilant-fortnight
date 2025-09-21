@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict
 
 import pytest
 
@@ -203,6 +204,61 @@ def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
     assert call["success"] is True
     assert call["persona"] == "sarah"
     assert call["error"] is None
+
+
+def test_qdrant_related_press_context(monkeypatch, tmp_path):
+    monkeypatch.setenv("GREAT_WORK_QDRANT_INDEXING", "true")
+
+    class StubManager:
+        def search(self, query: str, limit: int = 5):
+            return [
+                {
+                    "payload": {
+                        "title": "Older Discovery",
+                        "content": "Scholars uncovered similar artifacts in the bronze archives.",
+                        "metadata": {"timestamp": "2025-05-01T12:00:00Z"},
+                    }
+                }
+            ]
+
+    class StubTelemetry:
+        def track_llm_activity(self, *args, **kwargs):
+            return None
+
+        def track_system_event(self, *args, **kwargs):
+            return None
+
+    captured_context: Dict[str, Any] = {}
+
+    def fake_enhance_press_release_sync(press_type, base_body, context, persona_name, persona_traits):
+        captured_context.update(context)
+        return "Enhanced body"
+
+    monkeypatch.setattr("great_work.service.get_telemetry", lambda: StubTelemetry())
+    monkeypatch.setattr("great_work.service.enhance_press_release_sync", fake_enhance_press_release_sync)
+    monkeypatch.setattr(GameService, "_get_qdrant_manager", lambda self: StubManager())
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path, auto_seed=False)
+
+    press = PressRelease(
+        type="academic_gossip",
+        headline="Breakthrough Announced",
+        body="New findings emerge.",
+        metadata={},
+    )
+
+    result = service._enhance_press_release(
+        press,
+        base_body="New findings emerge.",
+        persona_name=None,
+        persona_traits=None,
+        extra_context=None,
+    )
+
+    assert result.body == "Enhanced body"
+    related = captured_context.get("related_press")
+    assert related and any("Older Discovery" in item for item in related)
 
 
 def test_recruitment_and_cooldown_flow(tmp_path):

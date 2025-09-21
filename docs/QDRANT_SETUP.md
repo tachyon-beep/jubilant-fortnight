@@ -134,6 +134,7 @@ results = qdrant.search("Bronze Age discoveries by Fieldstone")
 # Set in your environment before running the bot or tests:
 #   export GREAT_WORK_QDRANT_INDEXING=true
 # GameService will embed and upsert each new press release into Qdrant automatically.
+# When enabled, the LLM press enhancer fetches these related releases to ground new copy with prior discoveries.
 ```
 
 ## Administration
@@ -179,15 +180,6 @@ If port 6333 is in use:
 # Reset collection (WARNING: deletes all data)
 curl -X DELETE http://localhost:6333/collections/great-work-knowledge
 python -m great_work.tools.qdrant_manager --setup
-```
-
-### MCP Server Not Found
-
-```bash
-# Install MCP server for Qdrant
-pip install mcp-server-qdrant
-# or
-uvx mcp-server-qdrant
 ```
 
 ## Future Enhancements

@@ -21,6 +21,19 @@ def _random_choice(seq):
     return _RANDOM.choice(seq)
 
 
+def _augment_prompt_with_related(prompt: str, context: Dict[str, Any]) -> str:
+    related = context.get("related_press") if isinstance(context, dict) else None
+    if not related:
+        return prompt
+    if not isinstance(related, list):
+        return prompt
+    items = [str(item).strip() for item in related if str(item).strip()]
+    if not items:
+        return prompt
+    related_section = "\n".join(f"- {item}" for item in items)
+    return f"{prompt}\n\nRelated context:\n{related_section}"
+
+
 class LLMGenerationError(RuntimeError):
     """Raised when the LLM cannot generate narrative content."""
 
@@ -369,6 +382,7 @@ async def enhance_press_release(
     }
 
     prompt = prompts.get(press_type, f"Write about: {base_content}")
+    prompt = _augment_prompt_with_related(prompt, context)
 
     enhanced = await client.generate_narrative(
         prompt=prompt,
@@ -402,6 +416,7 @@ def enhance_press_release_sync(
         "symposium_announcement": f"Write a symposium topic announcement: {base_content}",
     }
     prompt = prompt_map.get(press_type, f"Write about: {base_content}")
+    prompt = _augment_prompt_with_related(prompt, context)
 
     client = get_llm_client()
     return client.generate_narrative_sync(

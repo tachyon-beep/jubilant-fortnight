@@ -7,6 +7,7 @@ import os
 import random
 import threading
 import time
+import textwrap
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -740,6 +741,9 @@ class GameService:
         }
         if extra_context:
             context_payload.update(extra_context)
+        related_press = self._fetch_related_press(release, base_body)
+        if related_press:
+            context_payload["related_press"] = related_press
         try:
             enhanced_body = enhance_press_release_sync(
                 release.type,
@@ -5852,6 +5856,64 @@ class GameService:
                 f"🔎 Qdrant indexing unavailable: {self._qdrant_unavailable_reason}"
             )
             return None
+
+    def _fetch_related_press(
+        self,
+        release: PressRelease,
+        base_body: str,
+        *,
+        limit: int = 3,
+    ) -> List[str]:
+        if not getattr(self, "_qdrant_indexing_enabled", False):
+            return []
+        if self._qdrant_unavailable_reason is not None:
+            return []
+        manager = self._get_qdrant_manager()
+        if manager is None:
+            return []
+
+        query = f"{release.headline}\n\n{base_body}"
+        results = manager.search(query, limit=limit + 1)
+        related: List[str] = []
+
+        for result in results:
+            payload = result.get("payload") or {}
+            title = str(payload.get("title") or "").strip()
+            content = str(payload.get("content") or "").strip()
+
+            if title == release.headline and content == base_body.strip():
+                continue
+
+            snippet_source = content.replace("\n", " ") if content else ""
+            snippet = (
+                textwrap.shorten(snippet_source, width=180, placeholder="…")
+                if snippet_source
+                else ""
+            )
+
+            timestamp = ""
+            metadata = payload.get("metadata")
+            if isinstance(metadata, dict):
+                ts = metadata.get("timestamp")
+                if ts:
+                    timestamp = str(ts)
+
+            if title and snippet and timestamp:
+                summary = f"{title} ({timestamp}): {snippet}"
+            elif title and snippet:
+                summary = f"{title}: {snippet}"
+            elif title:
+                summary = title
+            elif snippet:
+                summary = snippet
+            else:
+                continue
+
+            related.append(summary)
+            if len(related) >= limit:
+                break
+
+        return related
 
     def _initial_generated_counter(self) -> int:
         max_index = 0
