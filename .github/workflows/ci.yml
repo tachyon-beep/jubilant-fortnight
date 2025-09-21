@@ -50,7 +50,7 @@ jobs:
           python -m great_work.tools.deployment_smoke
 
       - name: Upload coverage to Codacy
-        if: ${{ secrets.CODACY_API_TOKEN != '' }}
+        if: ${{ github.event_name == 'push' }}
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           api-token: ${{ secrets.CODACY_API_TOKEN }}
@@ -58,7 +58,4 @@ jobs:
           organization-provider: gh
           username: ${{ github.repository_owner }}
           project-name: ${{ github.event.repository.name }}
-
-      - name: Skip Codacy upload (token missing)
-        if: ${{ secrets.CODACY_API_TOKEN == '' }}
-        run: echo "CODACY_API_TOKEN not provided; skipping coverage upload."
+        continue-on-error: true
