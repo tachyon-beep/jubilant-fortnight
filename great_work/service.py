@@ -7132,6 +7132,26 @@ class GameService:
             if sidecast_entries:
                 sidecast_arc = sidecast_entries[-1].get("arc") or scholar.contract.get("sidecast_arc")
 
+            history: List[Dict[str, object]] = []
+            for entry in mentorship_entries[-3:]:
+                history.append(
+                    {
+                        "type": "mentorship",
+                        "event": entry.get("event"),
+                        "timestamp": entry.get("timestamp"),
+                    }
+                )
+            for entry in sidecast_entries[-3:]:
+                history.append(
+                    {
+                        "type": "sidecast",
+                        "phase": entry.get("phase"),
+                        "timestamp": entry.get("timestamp"),
+                        "arc": entry.get("arc"),
+                    }
+                )
+            history.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
+
             entries.append(
                 {
                     "scholar": scholar.name,
@@ -7145,6 +7165,7 @@ class GameService:
                     "sidecast_arc": sidecast_arc,
                     "last_sidecast_phase": last_sidecast_phase,
                     "last_sidecast_at": last_sidecast_at,
+                    "history": history[:5],
                 }
             )
 
@@ -7380,12 +7401,33 @@ class GameService:
         if delta:
             scholar.memory.adjust_feeling(mentor_id, delta)
 
+        faction_bonus = None
+        faction_change = 0
+        politics = scholar.politics or {}
+        if politics:
+            primary_faction = max(politics.items(), key=lambda item: item[1])[0]
+            if event == "completion":
+                faction_change = 2
+            elif event == "progression":
+                faction_change = 1
+            elif event == "activation":
+                faction_change = 1
+            if faction_change:
+                self._apply_influence_change(mentor, primary_faction, int(faction_change))
+                faction_bonus = {
+                    "faction": primary_faction,
+                    "change": faction_change,
+                }
+                self.state.upsert_player(mentor)
+
         details = {
             "event": event,
             "mentor": mentor.display_name,
             "mentor_id": mentor_id,
             "track": track,
         }
+        if faction_bonus:
+            details["faction_bonus"] = faction_bonus
         scholar.memory.record_fact(
             MemoryFact(
                 timestamp=timestamp,
@@ -7404,6 +7446,7 @@ class GameService:
                 "mentor": mentor.display_name,
                 "track": track,
                 "timestamp": timestamp.isoformat(),
+                "faction_bonus": faction_bonus,
             },
         )
 
@@ -7427,6 +7470,21 @@ class GameService:
             delta = delta_map.get(phase, 0.4)
             if delta:
                 scholar.memory.adjust_feeling(sponsor_id, delta)
+            politics = scholar.politics or {}
+            if politics:
+                primary_faction = max(politics.items(), key=lambda item: item[1])[0]
+                sponsor_player = self.state.get_player(sponsor_id)
+                if sponsor_player:
+                    self._apply_influence_change(sponsor_player, primary_faction, 1)
+                    self.state.upsert_player(sponsor_player)
+                    if extra is None:
+                        extra = {}
+                    extra.setdefault("faction_bonus", {}).update(
+                        {
+                            "faction": primary_faction,
+                            "change": 1,
+                        }
+                    )
         subject = sponsor_id or arc
         details = {
             "arc": arc,

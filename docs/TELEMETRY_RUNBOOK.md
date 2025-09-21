@@ -13,6 +13,7 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `python -m great_work.tools.export_calibration_snapshot` – export the same snapshot on disk (supports summary-only mode and retention pruning).
 - `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
 - `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
+- `python -m great_work.tools.calibrate_moderation` – inspect Guardian category/severity counts for tuning and override review.
 
 ## Calibration Snapshots & Tuning Workflow
 
@@ -27,6 +28,11 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - Cancel stale work with `/gw_admin cancel_order order_id:<id> [reason:<text>]`; cancellations emit telemetry and admin notifications.
 - The telemetry dashboard hosts a dispatcher filter form that proxies `/api/orders` and `/api/orders.csv`, accepting additional query parameters (`event`, `min_pending`, `min_age_hours`).
 - Use `python -m great_work.tools.manage_orders summary --json` for job-friendly snapshots or `python -m great_work.tools.manage_orders followups migrate` to convert legacy `followups` rows into dispatcher orders with a structured report.
+
+## Narrative Surface Health
+
+- Digest telemetry now records the press mix per cycle; review `/telemetry_report` → "Long-tail Economy" and "Press Cadence" sections to ensure varied templates keep firing.
+- Moderation metrics surface in `/telemetry_report` under "Moderation (24h)"—watch for spikes in specific categories and run `python -m great_work.tools.calibrate_moderation --json` when retuning Guardian thresholds.
 
 ## Health Checks & Thresholds
 

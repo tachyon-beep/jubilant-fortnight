@@ -183,8 +183,13 @@ class GazetteScheduler:
                 release_count=release_count,
                 scheduled_queue_size=self.service.pending_press_count(),
             )
+            if releases:
+                telemetry.track_press_mix(
+                    press_types=[press.type for press in releases],
+                    source="digest",
+                )
         except Exception:  # pragma: no cover - defensive logging only
-                logger.exception("Failed to record digest telemetry")
+            logger.exception("Failed to record digest telemetry")
 
         self._evaluate_alerts(
             duration_ms=duration_ms,

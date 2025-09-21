@@ -28,6 +28,15 @@ vignettes:
           - "Religious envoys insist the consortium publish a respectful treatment manual before further digs."
           - "Foreign observers wonder if the consortium will demand tribute from every future expedition."
         tags: ["diplomacy", "religious"]
+      - id: "field_covert_listeners"
+        headline: "Covert Listening Posts Activated"
+        body: |
+          Signal-workers thread resonant wire through canyon strata, triangulating whispers between rival campfires.
+          The team now hears when competing factions reroute supplies or slip new envoys past the cordon.
+        gossip:
+          - "Industry attachés quietly offer to bankroll an expanded wire network."
+          - "Foreign dignitaries accuse the expedition of wiretapping inter-faction parleys."
+        tags: ["intelligence", "foreign"]
     standard:
       - id: "field_trading_post"
         headline: "Trading Post Rescued"
@@ -83,6 +92,15 @@ vignettes:
           - "Archive staff race to transcribe stories before dialect nuances are lost."
           - "Some theorists worry the new myths undercut their favourite theses."
         tags: ["culture", "archives"]
+      - id: "field_sabotage_countermeasure"
+        headline: "Sabotage Countermeasure Implemented"
+        body: |
+          After detecting tampered ballast weights, engineers deploy resonance wards and rotating watchers. The move
+          reassures patrons but stretches the already thin logistics crew.
+        gossip:
+          - "{scholar} swears the saboteurs left a calling card tied to a rival patron."
+          - "Government envoys request access to the ward schematics for their own frontier sites."
+        tags: ["security", "sabotage"]
   think_tank:
     deep:
       - id: "think_tank_forbidden_thesis"

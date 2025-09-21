@@ -6,7 +6,7 @@ import logging
 import os
 import sqlite3
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -469,6 +469,23 @@ class TelemetryCollector:
             float(queue_size),
             metadata={"horizon_hours": horizon_hours},
         )
+
+    def track_press_mix(
+        self,
+        *,
+        press_types: Iterable[str],
+        source: str = "digest",
+    ) -> None:
+        """Record the mix of press types generated during a cycle."""
+
+        counter = Counter(press_types)
+        for press_type, count in counter.items():
+            self.record(
+                MetricType.PRESS_CADENCE,
+                "press_mix",
+                float(count),
+                tags={"event_type": "press_mix", "layer_type": press_type, "source": source},
+            )
 
     def track_order_snapshot(
         self,

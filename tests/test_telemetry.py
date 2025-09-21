@@ -299,6 +299,17 @@ def test_track_moderation_event_summary(tmp_path):
     assert summary["totals"]["by_severity"]["block"] == 1
 
 
+def test_track_press_mix(tmp_path):
+    collector = TelemetryCollector(Path(tmp_path) / "press.db")
+    collector.track_press_mix(press_types=["mentorship", "mentorship", "symposium"], source="digest")
+    collector.flush()
+    summary = collector.get_press_cadence_summary(hours=1)
+    entries = [entry for entry in summary if entry.get("event_type") == "press_mix"]
+    assert entries
+    layer_types = {entry.get("layer_type") for entry in entries}
+    assert "mentorship" in layer_types
+
+
 def test_track_system_event_alert_routing(monkeypatch):
     """Alert-prefixed system events trigger the alert router with cooldown handling."""
     monkeypatch.setenv("GREAT_WORK_ALERT_COOLDOWN_SECONDS", "60")

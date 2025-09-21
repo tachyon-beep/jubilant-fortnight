@@ -79,6 +79,27 @@ async def _post_to_channel(
         logger.exception("Failed to send %s message", purpose)
 
 
+async def _post_embed_to_channel(
+    bot: commands.Bot,
+    channel_id: Optional[int],
+    *,
+    embed: discord.Embed,
+    content: Optional[str],
+    purpose: str,
+) -> None:
+    if channel_id is None:
+        logger.debug("Skipping %s embed post; channel not configured", purpose)
+        return
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        logger.warning("Failed to locate %s channel with id %s", purpose, channel_id)
+        return
+    try:
+        await channel.send(content=content, embed=embed)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to send %s embed", purpose)
+
+
 async def _post_file_to_channel(
     bot: commands.Bot,
     channel_id: Optional[int],
@@ -121,7 +142,21 @@ def _format_message(lines: Iterable[str]) -> str:
 
 
 def _format_press(press: PressRelease) -> str:
-    return f"**{press.headline}**\n{press.body}"
+    lines = [f"**{press.headline}**"]
+    metadata = press.metadata or {}
+    scheduled = metadata.get("scheduled", {}) if isinstance(metadata.get("scheduled"), dict) else {}
+    release_at = scheduled.get("release_at")
+    if isinstance(release_at, datetime):  # pragma: no cover - typically stored as str
+        release_label = release_at.strftime("%Y-%m-%d %H:%M")
+    else:
+        release_label = release_at
+    if release_label:
+        lines.append(f"_Scheduled for {release_label}_")
+    source = metadata.get("surface") or metadata.get("type")
+    if source:
+        lines.append(f"_{source}_")
+    lines.append(press.body)
+    return "\n".join(lines)
 
 
 def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> commands.Bot:
@@ -151,21 +186,41 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
 
     async def _respond_and_broadcast(
         interaction: discord.Interaction,
-        lines: Iterable[str],
+        lines: Optional[Iterable[str]] = None,
         *,
         purpose: str,
         header: Optional[str] = None,
         channel: Optional[int] = None,
         ephemeral: bool = True,
+        embed: Optional[discord.Embed] = None,
     ) -> None:
         """Send an ephemeral response and mirror it to a public channel."""
 
-        message = _format_message(lines)
-        await interaction.response.send_message(message, ephemeral=ephemeral)
+        if embed is not None and lines is None:
+            await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+        else:
+            message = _format_message(lines or [])
+            await interaction.response.send_message(message, ephemeral=ephemeral)
+
         target_channel = channel if channel is not None else _info_channel()
         if target_channel is None:
             return
-        public_message = message if not header else _clamp_text(f"{header}\n{message}")
+
+        if embed is not None and lines is None:
+            public_embed = embed.copy()
+            content = header or None
+            await _post_embed_to_channel(
+                bot,
+                target_channel,
+                embed=public_embed,
+                content=content,
+                purpose=purpose,
+            )
+            return
+
+        public_message = _format_message(lines or [])
+        if header:
+            public_message = _clamp_text(f"{header}\n{public_message}")
         if not public_message.strip():
             return
         await _post_to_channel(bot, target_channel, public_message, purpose=purpose)
@@ -186,6 +241,157 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             return
         for note in notes:
             await _post_to_channel(bot, router.admin, note, purpose="admin")
+
+    def _build_status_embed(data: Dict[str, Any]) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"Status — {data['display_name']}",
+            colour=discord.Color.blurple(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(
+            name="Reputation",
+            value=f"{data['reputation']} (cap {data['influence_cap']})",
+            inline=False,
+        )
+
+        influence_lines = [f"{faction.capitalize()}: {value}" for faction, value in sorted(data["influence"].items())]
+        influence_text = "\n".join(influence_lines) if influence_lines else "None"
+        embed.add_field(name="Influence", value=influence_text, inline=False)
+
+        cooldowns = data.get("cooldowns") or {}
+        if cooldowns:
+            cooldown_lines = [f"{key}: {value} digests" for key, value in cooldowns.items()]
+            embed.add_field(
+                name="Cooldowns",
+                value="\n".join(cooldown_lines),
+                inline=False,
+            )
+
+        thresholds = data.get("thresholds") or {}
+        if thresholds:
+            threshold_lines = [f"{action}: rep ≥ {value}" for action, value in sorted(thresholds.items())]
+            embed.add_field(
+                name="Action Thresholds",
+                value="\n".join(threshold_lines),
+                inline=False,
+            )
+
+        contracts = data.get("contracts", {})
+        if contracts:
+            contract_lines = []
+            for faction, payload in sorted(contracts.items()):
+                contract_lines.append(
+                    f"{faction.capitalize()}: {payload.get('scholars', 0)} scholar(s), upkeep {payload.get('upkeep', 0)}, debt {payload.get('outstanding', 0)}"
+                )
+            embed.add_field(
+                name="Contract Upkeep",
+                value="\n".join(contract_lines),
+                inline=False,
+            )
+
+        sentiments = data.get("faction_sentiments") or {}
+        if sentiments:
+            sentiment_lines = []
+            for faction, payload in sorted(sentiments.items()):
+                avg = payload.get("average", 0.0)
+                count = payload.get("count", 0)
+                sentiment_lines.append(
+                    f"{faction.capitalize()}: Δ {avg:+.2f} ({count} scholar{'s' if count != 1 else ''})"
+                )
+            embed.add_field(
+                name="Faction Sentiment",
+                value="\n".join(sentiment_lines),
+                inline=False,
+            )
+
+        relationships = data.get("relationships") or []
+        if relationships:
+            relationship_lines = []
+            for entry in relationships[:5]:
+                feeling = entry.get("feeling", 0.0)
+                summary_parts: List[str] = []
+                if entry.get("active_mentorship"):
+                    summary_parts.append("active mentorship")
+                elif entry.get("last_mentorship_event"):
+                    summary_parts.append(entry["last_mentorship_event"])
+                track = entry.get("track")
+                tier = entry.get("tier")
+                if track:
+                    summary_parts.append(f"track {track}{'/' + tier if tier else ''}")
+                sidecast = entry.get("sidecast_arc")
+                if sidecast:
+                    phase = entry.get("last_sidecast_phase") or "ongoing"
+                    summary_parts.append(f"sidecast {sidecast} ({phase})")
+                summary = ", ".join(summary_parts) if summary_parts else "relationship"
+                timeline = []
+                for item in entry.get("history", [])[:2]:
+                    stamp = item.get("timestamp")
+                    if stamp and isinstance(stamp, str):
+                        stamp_display = stamp.split("T")[0]
+                    else:
+                        stamp_display = "recent"
+                    if item.get("type") == "mentorship":
+                        timeline.append(f"{stamp_display}: mentorship {item.get('event')}")
+                    else:
+                        timeline.append(f"{stamp_display}: sidecast {item.get('phase')}")
+                history_text = " | ".join(timeline)
+                line = f"{entry['scholar']}: Δ {feeling:+.1f} ({summary})"
+                if history_text:
+                    line += f"\n   {history_text}"
+                relationship_lines.append(line)
+            if len(relationships) > 5:
+                relationship_lines.append(f"… plus {len(relationships) - 5} more")
+            embed.add_field(
+                name="Mentorship & Sidecasts",
+                value="\n".join(relationship_lines),
+                inline=False,
+            )
+
+        commitments = data.get("commitments") or []
+        if commitments:
+            commitment_lines = []
+            for entry in commitments[:4]:
+                relationship_pct = entry.get("relationship_modifier", 0.0) * 100
+                end_at = entry.get("end_at")
+                if isinstance(end_at, datetime):
+                    end_text = end_at.strftime("%Y-%m-%d")
+                else:
+                    end_text = str(end_at) if end_at else "ongoing"
+                commitment_lines.append(
+                    f"{(entry.get('faction') or 'Unaligned').capitalize()}: {entry.get('status', 'active')} (Δ {relationship_pct:+.1f}%, ends {end_text})"
+                )
+            embed.add_field(
+                name="Seasonal Commitments",
+                value="\n".join(commitment_lines),
+                inline=False,
+            )
+
+        investments = data.get("investments") or []
+        if investments:
+            invest_lines = [
+                f"{entry.get('faction', 'unknown').capitalize()}: {entry.get('amount', 0)} influence"
+                for entry in investments[:4]
+            ]
+            embed.add_field(
+                name="Investments",
+                value="\n".join(invest_lines),
+                inline=False,
+            )
+
+        endowments = data.get("archive_endowments") or []
+        if endowments:
+            endow_lines = [
+                f"{entry.get('program', 'program')}: {entry.get('amount', 0)} influence"
+                for entry in endowments[:4]
+            ]
+            embed.add_field(
+                name="Archive Endowments",
+                value="\n".join(endow_lines),
+                inline=False,
+            )
+
+        embed.set_footer(text="Status generated via /status")
+        return embed
 
     @bot.event
     async def on_ready() -> None:
@@ -965,21 +1171,26 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     async def symposium_backlog(interaction: discord.Interaction) -> None:
         report = service.symposium_backlog_report()
         cfg = report.get("config", {})
-        lines = [
-            (
-                f"**Symposium Backlog** "
-                f"({report['backlog_size']}/{cfg.get('max_backlog')} slots; {report['slots_remaining']} free)"
+        embed = discord.Embed(
+            title="Symposium Backlog",
+            colour=discord.Color.gold(),
+            timestamp=datetime.now(timezone.utc),
+            description=(
+                f"Backlog {report['backlog_size']}/{cfg.get('max_backlog')} | "
+                f"Slots remaining {report['slots_remaining']}"
             ),
-            (
-                "Scoring: "
-                f"age weight {cfg.get('age_weight')}, max age {cfg.get('max_age_days')}d, "
-                f"fresh bonus +{cfg.get('fresh_bonus')}, repeat penalty −{cfg.get('repeat_penalty')}"
+        )
+        embed.add_field(
+            name="Scoring Weights",
+            value=(
+                f"Age weight {cfg.get('age_weight')} | Max age {cfg.get('max_age_days')}d | "
+                f"Fresh bonus +{cfg.get('fresh_bonus')} | Repeat penalty −{cfg.get('repeat_penalty')}"
             ),
-        ]
+            inline=False,
+        )
         scoring = report.get("scoring") or []
         if scoring:
-            lines.append("")
-            lines.append("**Current Ranking**")
+            ranking_lines: List[str] = []
             for entry in scoring:
                 components: list[str] = []
                 age_contrib = entry.get("age_contribution")
@@ -995,9 +1206,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     components.append("0.00 neutral")
                 component_text = ", ".join(components)
                 recent_flag = " (recent proposer)" if entry.get("recent_proposer") else ""
-                lines.append(
-                    "• {topic} — {name}: score {score:.2f} "
-                    "[{components}; age {age:.1f}d]{flag}".format(
+                ranking_lines.append(
+                    "{topic} — {name}: {score:.2f} [{components}; age {age:.1f}d]{flag}".format(
                         topic=entry.get("topic"),
                         name=entry.get("display_name"),
                         score=entry.get("score", 0.0),
@@ -1006,20 +1216,23 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         flag=recent_flag,
                     )
                 )
+            embed.add_field(
+                name="Current Ranking",
+                value="\n".join(ranking_lines)[:1024] or "—",
+                inline=False,
+            )
         else:
-            lines.append("")
-            lines.append("No proposals scored yet.")
+            embed.add_field(name="Current Ranking", value="No proposals scored yet.", inline=False)
 
         debt_rows = report.get("debts") or []
         if debt_rows:
             totals = report.get("debt_totals", {})
-            lines.append("")
-            lines.append(
-                "**Outstanding Debts** (total {total} across {count} player(s))".format(
+            debt_lines: List[str] = [
+                "Total {total} across {count} player(s)".format(
                     total=totals.get("total_outstanding", 0),
                     count=totals.get("players_in_debt", len(debt_rows)),
                 )
-            )
+            ]
             sorted_rows = sorted(
                 debt_rows,
                 key=lambda row: (row.get("amount", 0), row.get("display_name", "")),
@@ -1027,8 +1240,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             )
             for row in sorted_rows:
                 next_reprisal = row.get("next_reprisal_at") or "pending"
-                lines.append(
-                    "• {name} owes {amount} ({faction}) — reprisal lvl {level}, next reprisal {next_reprisal}".format(
+                debt_lines.append(
+                    "{name} owes {amount} ({faction}) — reprisal lvl {level}, next {next_reprisal}".format(
                         name=row.get("display_name"),
                         amount=row.get("amount", 0),
                         faction=(row.get("faction") or "Unaligned").capitalize(),
@@ -1037,20 +1250,25 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     )
                 )
                 if row.get("last_reprisal_at"):
-                    lines.append(
-                        "   Last reprisal {last} (cooldown {cooldown}d)".format(
+                    debt_lines.append(
+                        "  Last reprisal {last} (cooldown {cooldown}d)".format(
                             last=row.get("last_reprisal_at"),
                             cooldown=row.get("cooldown_days", "?"),
                         )
                     )
+            embed.add_field(
+                name="Outstanding Debts",
+                value="\n".join(debt_lines)[:1024],
+                inline=False,
+            )
 
-        header = f"**/symposium_status requested by {interaction.user.display_name}**"
+        header = f"/symposium_backlog requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
             interaction,
-            lines,
             purpose="symposium-status",
             header=header,
             ephemeral=True,
+            embed=embed,
         )
         await _flush_admin_notifications()
 
@@ -1061,77 +1279,96 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         service.ensure_player(player_id, interaction.user.display_name)
         status = service.symposium_pledge_status(player_id)
 
-        lines = [f"**Symposium Pledge Status — {status['display_name']}**"]
-        lines.append(
-            f"Current miss streak: {status['miss_streak']} | Grace remaining: {status['grace_remaining']} of {status['grace_limit']}"
+        embed = discord.Embed(
+            title=f"Symposium Status — {status['display_name']}",
+            colour=discord.Color.teal(),
+            timestamp=datetime.now(timezone.utc),
         )
-        if status.get("grace_window_start"):
-            lines.append(f"Grace window reset: {status['grace_window_start']}")
-        if status.get("last_voted_at"):
-            lines.append(f"Last voted at: {status['last_voted_at']}")
+        embed.add_field(
+            name="Participation",
+            value=(
+                f"Miss streak {status['miss_streak']} | Grace {status['grace_remaining']}/{status['grace_limit']}\n"
+                f"Last voted: {status.get('last_voted_at') or '—'}"
+            ),
+            inline=False,
+        )
         outstanding = status.get("outstanding_debt", 0)
         if outstanding:
-            lines.append(f"Outstanding symposium debt: {outstanding} influence")
+            embed.add_field(
+                name="Outstanding Symposium Debt",
+                value=f"{outstanding} influence owed",
+                inline=False,
+            )
 
         current = status.get("current")
         if current:
-            current_lines = ["", "**Active Symposium**"]
-            current_lines.append(f"Topic: {current['topic']}")
-            current_lines.append(f"Pledge: {current['pledge_amount']} influence")
-            faction = current.get("faction")
-            if faction:
-                current_lines.append(f"Faction at stake: {faction}")
-            current_lines.append(f"Status: {current.get('status', 'pending')}")
-            lines.extend(current_lines)
+            current_lines = [
+                f"Topic: {current['topic']}",
+                f"Pledge: {current['pledge_amount']} influence",
+                f"Status: {current.get('status', 'pending')}",
+            ]
+            if current.get("faction"):
+                current_lines.append(f"Faction: {current['faction']}")
+            embed.add_field(
+                name="Active Symposium",
+                value="\n".join(current_lines),
+                inline=False,
+            )
 
         debts = status.get("debts") or []
         if debts:
-            lines.append("")
-            lines.append("**Outstanding Debts**")
+            debt_lines = []
             for debt in debts:
                 faction = (debt.get("faction") or "Unaligned").capitalize()
                 next_reprisal = debt.get("next_reprisal_at") or "pending"
-                line = (
-                    f"• {debt.get('amount', 0)} influence ({faction}) — "
-                    f"reprisal lvl {debt.get('reprisal_level', 0)}, next reprisal {next_reprisal}"
+                record = (
+                    f"{debt.get('amount', 0)} influence ({faction}) — reprisal lvl {debt.get('reprisal_level', 0)}, next {next_reprisal}"
                 )
-                lines.append(line)
-                extra_bits: list[str] = []
+                extras = []
                 if debt.get("last_reprisal_at"):
-                    extra_bits.append(f"last reprisal {debt['last_reprisal_at']}")
+                    extras.append(f"last {debt['last_reprisal_at']}")
                 if debt.get("updated_at"):
-                    extra_bits.append(f"updated {debt['updated_at']}")
+                    extras.append(f"updated {debt['updated_at']}")
                 if debt.get("cooldown_days") is not None:
-                    extra_bits.append(f"cooldown {debt['cooldown_days']}d")
-                if extra_bits:
-                    lines.append("   " + "; ".join(extra_bits))
+                    extras.append(f"cooldown {debt['cooldown_days']}d")
+                if extras:
+                    record += "\n  " + "; ".join(extras)
+                debt_lines.append(record)
+            embed.add_field(
+                name="Outstanding Debts",
+                value="\n".join(debt_lines)[:1024],
+                inline=False,
+            )
 
         history = status.get("history") or []
         if history:
-            lines.append("")
-            lines.append("**Recent Symposium Outcomes**")
-            for entry in history:
-                lines.append(
-                    "• {topic} — {status} ({amount} influence{faction})".format(
-                        topic=entry.get("topic") or f"Topic {entry['topic_id']}",
-                        status=entry.get("status", "unknown"),
-                        amount=entry.get("pledge_amount", 0),
-                        faction=f" / {entry['faction']}" if entry.get("faction") else "",
-                    )
+            history_lines = []
+            for entry in history[:5]:
+                line = (
+                    f"[{entry['topic_id']}] {entry['topic']} — {entry['status']} (pledge {entry.get('pledge_amount', 0)})"
                 )
-                if entry.get("status") == "debt" and entry.get("resolved_at") is None:
-                    lines.append("  Debt outstanding until paid")
+                if entry.get("faction"):
+                    line += f" / {entry['faction']}"
+                if entry.get("symposium_date"):
+                    line += f" | date {entry['symposium_date']}"
+                if entry.get("resolved_at"):
+                    line += f" | resolved {entry['resolved_at']}"
+                history_lines.append(line)
+            embed.add_field(
+                name="Recent Participation",
+                value="\n".join(history_lines)[:1024],
+                inline=False,
+            )
         else:
-            lines.append("")
-            lines.append("No prior symposium pledges on record.")
+            embed.add_field(name="Recent Participation", value="No prior symposium pledges on record.", inline=False)
 
-        header = f"**/symposium_status requested by {interaction.user.display_name}**"
+        header = f"/symposium_status requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
             interaction,
-            lines,
             purpose="symposium-status",
             header=header,
             ephemeral=True,
+            embed=embed,
         )
         await _flush_admin_notifications()
 
@@ -1140,136 +1377,15 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     async def status(interaction: discord.Interaction) -> None:
         service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
         data = service.player_status(str(interaction.user.display_name))
-        lines = [f"**Status Snapshot — {data['display_name']}**"]
-        lines.append(f"Reputation: {data['reputation']} (cap {data['influence_cap']})")
-        lines.append("Influence:")
-        for faction, value in sorted(data["influence"].items()):
-            lines.append(f" - {faction}: {value}")
-        if data["cooldowns"]:
-            lines.append("Cooldowns:")
-            for key, value in data["cooldowns"].items():
-                lines.append(f" - {key}: {value} digests")
-        else:
-            lines.append("No active cooldowns.")
-        if data["thresholds"]:
-            lines.append("Action thresholds:")
-            for action, value in sorted(data["thresholds"].items()):
-                lines.append(f" - {action}: requires reputation {value}")
-        contracts = data.get("contracts", {})
-        if contracts:
-            lines.append("")
-            lines.append("Contract upkeep:")
-            for faction, payload in sorted(contracts.items()):
-                lines.append(
-                    " - {faction}: {count} scholar(s), upkeep {upkeep}, debt {debt}".format(
-                        faction=faction.capitalize(),
-                        count=payload.get("scholars", 0),
-                        upkeep=payload.get("upkeep", 0),
-                        debt=payload.get("outstanding", 0),
-                    )
-                )
-        relationships = data.get("relationships") or []
-        if relationships:
-            lines.append("")
-            lines.append("Mentorship & Sidecast Links:")
-            for entry in relationships:
-                feeling = entry.get("feeling", 0.0)
-                feeling_text = f"{feeling:+.1f}"
-                detail_parts: List[str] = []
-                if entry.get("active_mentorship"):
-                    detail_parts.append("active mentorship")
-                elif entry.get("last_mentorship_event"):
-                    detail = entry.get("last_mentorship_event")
-                    when = entry.get("last_mentorship_at") or "recently"
-                    detail_parts.append(f"{detail} ({when})")
-                track = entry.get("track")
-                tier = entry.get("tier")
-                if track:
-                    detail_parts.append(f"track {track}{'/' + tier if tier else ''}")
-                sidecast = entry.get("sidecast_arc")
-                if sidecast:
-                    phase = entry.get("last_sidecast_phase") or "ongoing"
-                    detail_parts.append(f"sidecast {sidecast} ({phase})")
-                summary = "; ".join(detail_parts) if detail_parts else "relationship"
-                lines.append(f" - {entry['scholar']} (Δ {feeling_text}) — {summary}")
-        sentiments = data.get("faction_sentiments") or {}
-        if sentiments:
-            lines.append("")
-            lines.append("Faction Sentiment:")
-            for faction, payload in sorted(sentiments.items()):
-                avg = payload.get("average", 0.0)
-                count = payload.get("count", 0)
-                label = faction.capitalize()
-                lines.append(
-                    " - {faction}: Δ {avg:+.2f} ({count} scholar{plural})".format(
-                        faction=label,
-                        avg=avg,
-                        count=count,
-                        plural="s" if count != 1 else "",
-                    )
-                )
-        commitments = data.get("commitments") or []
-        if commitments:
-            lines.append("")
-            lines.append("Seasonal Commitments:")
-            for entry in commitments:
-                relationship_pct = entry.get("relationship_modifier", 0.0) * 100
-                end_at = entry.get("end_at")
-                if isinstance(end_at, datetime):
-                    end_text = end_at.strftime("%Y-%m-%d")
-                else:
-                    end_text = str(end_at) if end_at else "ongoing"
-                lines.append(
-                    " - {faction}: status {status}, Δ {rel:+.1f}%, ends {end}".format(
-                        faction=(entry.get("faction") or "Unaligned").capitalize(),
-                        status=entry.get("status", "active"),
-                        rel=relationship_pct,
-                        end=end_text,
-                    )
-                )
-        investments = data.get("investments") or []
-        if investments:
-            lines.append("")
-            lines.append("Faction Investments:")
-            for entry in investments:
-                faction = (entry.get("faction") or "Unaligned").capitalize()
-                latest = entry.get("latest") or "—"
-                lines.append(
-                    " - {faction}: total {total} influence across {count} contribution(s); latest {latest}".format(
-                        faction=faction,
-                        total=entry.get("total", 0),
-                        count=entry.get("count", 0),
-                        latest=latest,
-                    )
-                )
-                programs = entry.get("programs") or []
-                if programs:
-                    lines.append("   Programs: " + ", ".join(programs))
-        endowments = data.get("endowments") or []
-        if endowments:
-            lines.append("")
-            lines.append("Archive Endowments:")
-            for entry in endowments:
-                faction = (entry.get("faction") or "Unaligned").capitalize()
-                latest = entry.get("latest") or "—"
-                lines.append(
-                    " - {faction}: total {total} donated across {count} gift(s); latest {latest}".format(
-                        faction=faction,
-                        total=entry.get("total", 0),
-                        count=entry.get("count", 0),
-                        latest=latest,
-                    )
-                )
-                programs = entry.get("programs") or []
-                if programs:
-                    lines.append("   Initiatives: " + ", ".join(programs))
-        header = f"**/status requested by {interaction.user.display_name}**"
+        embed = _build_status_embed(data)
+        header = f"/status requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
             interaction,
-            lines,
+            lines=None,
             purpose="status",
             header=header,
             ephemeral=True,
+            embed=embed,
         )
 
     @app_commands.command(name="invest", description="Invest influence into faction infrastructure")
@@ -1435,17 +1551,26 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         if not records:
             await interaction.response.send_message("No Gazette entries recorded yet.", ephemeral=True)
             return
-        lines = ["**Recent Gazette Entries**"]
+        embed = discord.Embed(
+            title="Recent Gazette Entries",
+            colour=discord.Color.dark_blue(),
+            timestamp=datetime.now(timezone.utc),
+        )
         for record in records:
             timestamp = record.timestamp.strftime("%Y-%m-%d %H:%M")
-            lines.append(f" - {timestamp} | {record.release.headline}")
-        header = f"**/gazette requested by {interaction.user.display_name}**"
+            embed.add_field(
+                name=timestamp,
+                value=record.release.headline,
+                inline=False,
+            )
+        embed.set_footer(text="Use /export_log for detailed history")
+        header = f"/gazette requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
             interaction,
-            lines,
             purpose="gazette-summary",
             header=header,
             ephemeral=True,
+            embed=embed,
         )
 
     @app_commands.command(name="export_log", description="Export recent events and press")
