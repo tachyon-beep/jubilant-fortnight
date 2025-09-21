@@ -194,6 +194,30 @@ Faction Project Update — Sky Array
 Sky Array advances under Academia stewardship. Progress: 1.2/3.0 (40.0%). Top contributors: Mentor Hal (+0.6), Team Lyra (+0.2).
 ```
 
+### 4.10 Player Status Snapshot (`/status`)
+
+- `/status` shows the most recent mentorship beats, sidecast arcs, and faction sentiments. Keep history blurbs short (≤60 characters) and focused on consequential beats so the embed stays scannable.
+- Use present-tense phrasings ("Mentorship closed", "Sidecast spotlight") so the embed reads like a timeline rather than a log extract.
+- Mentorship history pulls the two most recent events per scholar plus active arcs. Close the feedback loop by writing mentorship and sidecast follow-ups that name the event ("Advanced to co-lead track", "Phase 2: Spotlight"), allowing the snapshot to read cleanly.
+- Sidecast arcs surface the latest phase; prefer arc names that imply motion ("Archive Vigil", "Sponsorship Renewal") over vague descriptors.
+- Seasonal commitments render as "Academia: active (Δ +20.0%, ends 2030-01-05)". Keep seasonal copy grounded in tangible stakes so the percentages feel motivated.
+
+### 4.11 Theory Reference Snapshot (`/theory_reference`)
+
+```
+Theory Reference — pin in table-talk
+[104] Innovator
+Ley lines intersect at the Clocktower
+Confidence: Certain
+Deadline: 2030-02-14 (Active • 2d remaining)
+Supporters: s.lyra, s.merial
+```
+
+- Title lines are derived from player display names. Theory bodies should fit within 180 characters; trim preambles that restate the same hook.
+- Deadlines reflect ISO dates; when referencing them in prose, prefer "by 14 Feb" to keep table-talk tidy.
+- Supporter lists truncate after four entries, so front-load the most flavourful scholar IDs.
+- If a theory has no supporters yet, let the body hint at who should weigh in ("Awaiting symposium challengers"), so pinning the embed prompts action.
+
 ## 5. Good vs Bad Examples
 
 ### 5.1 Gossip Quote

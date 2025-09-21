@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 import statistics
 from collections import defaultdict
 from pathlib import Path
@@ -152,6 +154,30 @@ def recommend_thresholds(
     }
 
 
+def apply_thresholds(
+    collector: TelemetryCollector,
+    thresholds: Dict[str, float],
+) -> Dict[str, Dict[str, float]]:
+    """Persist recommendations into the KPI target table."""
+
+    mappings = {
+        "GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS": "active_players",
+        "GREAT_WORK_ALERT_MIN_MANIFESTO_RATE": "manifesto_adoption",
+        "GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS": "archive_usage",
+        "GREAT_WORK_ALERT_MIN_NICKNAME_RATE": "nickname_rate",
+        "GREAT_WORK_ALERT_MIN_PRESS_SHARES": "press_shares",
+    }
+
+    persisted: Dict[str, Dict[str, float]] = {}
+    for env_key, target_name in mappings.items():
+        value = thresholds.get(env_key)
+        if value is None:
+            continue
+        collector.set_kpi_target(target_name, value)
+        persisted[target_name] = {"target": value}
+    return persisted
+
+
 def _window_start_seconds(days: int) -> float:
     import time
 
@@ -190,6 +216,16 @@ def main() -> None:
         default=14,
         help="Window (days) to analyse archive lookups.",
     )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Persist recommended thresholds into telemetry.kpi_targets.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path to write a JSON export of recommendations (and persisted targets when --apply is set).",
+    )
     args = parser.parse_args()
 
     recommendations = recommend_thresholds(
@@ -199,9 +235,31 @@ def main() -> None:
         archive_days=args.archive_days,
     )
 
+    applied: Dict[str, Dict[str, float]] = {}
+    if args.apply:
+        collector = TelemetryCollector(args.db)
+        applied = apply_thresholds(collector, recommendations)
+
+    if args.output:
+        payload = {
+            "recommendations": recommendations,
+            "applied_targets": applied,
+            "database": str(args.db),
+        }
+        args.output.write_text(json.dumps(payload, indent=2))
+
+    # Print shell-friendly snippet regardless, so operators can copy/paste.
     print("# Recommended KPI thresholds (adjust as needed)")
     for key, value in recommendations.items():
         print(f"{key}={value}")
+
+    if args.apply:
+        print("\n# Applied targets")
+        for name, payload in applied.items():
+            target = payload.get("target")
+            print(f" set target {name} => {target}")
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

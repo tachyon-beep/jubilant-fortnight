@@ -12,6 +12,8 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `/gw_admin calibration_snapshot` – capture a calibration snapshot JSON and archive it in the admin channel.
 - `python -m great_work.tools.export_calibration_snapshot` – export the same snapshot on disk (supports summary-only mode and retention pruning).
 - `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
+- `python -m great_work.tools.recommend_kpi_thresholds --apply` – compute KPI guardrail suggestions from recent telemetry and persist them to `telemetry.db`; add `--output telemetry_exports/kpi_thresholds.json` for an audit trail.
+- `python -m great_work.tools.export_product_metrics` – dump current KPIs, historical trends, and cohort breakdowns to `telemetry_exports/` for offline dashboards or quarterly reviews.
 - `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
 - `python -m great_work.tools.calibrate_moderation` – inspect Guardian category/severity counts for tuning and override review.
 
@@ -61,7 +63,7 @@ export GREAT_WORK_ALERT_MAX_QUEUE=8
 
 All thresholds are evaluated as warnings at 75 % of the configured value before escalating to alerts.
 
-Canonical KPI targets live in the `kpi_targets` table inside `telemetry.db`. Use a short Python shell (or `sqlite3`) to upsert new values:
+Canonical KPI targets live in the `kpi_targets` table inside `telemetry.db`. Use either the calibration CLI (`python -m great_work.tools.recommend_kpi_thresholds --apply`) or a short Python shell to upsert new values:
 
 ```python
 from great_work.telemetry import TelemetryCollector
@@ -69,12 +71,11 @@ collector = TelemetryCollector("telemetry.db")
 collector.set_kpi_target("active_players", target=6, warning=4, notes="Beta baseline")
 ```
 
-Targets appear in `/telemetry_report`, drive the dashboard’s KPI targets table, and are echoed alongside health checks. Stored targets do not yet override environment thresholds automatically—set both when tuning alerts so on-call operators see aligned expectations.
-Stored targets override the corresponding alert thresholds (e.g., `active_players`, `manifesto_adoption`, `archive_usage`, `nickname_rate`, `press_shares`) during health evaluation, so update the database entry whenever product adjusts the baseline. Keep the environment variables aligned for clarity in deployment manifests.
+Targets appear in `/telemetry_report`, drive the dashboard’s KPI table, and automatically override the matching alert thresholds (`active_players`, `manifesto_adoption`, `archive_usage`, `nickname_rate`, `press_shares`). Update both the database entry and any environment defaults so deployment manifests stay in sync with the tuned guardrails.
 
 ### Alert Routing
 
-Set `GREAT_WORK_ALERT_WEBHOOK_URL` to forward guardrail breaches to an external destination (Discord webhook, Slack incoming URL, PagerDuty relay, etc.). Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP in addition to any webhook configured.
+Set `GREAT_WORK_ALERT_WEBHOOK_URLS` with a comma-separated list to fan alerts out to multiple destinations (Discord, Slack, PagerDuty, etc.), and optionally keep `GREAT_WORK_ALERT_WEBHOOK_URL` for legacy single-channel setups. Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP alongside the webhook fan-out.
 
 Events emitted through `TelemetryCollector.track_system_event` using the `alert_` prefix—including orders dispatcher backlog warnings, health-check failures, and symposium reprisal spikes—automatically route through the webhook once their cooldown expires.
 

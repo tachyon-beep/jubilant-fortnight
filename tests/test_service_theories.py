@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -137,6 +137,56 @@ def test_submit_multiple_theories_increments_bulletin_number(tmp_path):
     num2 = int(press2.headline.split("No. ")[1])
 
     assert num2 > num1
+
+
+def test_theory_reference_snapshot_includes_status_and_supporters(tmp_path):
+    """The theory reference snapshot should classify deadlines and surface supporters."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+
+    future_deadline = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    past_deadline = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+
+    service.ensure_player("innovator", "Innovator")
+    service.ensure_player("historian", "Historian")
+
+    service.submit_theory(
+        player_id="innovator",
+        theory="Ley lines intersect at the university clocktower",
+        confidence=ConfidenceLevel.CERTAIN,
+        supporters=["s.lyra"],
+        deadline=future_deadline,
+    )
+    future_id = service.state.get_last_theory_id_by_player("innovator")
+
+    service.submit_theory(
+        player_id="historian",
+        theory="Ancient tide tables predict symposium attendance",
+        confidence=ConfidenceLevel.SUSPECT,
+        supporters=[],
+        deadline=past_deadline,
+    )
+    past_id = service.state.get_last_theory_id_by_player("historian")
+
+    snapshot = service.theory_reference(limit=5)
+
+    assert snapshot["active"] >= 1
+    assert snapshot["expired"] >= 1
+
+    theories_by_id = {entry["id"]: entry for entry in snapshot["theories"]}
+    future_entry = theories_by_id[future_id]
+    past_entry = theories_by_id[past_id]
+
+    assert future_entry["status"] == "active"
+    assert future_entry["confidence_display"] == "Certain"
+    assert future_entry["supporters"] == ["s.lyra"]
+    assert future_entry["player_display"] == "Innovator"
+    assert future_entry["days_remaining"] is not None and future_entry["days_remaining"] >= 0
+
+    assert past_entry["status"] == "expired"
+    assert past_entry["confidence_display"] == "Suspect"
+    assert past_entry["deadline_display"] == past_deadline
 
 
 def test_ensure_player_creates_new_player(tmp_path):

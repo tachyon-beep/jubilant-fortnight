@@ -2612,6 +2612,88 @@ class GameService:
             "faction_sentiments": faction_sentiments,
         }
 
+    def theory_reference(self, limit: int = 8) -> Dict[str, object]:
+        """Return a snapshot of recent theories for reference surfaces."""
+
+        records = self.state.list_theories(limit=limit)
+        now = datetime.now(timezone.utc)
+        today = now.date()
+
+        entries: List[Dict[str, object]] = []
+        active = 0
+        expired = 0
+        unscheduled = 0
+
+        for theory_id, record in records:
+            player = self.state.get_player(record.player_id)
+            display_name = player.display_name if player else record.player_id
+
+            deadline_display = record.deadline or "—"
+            deadline_date = None
+            days_remaining: Optional[int] = None
+            status = "unscheduled"
+            if record.deadline:
+                parsed_deadline: Optional[datetime] = None
+                try:
+                    parsed_deadline = datetime.fromisoformat(record.deadline)
+                except ValueError:
+                    try:
+                        parsed_deadline = datetime.strptime(record.deadline, "%Y-%m-%d")
+                    except ValueError:
+                        parsed_deadline = None
+                if parsed_deadline is not None:
+                    deadline_date = parsed_deadline.date()
+                    deadline_display = deadline_date.isoformat()
+                    days_remaining = (deadline_date - today).days
+                    status = "active" if days_remaining >= 0 else "expired"
+                else:
+                    status = "unscheduled"
+            if not record.deadline:
+                status = "unscheduled"
+
+            if status == "active":
+                active += 1
+            elif status == "expired":
+                expired += 1
+            else:
+                unscheduled += 1
+
+            supporters = [str(value) for value in record.supporters] if record.supporters else []
+            confidence_value = record.confidence
+            try:
+                confidence_label = ConfidenceLevel(confidence_value).value
+            except ValueError:
+                confidence_label = confidence_value
+            confidence_display = confidence_label.replace("_", " ").title()
+
+            submitted_display = record.timestamp.strftime("%Y-%m-%d")
+
+            entries.append(
+                {
+                    "id": theory_id,
+                    "theory": record.theory,
+                    "player_id": record.player_id,
+                    "player_display": display_name,
+                    "confidence": confidence_value,
+                    "confidence_display": confidence_display,
+                    "supporters": supporters,
+                    "deadline_display": deadline_display,
+                    "status": status,
+                    "days_remaining": days_remaining,
+                    "submitted_at": record.timestamp.isoformat(),
+                    "submitted_display": submitted_display,
+                }
+            )
+
+        return {
+            "generated_at": now.isoformat(),
+            "limit": limit,
+            "theories": entries,
+            "active": active,
+            "expired": expired,
+            "unscheduled": unscheduled,
+        }
+
     def roster_status(self) -> List[Dict[str, object]]:
         """Get status information for all scholars in the roster."""
         roster = []

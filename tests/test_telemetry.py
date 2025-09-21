@@ -428,6 +428,36 @@ def test_alert_router_multiple_webhooks(monkeypatch):
     assert urls_called == ["https://ops.example", "https://alerts.example"]
 
 
+def test_alert_router_env_merges_urls(monkeypatch):
+    """Environment variables should merge multiple webhook destinations."""
+
+    from great_work import alerting
+
+    monkeypatch.setenv(
+        "GREAT_WORK_ALERT_WEBHOOK_URLS",
+        "https://ops.example, https://oncall.example",
+    )
+    monkeypatch.setenv("GREAT_WORK_ALERT_WEBHOOK_URL", "https://fallback.example")
+    alerting.set_alert_router(None)
+
+    urls_called = []
+
+    def fake_post(self, payload, url):
+        urls_called.append(url)
+        return True
+
+    monkeypatch.setattr(AlertRouter, "_post_webhook", fake_post, raising=False)
+
+    router = alerting.get_alert_router()
+    router.notify(event="test", message="hi")
+
+    assert urls_called == [
+        "https://ops.example",
+        "https://oncall.example",
+        "https://fallback.example",
+    ]
+
+
 def test_digest_summary():
     """Digest summaries should surface runtime and queue size."""
     with tempfile.TemporaryDirectory() as tmpdir:

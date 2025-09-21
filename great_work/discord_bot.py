@@ -647,13 +647,96 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 )
             )
 
-        header = f"**/symposium_backlog requested by {interaction.user.display_name}**"
+        header = f"**/recruit_odds requested by {interaction.user.display_name}**"
         await _respond_and_broadcast(
             interaction,
             lines,
-            purpose="symposium-backlog",
+            purpose="recruit-odds",
             header=header,
             ephemeral=True,
+        )
+        await _flush_admin_notifications()
+
+    @app_commands.command(name="theory_reference", description="Publish a snapshot of recent theories for players")
+    @track_command
+    @app_commands.describe(limit="Number of recent theories to include in the snapshot (default 8)")
+    async def theory_reference(
+        interaction: discord.Interaction,
+        limit: app_commands.Range[int, 1, 20] = 8,
+    ) -> None:
+        snapshot = service.theory_reference(limit=limit)
+        theories = snapshot.get("theories", [])
+        if not theories:
+            await interaction.response.send_message("No theories recorded yet.", ephemeral=True)
+            await _flush_admin_notifications()
+            return
+
+        embed = discord.Embed(
+            title="Theory Reference",
+            colour=discord.Color.purple(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        summary = (
+            f"Active {snapshot.get('active', 0)} • Expired {snapshot.get('expired', 0)} • "
+            f"Unscheduled {snapshot.get('unscheduled', 0)}"
+        )
+        embed.description = summary + "\nPin this snapshot for quick theory lookups."
+
+        for entry in theories:
+            supporters = entry.get("supporters") or []
+            if supporters:
+                supporter_preview = ", ".join(supporters[:4])
+                remaining_supporters = len(supporters) - 4
+                if remaining_supporters > 0:
+                    supporter_preview += f" … +{remaining_supporters}"
+            else:
+                supporter_preview = "—"
+
+            days_remaining = entry.get("days_remaining")
+            status = entry.get("status", "unscheduled")
+            if status == "active":
+                if days_remaining is None:
+                    status_text = "Active"
+                elif days_remaining > 1:
+                    status_text = f"Active • {days_remaining}d remaining"
+                elif days_remaining == 1:
+                    status_text = "Active • 1d remaining"
+                elif days_remaining == 0:
+                    status_text = "Active • resolves today"
+                else:
+                    status_text = "Active"
+            elif status == "expired":
+                status_text = "Expired"
+            else:
+                status_text = "Unscheduled"
+
+            theory_text = _clamp_text(entry.get("theory", ""))
+            confidence_text = entry.get("confidence_display", entry.get("confidence", "")).strip()
+            field_lines = [theory_text]
+            if confidence_text:
+                field_lines.append(f"Confidence: {confidence_text}")
+            field_lines.append(
+                f"Deadline: {entry.get('deadline_display', '—')} ({status_text})"
+            )
+            field_lines.append(f"Supporters: {supporter_preview}")
+            field_lines.append(f"Submitted: {entry.get('submitted_display', '—')}")
+
+            field_value = _clamp_text("\n".join(field_lines))[:1024]
+            embed.add_field(
+                name=f"[{entry.get('id')}] {entry.get('player_display')}"
+                if entry.get("player_display")
+                else f"Theory {entry.get('id')}",
+                value=field_value,
+                inline=False,
+            )
+
+        header = f"/theory_reference requested by {interaction.user.display_name}"
+        await _respond_and_broadcast(
+            interaction,
+            purpose="theory-reference",
+            header=header,
+            ephemeral=True,
+            embed=embed,
         )
         await _flush_admin_notifications()
 
