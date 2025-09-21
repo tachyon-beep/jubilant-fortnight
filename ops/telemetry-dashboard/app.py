@@ -181,22 +181,40 @@ async def healthcheck() -> HTMLResponse:
 
 
 @app.get("/api/orders", response_class=JSONResponse)
-async def api_order_records(order_type: Optional[str] = None, hours: int = 24, limit: int = 250) -> JSONResponse:
+async def api_order_records(
+    order_type: Optional[str] = None,
+    hours: int = 24,
+    limit: int = 250,
+    event: Optional[str] = None,
+    min_pending: Optional[float] = None,
+    min_age_hours: Optional[float] = None,
+) -> JSONResponse:
     """Return dispatcher backlog events with optional filtering."""
 
     normalised_hours = _normalise_hours(hours)
     normalised_limit = _normalise_limit(limit)
+    min_age_seconds = None
+    if min_age_hours is not None:
+        if min_age_hours < 0:
+            raise HTTPException(status_code=400, detail="min_age_hours must be non-negative")
+        min_age_seconds = float(min_age_hours) * 3600.0
 
     records = collector.get_order_backlog_events(
         order_type=order_type or None,
         hours=normalised_hours,
         limit=normalised_limit,
+        event=event or None,
+        min_pending=min_pending,
+        min_age_seconds=min_age_seconds,
     )
     order_types = sorted(collector.get_order_backlog_summary(MAX_QUERY_HOURS).keys())
     payload = {
         "order_type": order_type,
         "hours": normalised_hours,
         "limit": normalised_limit,
+        "event": event,
+        "min_pending": min_pending,
+        "min_age_hours": min_age_hours,
         "records": records,
         "order_types": order_types,
     }
@@ -204,16 +222,31 @@ async def api_order_records(order_type: Optional[str] = None, hours: int = 24, l
 
 
 @app.get("/api/orders.csv")
-async def api_order_records_csv(order_type: Optional[str] = None, hours: int = 24, limit: int = 250) -> StreamingResponse:
+async def api_order_records_csv(
+    order_type: Optional[str] = None,
+    hours: int = 24,
+    limit: int = 250,
+    event: Optional[str] = None,
+    min_pending: Optional[float] = None,
+    min_age_hours: Optional[float] = None,
+) -> StreamingResponse:
     """Export dispatcher backlog events as CSV."""
 
     normalised_hours = _normalise_hours(hours)
     normalised_limit = _normalise_limit(limit)
+    min_age_seconds = None
+    if min_age_hours is not None:
+        if min_age_hours < 0:
+            raise HTTPException(status_code=400, detail="min_age_hours must be non-negative")
+        min_age_seconds = float(min_age_hours) * 3600.0
 
     records = collector.get_order_backlog_events(
         order_type=order_type or None,
         hours=normalised_hours,
         limit=normalised_limit,
+        event=event or None,
+        min_pending=min_pending,
+        min_age_seconds=min_age_seconds,
     )
 
     def _row_iter() -> Iterable[str]:

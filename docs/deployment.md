@@ -131,8 +131,12 @@ The `/telemetry_report` command now opens with a **Health Summary**, mapping key
 
 - List pending work with `/gw_admin list_orders` (filter by order type and status). Results show the order
   id, actor, subject, and payload preview.
+- Additional filters include `actor_id`, `subject_id`, and `older_than_hours`; toggles `include_payload=true` and `as_file=true`
+  expose full JSON payloads or attach the output as a text file when Discord message limits would truncate it.
 - Cancel items with `/gw_admin cancel_order order_id:<id> [reason:<text>]`. The game logs the cancellation,
   emits telemetry, and notifies the admin channel. Cancelled orders no longer execute during the digest tick.
+- For bulk reviews, run `python -m great_work.tools.manage_orders summary --json` to stream order counts or
+  `python -m great_work.tools.manage_orders followups migrate` to migrate any legacy `followups` rows after a dry run.
 
 Update the environment variables to tune when alerts trigger, and capture any operator-specific playbook additions in your internal notes.
 Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS` to 2–3 for tiny playtests or temporarily mute manifesto/archive checks while onboarding new groups.
@@ -168,6 +172,7 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 2. The Gazette scheduler now writes timestamped JSON files plus `latest.json` after each digest. Mirror the directory to long-term storage if you need historical tuning records.
 3. Run `/gw_admin calibration_snapshot` or `python -m great_work.tools.export_calibration_snapshot --stdout` to generate a snapshot on demand; both honour the same environment configuration and return summaries covering seasonal debt, faction investment totals, endowments, and pending orders.
 4. The telemetry dashboard exposes the most recent snapshot at `/api/calibration_snapshot` and surfaces key totals at the top of the UI.
+5. Use the dashboard’s dispatcher filter form (or call `/api/orders?event=poll&min_pending=3`) to pull JSON/CSV samples during live triage.
 
 Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `telemetry.db` with deterministic sample data when rehearsing the workflow before live players arrive.
 

@@ -69,7 +69,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 10 | 100% |
 
-**Notes:** Slash commands cover theories, wagers, recruitment, expeditions, conferences, mentorship, offers, archives, telemetry, and admin overrides, all wired to service methods and wrapped in the shared telemetry decorator with layered-press and digest metrics surfaced via Discord and the bundled dashboard container.【F:great_work/discord_bot.py†L123-L940】【F:great_work/telemetry_decorator.py†L12-L80】【F:ops/telemetry-dashboard/app.py†L1-L64】
+**Notes:** Slash commands cover theories, wagers, recruitment, expeditions, conferences, mentorship, offers, archives, telemetry, and admin overrides, all wired to service methods and wrapped in the shared telemetry decorator with layered-press and digest metrics surfaced via Discord and the bundled dashboard container. `/gw_admin list_orders` now supports actor/subject/age filters and file output, and the `python -m great_work.tools.manage_orders` CLI provides JSON/CSV-ready summaries for audits.【F:great_work/discord_bot.py†L123-L2390】【F:great_work/telemetry_decorator.py†L12-L80】【F:ops/telemetry-dashboard/app.py†L1-L230】
 
 ## Non-Functional Requirements Status
 

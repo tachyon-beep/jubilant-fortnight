@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Telemetry now persists KPI targets (which automatically override alert thresholds), reports engagement cohorts (new vs returning players), and surfaces symposium participation mixes in `/telemetry_report` and the dashboard, including updated FastAPI views/templates.
 - Added digest-synced calibration snapshots with `/gw_admin calibration_snapshot`, `python -m great_work.tools.export_calibration_snapshot`, and a dashboard `/api/calibration_snapshot` endpoint; snapshots summarise seasonal debt, faction investments, archive endowments, and pending orders.
 - Added `python -m great_work.tools.generate_sample_telemetry` to seed deterministic telemetry data for rehearsal environments.
+- Added `python -m great_work.tools.manage_orders` plus enhanced `/gw_admin list_orders` filters/file output and dashboard query controls for dispatcher audits.
 - Added `python -m great_work.tools.validate_narrative --all` (and `make validate-narrative`) to statically lint tone packs, recruitment/table-talk/mentorship press, sidecast arcs, epilogues, and vignette catalogues before deployment.
 - Added `python -m great_work.tools.preview_narrative` (and `make preview-narrative`) to render sample outputs for narrative surfaces, aiding content review before deploy.
 - Landmark expeditions now draw copy from `great_work/data/landmark_preparations.yaml`, including dedicated follow-up briefs previewable via `python -m great_work.tools.preview_narrative landmark-prep`.

@@ -12,6 +12,7 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `/gw_admin calibration_snapshot` – capture a calibration snapshot JSON and archive it in the admin channel.
 - `python -m great_work.tools.export_calibration_snapshot` – export the same snapshot on disk (supports summary-only mode and retention pruning).
 - `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
+- `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
 
 ## Calibration Snapshots & Tuning Workflow
 
@@ -19,6 +20,13 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - **On-demand export:** run `/gw_admin calibration_snapshot` or `python -m great_work.tools.export_calibration_snapshot --stdout` to capture the latest totals before a tuning review. Both commands respect the same environment configuration and pin a `latest.json` alongside timestamped files.
 - **Dashboard visibility:** the telemetry dashboard now surfaces the latest snapshot summary and exposes the raw JSON at `/api/calibration_snapshot`.
 - **Live-data follow-up:** once 1.0 telemetry is available, analyse seasonal debt, investment totals, and archival endowments from the snapshot to adjust defaults in `settings.yaml`. Use `python -m great_work.tools.recommend_seasonal_settings` to fold the findings back into configuration and update this runbook with the chosen baselines.
+
+## Dispatcher Backlog Operations
+
+- `/gw_admin list_orders` now supports `actor_id`, `subject_id`, and `older_than_hours` filters, plus `include_payload` and `as_file` toggles for detailed reviews.
+- Cancel stale work with `/gw_admin cancel_order order_id:<id> [reason:<text>]`; cancellations emit telemetry and admin notifications.
+- The telemetry dashboard hosts a dispatcher filter form that proxies `/api/orders` and `/api/orders.csv`, accepting additional query parameters (`event`, `min_pending`, `min_age_hours`).
+- Use `python -m great_work.tools.manage_orders summary --json` for job-friendly snapshots or `python -m great_work.tools.manage_orders followups migrate` to convert legacy `followups` rows into dispatcher orders with a structured report.
 
 ## Health Checks & Thresholds
 

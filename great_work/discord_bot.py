@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import io
+import json
 import atexit
 import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import discord
 from discord import app_commands
@@ -2283,13 +2284,23 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @app_commands.describe(
         order_type="Filter by order type (e.g. followup:symposium_reprimand)",
         status="Order status filter (pending/completed/cancelled/any)",
-        limit="Maximum number of rows to display (1-25)",
+        limit="Maximum number of rows to display (1-50)",
+        actor_id="Only include orders with this actor id",
+        subject_id="Only include orders with this subject id",
+        older_than_hours="Only include orders older than this many hours",
+        include_payload="Append JSON payload details",
+        as_file="Attach the results as a text file",
     )
     async def admin_list_orders(
         interaction: discord.Interaction,
         order_type: Optional[str] = None,
         status: Optional[str] = "pending",
         limit: int = 10,
+        actor_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        older_than_hours: Optional[float] = None,
+        include_payload: bool = False,
+        as_file: bool = False,
     ) -> None:
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -2298,7 +2309,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             )
             return
 
-        limit = max(1, min(limit, 25))
+        limit = max(1, min(limit, 50))
         status_filter = None if not status or status.lower() == "any" else status.lower()
         orders = service.admin_list_orders(
             order_type=order_type or None,
@@ -2306,39 +2317,74 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             limit=limit,
         )
 
+        if actor_id:
+            orders = [order for order in orders if (order.get("actor_id") or "") == actor_id]
+        if subject_id:
+            orders = [order for order in orders if (order.get("subject_id") or "") == subject_id]
+
+        if older_than_hours is not None and older_than_hours > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
+
+            def _order_timestamp(order: Dict[str, object]) -> Optional[datetime]:
+                scheduled = order.get("scheduled_at")
+                if isinstance(scheduled, datetime):
+                    return scheduled
+                created = order.get("created_at")
+                if isinstance(created, datetime):
+                    return created
+                return None
+
+            filtered_orders: List[Dict[str, object]] = []
+            for order in orders:
+                reference = _order_timestamp(order)
+                if reference is not None and reference <= cutoff:
+                    filtered_orders.append(order)
+            orders = filtered_orders
+
         if not orders:
             await interaction.response.send_message("No dispatcher orders found.", ephemeral=True)
             return
 
-        lines = ["**Dispatcher Orders:**"]
+        now_ts = datetime.now(timezone.utc)
+        lines = ["#id | type | status | actor | subject | age(h) | scheduled | created"]
         for order in orders:
-            payload = order.get("payload") or {}
-            payload_preview = ", ".join(
-                f"{key}={payload[key]}" for key in list(payload.keys())[:3]
+            scheduled = order.get("scheduled_at")
+            created = order.get("created_at")
+            scheduled_label = scheduled.isoformat() if isinstance(scheduled, datetime) else "—"
+            created_label = created.isoformat() if isinstance(created, datetime) else "—"
+            reference = scheduled if isinstance(scheduled, datetime) else created
+            if isinstance(reference, datetime):
+                age_hours = max(0.0, (now_ts - reference).total_seconds() / 3600.0)
+            else:
+                age_hours = 0.0
+            line = (
+                f"#{order['id']} | {order.get('order_type', 'unknown')} | {order.get('status', '?')} | "
+                f"{order.get('actor_id') or '—'} | {order.get('subject_id') or '—'} | {age_hours:.1f} | "
+                f"{scheduled_label} | {created_label}"
             )
-            if len(payload) > 3:
-                payload_preview += ", …"
-            scheduled = order.get("scheduled_at") or "—"
-            created = order.get("created_at") or "—"
-            lines.append(
-                "#{id} {otype} [{status}] actor={actor} subject={subject} scheduled={scheduled} created={created}".format(
-                    id=order["id"],
-                    otype=order.get("order_type", "unknown"),
-                    status=order.get("status", "?"),
-                    actor=order.get("actor_id") or "—",
-                    subject=order.get("subject_id") or "—",
-                    scheduled=scheduled,
-                    created=created,
-                )
+            lines.append(line)
+            if include_payload:
+                payload = order.get("payload") or {}
+                payload_json = json.dumps(payload, sort_keys=True)
+                lines.append(f"  payload: {payload_json}")
+
+        content = "\n".join(lines)
+        send_as_file = as_file or len(content) > 1900
+        summary_line = f"Returned {len(orders)} orders" + (f" (filtered by {order_type})" if order_type else "")
+
+        if send_as_file:
+            buffer = io.BytesIO(content.encode("utf-8"))
+            buffer.seek(0)
+            file_name = "orders_report.txt"
+            await interaction.response.send_message(
+                summary_line,
+                file=discord.File(buffer, filename=file_name),
+                ephemeral=True,
             )
-            if payload_preview:
-                lines.append(f"  payload: {payload_preview}")
-
-        message = "\n".join(lines)
-        if len(message) > 1900:
-            message = message[:1897] + "…"
-
-        await interaction.response.send_message(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(f"```
+{content}
+```", ephemeral=True)
         await _flush_admin_notifications()
 
     @gw_admin.command(name="cancel_order", description="Cancel a dispatcher order")

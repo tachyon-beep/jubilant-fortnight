@@ -241,15 +241,34 @@ def test_get_order_backlog_events_filters_and_limits():
             pending_count=5,
             oldest_pending_seconds=900.0,
         )
+        collector.track_order_snapshot(
+            order_type="mentorship_activation",
+            event="update:completed",
+            pending_count=0,
+            oldest_pending_seconds=0.0,
+        )
         collector.flush()
 
         records = collector.get_order_backlog_events(order_type="mentorship_activation", hours=1, limit=5)
         assert records
         assert all(record["order_type"] == "mentorship_activation" for record in records)
-        assert records[0]["pending"] == 1.0  # latest entry first
+        assert records[0]["event"] == "update:completed"
 
         limited = collector.get_order_backlog_events(hours=1, limit=2)
         assert len(limited) == 2
+
+        high_pending = collector.get_order_backlog_events(hours=1, min_pending=3)
+        assert all(record["pending"] >= 3 for record in high_pending)
+
+        aged = collector.get_order_backlog_events(hours=1, min_age_seconds=3500)
+        assert aged and all((record["oldest_pending_seconds"] or 0) >= 3500 for record in aged)
+
+        completed = collector.get_order_backlog_events(
+            hours=1,
+            event="update:completed",
+            order_type="mentorship_activation",
+        )
+        assert completed and all(record["event"] == "update:completed" for record in completed)
 
 
 def test_track_system_event_alert_routing(monkeypatch):

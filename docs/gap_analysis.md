@@ -62,7 +62,7 @@ Last Updated: 2025-09-21 (Guardian moderation, seasonal telemetry)
 
 - **Design intent:** Persist players, scholars, relationships, theories, expeditions, offers, press artefacts, and events with exports available through a bot command.【F:docs/HLD.md†L203-L385】
 - **Implementation status:** SQLite schema covers all major entities including offers, mentorships, conferences, symposium topics/votes, and press; the new `orders` table centralises delayed work (mentorship activations, conference resolutions) consumed by the orders dispatcher, while exports flow through `/export_log` and archive tooling.【F:great_work/state.py†L18-L520】【F:great_work/service.py†L1402-L1880】【F:great_work/discord_bot.py†L562-L737】
-- **Gap:** Exportable order snapshots are in place via the dashboard (`/api/orders`, `/api/orders.csv`). Remaining need: add migration audit helpers (dry‑run diffs, bulk action previews) to validate large edits safely.【F:ops/telemetry-dashboard/app.py†L86-L173】
+- **Status:** Exportable order snapshots are in place via the dashboard (`/api/orders`, `/api/orders.csv`), the new `/api/orders` filters plus the dispatcher form support event/age/pending constraints, and `python -m great_work.tools.manage_orders` provides dry-run migration previews and JSON summaries for audits.【F:ops/telemetry-dashboard/app.py†L1-L230】【F:docs/TELEMETRY_RUNBOOK.md†L20-L140】
 
 ## 8. Discord Command Surface and Admin Tools
 

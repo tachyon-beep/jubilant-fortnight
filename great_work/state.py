@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections import Counter
 from contextlib import closing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -299,6 +300,7 @@ class GameState:
         self._ensure_timeline()
         self._cached_players: Dict[str, Player] = {}
         self._cached_scholars: Dict[str, Scholar] = {}
+        self._followup_checked = False
 
     def _ensure_schema(self) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -507,16 +509,22 @@ class GameState:
             conn.commit()
 
     # Follow-up queue ---------------------------------------------------
-    def _migrate_followups_to_orders(self) -> None:
+    def _collect_followup_rows(self) -> List[Tuple[str, str, str, str]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
                 "SELECT scholar_id, kind, payload, resolve_at FROM followups"
             ).fetchall()
+        return rows
+
+    def _convert_followup_rows(self, rows: List[Tuple[str, str, str, str]]) -> int:
         if not rows:
-            return
+            return 0
 
         for scholar_id, kind, payload_json, resolve_at in rows:
-            payload = json.loads(payload_json)
+            try:
+                payload = json.loads(payload_json)
+            except (TypeError, json.JSONDecodeError):  # pragma: no cover - defensive guard
+                payload = {}
             scheduled_at = datetime.fromisoformat(resolve_at)
             self.enqueue_order(
                 f"followup:{kind}",
@@ -529,6 +537,118 @@ class GameState:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute("DELETE FROM followups")
             conn.commit()
+        return len(rows)
+
+    def _summarize_followup_rows(
+        self, rows: List[Tuple[str, str, str, str]]
+    ) -> Dict[str, object]:
+        summary: Dict[str, object] = {
+            "pending_rows": len(rows),
+            "kinds": {},
+            "earliest_resolve_at": None,
+            "latest_resolve_at": None,
+        }
+        if not rows:
+            return summary
+
+        kind_counts: Counter[str] = Counter()
+        earliest: Optional[datetime] = None
+        latest: Optional[datetime] = None
+        for _scholar_id, kind, _payload_json, resolve_at in rows:
+            kind_counts[kind] += 1
+            try:
+                resolve_dt = datetime.fromisoformat(resolve_at)
+            except ValueError:  # pragma: no cover - legacy safeguard
+                resolve_dt = None
+            if resolve_dt is not None:
+                if earliest is None or resolve_dt < earliest:
+                    earliest = resolve_dt
+                if latest is None or resolve_dt > latest:
+                    latest = resolve_dt
+
+        summary["kinds"] = dict(kind_counts)
+        summary["earliest_resolve_at"] = (
+            earliest.isoformat() if earliest is not None else None
+        )
+        summary["latest_resolve_at"] = (
+            latest.isoformat() if latest is not None else None
+        )
+        return summary
+
+    def _followup_order_snapshot(self) -> Dict[str, object]:
+        with closing(sqlite3.connect(self._db_path)) as conn:
+            rows = conn.execute(
+                """
+                    SELECT
+                        order_type,
+                        status,
+                        COUNT(*) AS total,
+                        MIN(COALESCE(scheduled_at, created_at)) AS oldest,
+                        MAX(COALESCE(scheduled_at, created_at)) AS newest
+                    FROM orders
+                    WHERE order_type LIKE 'followup:%'
+                    GROUP BY order_type, status
+                """
+            ).fetchall()
+
+        totals: Dict[str, object] = {
+            "by_status": {},
+            "by_kind": {},
+            "oldest": None,
+            "newest": None,
+        }
+        oldest: Optional[str] = None
+        newest: Optional[str] = None
+        status_counter: Counter[str] = Counter()
+        kind_counter: Counter[str] = Counter()
+
+        for order_type, status, total, oldest_ts, newest_ts in rows:
+            status_counter[str(status)] += int(total or 0)
+            kind = order_type.split(":", 1)[1] if ":" in order_type else order_type
+            kind_counter[kind] += int(total or 0)
+            if oldest_ts and (oldest is None or oldest_ts < oldest):
+                oldest = oldest_ts
+            if newest_ts and (newest is None or newest_ts > newest):
+                newest = newest_ts
+
+        totals["by_status"] = dict(status_counter)
+        totals["by_kind"] = dict(kind_counter)
+        totals["oldest"] = oldest
+        totals["newest"] = newest
+        totals["total_pending"] = status_counter.get("pending", 0)
+        return totals
+
+    def preview_followup_migration(self) -> Dict[str, object]:
+        rows = self._collect_followup_rows()
+        summary = self._summarize_followup_rows(rows)
+        summary["existing_orders"] = self._followup_order_snapshot()
+        return summary
+
+    def migrate_followups(self, *, dry_run: bool = False) -> Dict[str, object]:
+        rows = self._collect_followup_rows()
+        summary = self._summarize_followup_rows(rows)
+        if dry_run or not rows:
+            summary["migrated_rows"] = 0
+            summary["migrated"] = False
+            summary["existing_orders"] = self._followup_order_snapshot()
+            return summary
+
+        migrated = self._convert_followup_rows(rows)
+        self._followup_checked = True
+        summary["migrated_rows"] = migrated
+        summary["migrated"] = True
+        summary["existing_orders"] = self._followup_order_snapshot()
+        return summary
+
+    def _migrate_followups_to_orders(self) -> None:
+        if self._followup_checked:
+            return
+        rows = self._collect_followup_rows()
+        if not rows:
+            self._followup_checked = True
+            return
+        self._convert_followup_rows(rows)
+        self._followup_checked = True
 
     def schedule_followup(
         self, scholar_id: str, kind: str, resolve_at: datetime, payload: Dict[str, object]

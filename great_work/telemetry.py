@@ -1088,6 +1088,9 @@ class TelemetryCollector:
         order_type: Optional[str] = None,
         hours: int = 24,
         limit: int = 250,
+        event: Optional[str] = None,
+        min_pending: Optional[float] = None,
+        min_age_seconds: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """Return raw dispatcher backlog events for filtering/export."""
 
@@ -1097,6 +1100,9 @@ class TelemetryCollector:
         if order_type:
             where_clause = " AND name = ?"
             params.append(order_type)
+        if event:
+            where_clause += " AND json_extract(tags, '$.event') = ?"
+            params.append(event)
 
         query = f"""
             SELECT
@@ -1127,6 +1133,20 @@ class TelemetryCollector:
                         "timestamp": datetime.fromtimestamp(row[4]).isoformat(),
                     }
                 )
+
+        if min_pending is not None:
+            records = [r for r in records if r.get("pending", 0.0) >= min_pending]
+
+        if min_age_seconds is not None:
+            filtered: List[Dict[str, Any]] = []
+            for record in records:
+                oldest = record.get("oldest_pending_seconds")
+                if oldest is None:
+                    continue
+                if oldest >= min_age_seconds:
+                    filtered.append(record)
+            records = filtered
+
         return records
 
     def get_product_kpis(
