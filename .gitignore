@@ -38,3 +38,6 @@ models/guardian/
 .claude/
 .codacy/
 .vscode/
+.mcp.json
+.mcp.json
+AGENTS.md
