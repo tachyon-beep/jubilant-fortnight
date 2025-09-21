@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0--rc1-blue)](https://github.com/your-repo/the-great-work)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-![Tests](https://img.shields.io/badge/tests-192%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-283%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-70%25-yellow)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -130,6 +130,13 @@ make seed  # Seeds canonical scholars
 python -m great_work.tools.seed_db great_work.db
 ```
 
+1. **Run preflight smoke + test suite** (optional, recommended for deployment):
+
+```bash
+python -m great_work.tools.deployment_smoke
+pytest -q
+```
+
 1. **Run the bot**:
 
 ```bash
@@ -143,8 +150,16 @@ python -m great_work.discord_bot
 - Ensure all required environment variables are configured (`DISCORD_TOKEN`, channel IDs, LLM settings, alert thresholds).
 - For local installs, activate the virtualenv and run `python -m great_work.discord_bot`.
 - For containerised deployments, start the bot, archive server, and telemetry dashboard via `docker compose up`.
-- Full production guidance (env table, compose services, firewall notes) lives in [docs/deployment.md](docs/deployment.md);
+- Full production guidance (env table, compose services, Guardian incident response, smoke checks) lives in [docs/deployment.md](docs/deployment.md);
   follow it to expose the archive and dashboard safely.
+
+## Planning the Future
+
+Roadmap ideas, telemetry cohort concepts, and player portal sketches now live in [docs/ROADMAP.md](docs/ROADMAP.md). Refer to [docs/ARCHIVE_LOG.md](docs/ARCHIVE_LOG.md) for a record of merged/moved documents.
+
+## Preparing a Release
+
+When cutting a release candidate, follow the steps in [docs/RELEASE_1_0_RC_CHECKLIST.md](docs/RELEASE_1_0_RC_CHECKLIST.md). The checklist covers documentation sign-off, smoke tests (`python -m great_work.tools.deployment_smoke`), full test runs, tagging, and handoff tasks.
 
 ## Discord Commands
 
