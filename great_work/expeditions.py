@@ -557,8 +557,6 @@ class ExpeditionResolver:
         depth_entries = type_vignettes.get(prep_depth)
         if not depth_entries:
             return None
-        if not depth_entries:
-            return None
         return rng.choice(depth_entries)
 
     def _effects_from_tags(

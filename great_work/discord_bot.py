@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import textwrap
-import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

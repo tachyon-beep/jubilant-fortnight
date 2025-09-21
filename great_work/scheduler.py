@@ -165,7 +165,7 @@ class GazetteScheduler:
         Accepts full names (e.g. "Friday"), mixed case, or already short forms.
         Returns one of: mon, tue, wed, thu, fri, sat, sun.
         """
-        if not isinstance(value, str):  # defensive: fallback to friday
+        if not isinstance(value, str):  # defensive: fallback to Friday
             return "fri"
         v = value.strip().lower()
         mapping = {
