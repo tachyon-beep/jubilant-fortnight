@@ -13,7 +13,7 @@ import typing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 import discord
 from discord import app_commands
@@ -34,15 +34,15 @@ logger = logging.getLogger(__name__)
 class ChannelRouter:
     """Configures which Discord channels receive automated posts."""
 
-    orders: typing.Optional[int]
-    gazette: typing.Optional[int]
-    table_talk: typing.Optional[int]
-    admin: typing.Optional[int]
-    upcoming: typing.Optional[int]
+    orders: Optional[int]
+    gazette: Optional[int]
+    table_talk: Optional[int]
+    admin: Optional[int]
+    upcoming: Optional[int]
 
     @staticmethod
     def from_env() -> "ChannelRouter":
-        def _parse(env_key: str) -> typing.Optional[int]:
+        def _parse(env_key: str) -> Optional[int]:
             value = os.environ.get(env_key)
             if not value:
                 return None
@@ -63,7 +63,7 @@ class ChannelRouter:
 
 async def _post_to_channel(
     bot: commands.Bot,
-    channel_id: typing.Optional[int],
+    channel_id: Optional[int],
     content: str,
     *,
     purpose: str,
@@ -85,10 +85,10 @@ async def _post_to_channel(
 
 async def _post_embed_to_channel(
     bot: commands.Bot,
-    channel_id: typing.Optional[int],
+    channel_id: Optional[int],
     *,
     embed: discord.Embed,
-    content: typing.Optional[str],
+    content: Optional[str],
     purpose: str,
 ) -> None:
     if channel_id is None:
@@ -106,7 +106,7 @@ async def _post_embed_to_channel(
 
 async def _post_file_to_channel(
     bot: commands.Bot,
-    channel_id: typing.Optional[int],
+    channel_id: Optional[int],
     file_path: Path,
     *,
     caption: str,
@@ -167,12 +167,10 @@ def _format_press(press: PressRelease) -> str:
     return "\n".join(lines)
 
 
-def build_bot(
-    db_path: Path, intents: typing.Optional[discord.Intents] = None
-) -> commands.Bot:
+def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> commands.Bot:
     intents = intents or discord.Intents.default()
     app_id_raw = os.environ.get("DISCORD_APP_ID")
-    application_id: typing.Optional[int] = None
+    application_id: Optional[int] = None
     if app_id_raw:
         try:
             application_id = int(app_id_raw)
@@ -184,22 +182,22 @@ def build_bot(
     service = GameService(db_path)
     setattr(bot, "state_service", service)
     router = ChannelRouter.from_env()
-    scheduler: typing.Optional[GazetteScheduler] = None
+    scheduler: Optional[GazetteScheduler] = None
 
-    def _info_channel() -> typing.Optional[int]:
+    def _info_channel() -> Optional[int]:
         """Prefer table-talk for informational posts, fall back to gazette/orders."""
 
         return router.table_talk or router.gazette or router.upcoming or router.orders
 
     async def _respond_and_broadcast(
         interaction: discord.Interaction,
-        lines: typing.Optional[Iterable[str]] = None,
+        lines: Optional[Iterable[str]] = None,
         *,
         purpose: str,
-        header: typing.Optional[str] = None,
-        channel: typing.Optional[int] = None,
+        header: Optional[str] = None,
+        channel: Optional[int] = None,
         ephemeral: bool = True,
-        embed: typing.Optional[discord.Embed] = None,
+        embed: Optional[discord.Embed] = None,
     ) -> None:
         """Send an ephemeral response and mirror it to a public channel."""
 
@@ -1615,7 +1613,7 @@ def build_bot(
         interaction: discord.Interaction,
         faction: str,
         amount: int,
-        program: typing.Optional[str] = None,
+        program: str | None = None,
     ) -> None:
         player_id = str(interaction.user.display_name)
         service.ensure_player(player_id, interaction.user.display_name)
@@ -1647,8 +1645,8 @@ def build_bot(
     async def endow_archive(
         interaction: discord.Interaction,
         amount: int,
-        faction: typing.Optional[str] = None,
-        program: typing.Optional[str] = None,
+        faction: str | None = None,
+        program: str | None = None,
     ) -> None:
         player_id = str(interaction.user.display_name)
         service.ensure_player(player_id, interaction.user.display_name)
@@ -2568,10 +2566,10 @@ def build_bot(
         interaction: discord.Interaction,
         player_id: str,
         faction: str,
-        tier: typing.Optional[str] = None,
-        base_cost: typing.Optional[int] = None,
-        duration_days: typing.Optional[int] = None,
-        reason: typing.Optional[str] = None,
+        tier: str | None = None,
+        base_cost: int | None = None,
+        duration_days: int | None = None,
+        reason: str | None = None,
     ) -> None:
         admin_id = str(interaction.user.display_name)
         try:
@@ -2611,8 +2609,8 @@ def build_bot(
     async def admin_update_commitment(
         interaction: discord.Interaction,
         commitment_id: int,
-        status: app_commands.Choice[str],
-        reason: typing.Optional[str] = None,
+        status: discord.app_commands.Choice[str],
+        reason: str | None = None,
     ) -> None:
         admin_id = str(interaction.user.display_name)
         try:
@@ -2647,7 +2645,7 @@ def build_bot(
         name: str,
         faction: str,
         target_progress: float,
-        reason: typing.Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         admin_id = str(interaction.user.display_name)
         try:
@@ -2685,8 +2683,8 @@ def build_bot(
     async def admin_update_project(
         interaction: discord.Interaction,
         project_id: int,
-        status: app_commands.Choice[str],
-        reason: typing.Optional[str] = None,
+        status: discord.app_commands.Choice[str],
+        reason: str | None = None,
     ) -> None:
         admin_id = str(interaction.user.display_name)
         try:
@@ -2813,12 +2811,12 @@ def build_bot(
     )
     async def admin_list_orders(
         interaction: discord.Interaction,
-        order_type: typing.Optional[str] = None,
-        status: typing.Optional[str] = "pending",
+        order_type: str | None = None,
+        status: str = "pending",
         limit: int = 10,
-        actor_id: typing.Optional[str] = None,
-        subject_id: typing.Optional[str] = None,
-        older_than_hours: typing.Optional[float] = None,
+        actor_id: str | None = None,
+        subject_id: str | None = None,
+        older_than_hours: float | None = None,
         include_payload: bool = False,
         as_file: bool = False,
     ) -> None:
@@ -2853,7 +2851,7 @@ def build_bot(
         if older_than_hours is not None and older_than_hours > 0:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
 
-            def _order_timestamp(order: Dict[str, object]) -> typing.Optional[datetime]:
+            def _order_timestamp(order: Dict[str, object]) -> datetime | None:
                 scheduled = order.get("scheduled_at")
                 if isinstance(scheduled, datetime):
                     return scheduled
@@ -2931,7 +2929,7 @@ def build_bot(
     async def admin_cancel_order(
         interaction: discord.Interaction,
         order_id: int,
-        reason: typing.Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -3016,11 +3014,11 @@ def build_bot(
     async def admin_add_moderation_override(
         interaction: discord.Interaction,
         text_hash: str,
-        surface: typing.Optional[str] = None,
-        stage: typing.Optional[str] = None,
-        category: typing.Optional[str] = None,
-        notes: typing.Optional[str] = None,
-        expires_hours: typing.Optional[float] = None,
+        surface: str | None = None,
+        stage: str | None = None,
+        category: str | None = None,
+        notes: str | None = None,
+        expires_hours: float | None = None,
     ) -> None:
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -3193,7 +3191,7 @@ def build_bot(
     @app_commands.describe(reason="Optional reason for pausing the game")
     async def admin_pause(
         interaction: discord.Interaction,
-        reason: typing.Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
