@@ -11,7 +11,7 @@ ship consistent, mechanically aware copy across every surface.
 4. Hint at mechanical consequences (Section 6) so players understand what changed.
 5. Run local validation (Section 9) before opening a PR.
 6. Attach context in the PR (surface, test command, notable placeholders).
-7. Confirm the contribution is compatible with the licensing guidelines in `docs/NARRATIVE_LICENSE.md`.
+7. Confirm the contribution is compatible with the licensing guidelines in `../NARRATIVE_LICENSE.md`.
 
 ## 2. Narrative Surface Map
 

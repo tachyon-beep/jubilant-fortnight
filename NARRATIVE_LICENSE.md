@@ -19,8 +19,8 @@ The narrative assets bundled with The Great Work (press tone packs, recruitment 
 When redistributing or adapting these materials, please include:
 
 - Project name: **The Great Work**
-- Repository URL: https://github.com/tachyon-beep/jubilant-fortnight
-- Attribution statement such as: "Narrative content adapted from *The Great Work* (CC BY 4.0)."
+- Repository URL: <https://github.com/tachyon-beep/jubilant-fortnight>
+- Attribution statement such as: "Narrative content adapted from _The Great Work_ (CC BY 4.0)."
 
 ## Contributor Guidelines
 
@@ -36,4 +36,4 @@ When redistributing or adapting these materials, please include:
 
 ## Contact
 
-For questions about licensing or attribution, please open an issue in the repository or contact the maintainers at ops@greatwork.example.
+For questions about licensing or attribution, please open an issue in the repository or contact the maintainers at <john@foundryside.dev>.
