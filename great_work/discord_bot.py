@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import textwrap
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2228,6 +2229,94 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         name="gw_admin",
         description="Administrative commands for game management"
     )
+
+    @gw_admin.command(name="search_press", description="Search press releases using semantic similarity")
+    @track_command
+    @app_commands.describe(
+        query="Search phrase to match against recorded press releases",
+        limit="Number of similar press releases to return (default: 3)",
+    )
+    async def admin_search_press(
+        interaction: discord.Interaction,
+        query: str,
+        limit: discord.app_commands.Range[int, 1, 10] = 3,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        if not getattr(service, "_qdrant_indexing_enabled", False):
+            await interaction.response.send_message(
+                "Qdrant indexing is disabled. Set GREAT_WORK_QDRANT_INDEXING=true to enable semantic search.",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        manager = service._get_qdrant_manager()
+        if manager is None:
+            reason = getattr(service, "_qdrant_unavailable_reason", "unavailable")
+            await interaction.response.send_message(
+                f"Qdrant is unavailable: {reason}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        try:
+            results = manager.search(query, limit=limit)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            await interaction.response.send_message(
+                f"Qdrant search failed: {exc}",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        if not results:
+            await interaction.response.send_message(
+                "No matching press releases found.",
+                ephemeral=True,
+            )
+            await _flush_admin_notifications()
+            return
+
+        embed = discord.Embed(
+            title="Semantic press search",
+            description=f"Query: {query}",
+            colour=discord.Color.blurple(),
+        )
+
+        for result in results[:limit]:
+            payload = result.get("payload") or {}
+            headline = str(payload.get("title") or "Untitled")[:256]
+            content = str(payload.get("content") or "")
+            metadata = payload.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            timestamp = metadata.get("timestamp")
+            snippet_source = content.replace("\n", " ") if content else ""
+            snippet = (
+                textwrap.shorten(snippet_source, width=200, placeholder="…")
+                if snippet_source
+                else "(no content stored)"
+            )
+            score = result.get("score") if isinstance(result, dict) else None
+            field_lines: List[str] = []
+            if isinstance(score, (int, float)):
+                field_lines.append(f"score: {score:.3f}")
+            field_lines.append(snippet)
+            if timestamp:
+                field_lines.append(f"`{timestamp}`")
+            field_value = "\n".join(field_lines)[:1024] or "(no preview)"
+            embed.add_field(name=headline, value=field_value, inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await _flush_admin_notifications()
 
     @gw_admin.command(name="adjust_reputation", description="Adjust a player's reputation")
     @track_command

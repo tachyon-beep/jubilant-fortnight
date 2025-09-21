@@ -175,6 +175,8 @@ See `.env.example` for the full template.
 Enable semantic search and future retrieval features with Qdrant + embeddings.
 When indexing is enabled, the LLM press enhancer automatically pulls the top related press releases from Qdrant to provide richer, continuity-aware copy.
 
+Administrators can run `/gw_admin search_press query:"…"` (Discord) to inspect semantically similar releases directly from the bot.
+
 ```text
 # Qdrant connection
 QDRANT_URL=http://localhost:6333
