@@ -87,8 +87,11 @@ GREAT_WORK_QDRANT_INDEXING=false
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 # Qdrant service URL used by tools/CLIs (override via --url as needed)
 # QDRANT_URL=http://localhost:6333
-# Enable dashboard semantic search (requires indexing + embeddings)
+# Telemetry dashboard semantic search (requires embeddings)
 ENABLE_QDRANT_SEARCH=false
+# Override collection/model names if needed
+# QDRANT_COLLECTION=great-work-knowledge
+# QDRANT_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
 Informational slash commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror their output to the first available channel in this list: `GREAT_WORK_CHANNEL_TABLE_TALK`, `GREAT_WORK_CHANNEL_GAZETTE`, `GREAT_WORK_CHANNEL_UPCOMING`, `GREAT_WORK_CHANNEL_ORDERS`. Configure at least one of these so transparency requirements are met.
