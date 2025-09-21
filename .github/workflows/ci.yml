@@ -57,7 +57,7 @@ jobs:
           coverage-reports: coverage.xml
           organization-provider: gh
           username: tachyon-beep
-          project-name: jubilant-fortnight
+          project-name: great-work
 
       - name: Skip Codacy upload (token missing)
         if: ${{ secrets.CODACY_API_TOKEN == '' }}

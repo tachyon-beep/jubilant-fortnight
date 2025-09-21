@@ -32,6 +32,7 @@ from .adapters.discord.handlers import (
     _clamp_text,
     _format_message,
     _format_press,
+    make_responder,
 )
 from .adapters.discord.builders import (
     build_status_embed as _build_status_embed,
@@ -59,51 +60,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     router = ChannelRouter.from_env()
     scheduler: Optional[GazetteScheduler] = None
 
-    def _info_channel() -> Optional[int]:
-        """Prefer table-talk for informational posts, fall back to gazette/orders."""
-
-        return router.table_talk or router.gazette or router.upcoming or router.orders
-
-    async def _respond_and_broadcast(
-        interaction: discord.Interaction,
-        lines: Optional[Iterable[str]] = None,
-        *,
-        purpose: str,
-        header: Optional[str] = None,
-        channel: Optional[int] = None,
-        ephemeral: bool = True,
-        embed: Optional[discord.Embed] = None,
-    ) -> None:
-        """Send an ephemeral response and mirror it to a public channel."""
-
-        if embed is not None and lines is None:
-            await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
-        else:
-            message = _format_message(lines or [])
-            await interaction.response.send_message(message, ephemeral=ephemeral)
-
-        target_channel = channel if channel is not None else _info_channel()
-        if target_channel is None:
-            return
-
-        if embed is not None and lines is None:
-            public_embed = embed.copy()
-            content = header or None
-            await _post_embed_to_channel(
-                bot,
-                target_channel,
-                embed=public_embed,
-                content=content,
-                purpose=purpose,
-            )
-            return
-
-        public_message = _format_message(lines or [])
-        if header:
-            public_message = _clamp_text(f"{header}\n{public_message}")
-        if not public_message.strip():
-            return
-        await _post_to_channel(bot, target_channel, public_message, purpose=purpose)
+    responder = make_responder(bot, router)
 
     def _shutdown_scheduler() -> None:  # pragma: no cover - process shutdown hook
         if scheduler is not None:
@@ -376,43 +333,11 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             await _flush_admin_notifications()
             return
 
-        lines = [f"**Recruitment odds for {scholar_id}**"]
-        lines.append(f"Base chance before modifiers: {base_chance * 100:.1f}%")
-        relationship_modifier = odds[0]["relationship_modifier"] if odds else 0.0
-        cooldown_info = odds[0]["cooldown_remaining"] if odds else 0
-        if cooldown_info:
-            lines.append(
-                f"Recruitment cooldown active — penalties apply for the next {cooldown_info} digests."
-            )
-        if relationship_modifier:
-            lines.append(
-                "Scholar attitude modifier: {:+.1f}% (based on mentorship/sidecast history).".format(
-                    relationship_modifier * 100,
-                )
-            )
-        lines.append("")
-        for entry in odds:
-            faction = entry["faction"].capitalize()
-            chance_pct = entry["chance"] * 100
-            base_pct = entry.get("base_chance", entry["chance"]) * 100
-            relationship_pct = entry.get("relationship_modifier", 0.0) * 100
-            influence_bonus = entry["influence_bonus"] * 100
-            influence_value = entry["influence"]
-            cooldown_text = "halved" if entry["cooldown_active"] else "normal"
-            lines.append(
-                "• {faction}: {chance:.1f}% (base {base:.1f}%, relationship {rel:+.1f}%, influence {influence} ➜ +{bonus:.1f}%, cooldown {cooldown})".format(
-                    faction=faction,
-                    chance=chance_pct,
-                    base=base_pct,
-                    rel=relationship_pct,
-                    influence=influence_value,
-                    bonus=influence_bonus,
-                    cooldown=cooldown_text,
-                )
-            )
-
+        lines = build_recruit_odds_lines(
+            odds, base_chance=base_chance, scholar_id=scholar_id
+        )
         header = f"**/recruit_odds requested by {interaction.user.display_name}**"
-        await _respond_and_broadcast(
+        await responder(
             interaction,
             lines,
             purpose="recruit-odds",
@@ -445,7 +370,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         embed = build_theory_reference_embed(snapshot)
 
         header = f"/theory_reference requested by {interaction.user.display_name}"
-        await _respond_and_broadcast(
+        await responder(
             interaction,
             purpose="theory-reference",
             header=header,

@@ -133,4 +133,53 @@ __all__ = [
     "_clamp_text",
     "_format_message",
     "_format_press",
+    "make_responder",
 ]
+
+
+def make_responder(bot: commands.Bot, router) -> "Responder":
+    """Factory returning a coroutine to respond and mirror messages.
+
+    The returned function mirrors an initial interaction response to a public
+    info channel determined from the router (table_talk → gazette → upcoming → orders).
+    """
+
+    def _info_channel() -> Optional[int]:
+        return router.table_talk or router.gazette or router.upcoming or router.orders
+
+    async def _respond_and_broadcast(
+        interaction: discord.Interaction,
+        lines: Optional[Iterable[str]] = None,
+        *,
+        purpose: str,
+        header: Optional[str] = None,
+        channel: Optional[int] = None,
+        ephemeral: bool = True,
+        embed: Optional[discord.Embed] = None,
+    ) -> None:
+        if embed is not None and lines is None:
+            await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+        else:
+            message = _format_message(lines or [])
+            await interaction.response.send_message(message, ephemeral=ephemeral)
+
+        target_channel = channel if channel is not None else _info_channel()
+        if target_channel is None:
+            return
+
+        if embed is not None and lines is None:
+            public_embed = embed.copy()
+            content = header or None
+            await _post_embed_to_channel(
+                bot, target_channel, embed=public_embed, content=content, purpose=purpose
+            )
+            return
+
+        public_message = _format_message(lines or [])
+        if header:
+            public_message = _clamp_text(f"{header}\n{public_message}")
+        if not public_message.strip():
+            return
+        await _post_to_channel(bot, target_channel, public_message, purpose=purpose)
+
+    return _respond_and_broadcast

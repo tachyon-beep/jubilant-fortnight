@@ -223,3 +223,45 @@ def build_theory_reference_embed(snapshot: Dict[str, Any]) -> discord.Embed:
 
     return embed
 
+
+def build_recruit_odds_lines(
+    odds: list[dict], *, base_chance: float, scholar_id: str
+) -> list[str]:
+    """Build message lines for the recruit_odds command."""
+
+    lines: list[str] = [f"**Recruitment odds for {scholar_id}**"]
+    lines.append(f"Base chance before modifiers: {base_chance * 100:.1f}%")
+    relationship_modifier = odds[0]["relationship_modifier"] if odds else 0.0
+    cooldown_info = odds[0]["cooldown_remaining"] if odds else 0
+    if cooldown_info:
+        lines.append(
+            f"Recruitment cooldown active — penalties apply for the next {cooldown_info} digests."
+        )
+    if relationship_modifier:
+        lines.append(
+            "Scholar attitude modifier: {:+.1f}% (based on mentorship/sidecast history).".format(
+                relationship_modifier * 100,
+            )
+        )
+    lines.append("")
+    for entry in odds:
+        faction = entry["faction"].capitalize()
+        chance_pct = entry["chance"] * 100
+        base_pct = entry.get("base_chance", entry["chance"]) * 100
+        rel_pct = entry.get("relationship_modifier", 0.0) * 100
+        influence_bonus = entry["influence_bonus"] * 100
+        influence_value = entry["influence"]
+        cooldown_text = "halved" if entry["cooldown_active"] else "normal"
+        lines.append(
+            "• {faction}: {chance:.1f}% (base {base:.1f}%, relationship {rel:+.1f}%, influence {influence} ➜ +{bonus:.1f}%, cooldown {cooldown})".format(
+                faction=faction,
+                chance=chance_pct,
+                base=base_pct,
+                rel=rel_pct,
+                influence=influence_value,
+                bonus=influence_bonus,
+                cooldown=cooldown_text,
+            )
+        )
+    return lines
+
