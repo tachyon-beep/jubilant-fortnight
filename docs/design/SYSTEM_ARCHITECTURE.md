@@ -35,7 +35,7 @@ This document supplements the high-level design (HLD) with implementation-centri
 
 - **SQLite (`var/state/great_work.db`)** – authoritative state (players, scholars, events, commitments, orders). Event sourcing via append-only log.
 - **Telemetry (`var/telemetry/telemetry.db`, `TelemetryCollector`)** – metrics for commands, queue depth, seasonal/mentorship debt, Guardian events. Decorated slash commands emit telemetry automatically.
-- **Web Archive (`web_archive/`, `web_archive_public/`)** – static HTML exports triggered each digest, mirrored to GitHub Pages when enabled.
+- **Web Archive (`web_archive/`, publish dir via `GREAT_WORK_ARCHIVE_PUBLISH_DIR`, default `public/`)** – static HTML exports triggered each digest, mirrored to GitHub Pages when enabled.
 - **Guardian Sidecar** – optional moderation service; configuration controlled via `GREAT_WORK_GUARDIAN_*` env vars. Safety runbook is maintained internally.
 - **Tooling** – CLI entry points under `great_work/tools/`: seeding, calibration snapshot export, smoke tests, seasonal simulations, moderation probes, narrative validation/preview.
 

@@ -4,9 +4,9 @@
 
 ### Core Project Files
 - ✅ `pyproject.toml` - Project configuration and dependencies
-- ✅ `README.md` - Project documentation (needs update for 1.0)
+- ✅ `README.md` - Project documentation (updated for 1.0)
 - ✅ `LICENSE` - Legal requirements
-- ✅ `CLAUDE.md` - AI assistance documentation
+- ✅ `.claude/` - AI assistance notes (kept locally; not required for users)
 - ✅ `Makefile` - Development automation
 - ✅ `.gitignore` - Version control configuration
 
@@ -14,7 +14,6 @@
 - ✅ `.env.example` - Environment variable template
 - ✅ `docker-compose.yml` - Container orchestration
 - ✅ `.markdownlint.json` - Markdown linting rules
-- ✅ `.mcp.json` - MCP configuration
 
 ### Source Directories
 - ✅ `great_work/` - Main application code
@@ -27,25 +26,25 @@
 ## Files to Remove Before 1.0
 
 ### Development Artifacts
-- ❌ `.coverage` - Test coverage data (regenerate as needed)
-- ❌ `.mypy_cache/` - Type checking cache
-- ❌ `.pytest_cache/` - Test cache
-- ❌ `.ruff_cache/` - Linting cache
-- ❌ `htmlcov/` - Coverage HTML reports
-- ❌ `the_great_work.egg-info/` - Build artifact
+- ✅ `.coverage` - Not tracked; ignored in .gitignore
+- ✅ `.mypy_cache/` - Not tracked; ignored
+- ✅ `.pytest_cache/` - Not tracked; ignored
+- ✅ `.ruff_cache/` - Not tracked; ignored
+- ✅ `htmlcov/` - Not tracked; ignored
+- ✅ `the_great_work.egg-info/` - Not tracked; ignored
 
 ### Local Data Files
-- ❌ `var/state/great_work.db` - Development database (should be gitignored)
-- ❌ `var/telemetry/telemetry.db` - Telemetry database (should be gitignored)
-- ❌ `.env` - Local environment variables (already gitignored)
+- ✅ `var/state/great_work.db` - Not tracked; ignored
+- ✅ `var/telemetry/telemetry.db` - Not tracked; ignored
+- ✅ `.env` - Not tracked; ignored
 
 ### Development Notes
-- ❌ `PRODUCTION_BUGS_FOUND.md` - Internal development notes
-- ❌ `TEST_CLEANUP_SUMMARY.md` - Internal test cleanup notes
-- ❌ `AGENTS.md` - Internal AI agent notes (move to docs/archive/ if still needed)
+- ✅ `docs/archive/PRODUCTION_BUGS_FOUND.md` - Addressed via archive (kept until GA)
+- ✅ `docs/archive/TEST_CLEANUP_SUMMARY.md` - Addressed via archive (kept until GA)
+- ✅ `AGENTS.md` - Removed from repository; ignored locally
 
 ### IDE Configuration
-- ❌ `.vscode/` - VS Code settings (user-specific)
+- ✅ `.vscode/` - Not tracked; ignored
 
 ### Virtual Environment
 - ✅ `.venv/` - Keep gitignored, each user creates their own
@@ -53,44 +52,27 @@
 ## Files to Update for 1.0
 
 ### Documentation Updates Needed
-1. **README.md**
-   - Add installation instructions
-   - Add configuration guide
-   - Add quick start guide
-   - Update feature list
-   - Add contribution guidelines
+1. **README.md** (complete)
+   - Install, config, quick start, features, contributing present
 
-2. **CHANGELOG.md** (create new)
-   - Document all features for 1.0
-   - Migration notes if applicable
+2. **CHANGELOG.md** (complete)
+   - RC1 highlights added; promote to [1.0.0] at GA
 
-3. **docs/**
-   - Ensure all documentation is current
-   - Add deployment guide
-   - Add API documentation
+3. **docs/** (complete for RC)
+   - Deployment guide (DEPLOYMENT.md) and Telemetry Runbook aligned
+   - User Guide includes install/start/play; examples under `docs/examples/`
 
 ## Actions to Take
 
 ### Immediate Actions
-```bash
-# Remove development artifacts
-rm -rf .coverage htmlcov/ .mypy_cache/ .pytest_cache/ .ruff_cache/
-rm -rf the_great_work.egg-info/
-
-# Move or remove internal docs
-mv PRODUCTION_BUGS_FOUND.md docs/internal/
-mv TEST_CLEANUP_SUMMARY.md docs/internal/
-mv AGENTS.md .claude/
-
-# Ensure databases are gitignored
-echo "*.db" >> .gitignore
-rm -f var/state/great_work.db var/telemetry/telemetry.db
-```
+- Ensure caches and local artifacts are untracked (they’re ignored by `.gitignore`).
+- Internal docs already archived under `docs/archive/`.
+- Databases are ignored (`*.db`); keep local `.env` out of git.
 
 ### Pre-Release Actions
-1. Run full test suite and ensure 100% pass rate
+1. Run full test suite and ensure 100% pass rate (284+)
 2. Generate fresh documentation
-3. Update version in pyproject.toml to 1.0.0
+3. Update version in pyproject.toml to 1.0.0 at GA cut
 4. Create comprehensive CHANGELOG.md
 5. Update README with production deployment instructions
 6. Tag release with v1.0.0
@@ -127,15 +109,15 @@ build/
 ## Release Validation
 
 Before releasing 1.0:
-- [ ] All tests passing (192/192)
-- [ ] Documentation complete and reviewed
+- [ ] All tests passing (current: 284)
+- [ ] Documentation complete and reviewed (README, DEPLOYMENT, USER_GUIDE, RUNBOOK)
 - [ ] Security audit completed
 - [ ] Performance benchmarks documented
-- [ ] Docker image builds successfully
+- [ ] Docker image builds successfully (confirmed for bot)
 - [ ] Clean install tested on fresh system
-- [ ] Database migrations documented
-- [ ] API backwards compatibility verified
-- [ ] License and copyright headers verified
+- [ ] Database migrations documented (N/A for SQLite in 1.0; note path to Postgres if needed)
+- [ ] API/backwards compatibility verified (Discord command surface stable)
+- [ ] License headers verified
 - [ ] Dependencies audited for security vulnerabilities
 
 ## Version Tagging

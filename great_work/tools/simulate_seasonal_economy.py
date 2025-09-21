@@ -213,7 +213,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--days", type=int, help="Simulation horizon in days (overrides config)."
     )
-    parser.add_argument("--output-dir", type=Path, default=Path("simulation_runs"))
+    # Write outputs into the repository's examples folder by default for consistency
+    parser.add_argument("--output-dir", type=Path, default=Path("docs/examples"))
     return parser.parse_args()
 
 

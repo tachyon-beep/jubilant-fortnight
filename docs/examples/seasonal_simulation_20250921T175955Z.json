@@ -1,0 +1,799 @@
+{
+  "config": {
+    "days": 7,
+    "settings": {
+      "seasonal_commitment_base_cost": 3,
+      "seasonal_commitment_duration_days": 28,
+      "seasonal_commitment_relationship_weight": 0.05
+    },
+    "players": [
+      {
+        "player_id": "sim_alex",
+        "influence": {
+          "Academic": 5,
+          "Government": 3
+        },
+        "commitments": [
+          {
+            "faction": "Academic",
+            "base_cost": 3,
+            "duration_days": 14,
+            "tier": "basic"
+          }
+        ]
+      },
+      {
+        "player_id": "sim_bao",
+        "influence": {
+          "Industry": 4,
+          "Religious": 2
+        },
+        "commitments": [
+          {
+            "faction": "Industry",
+            "base_cost": null,
+            "duration_days": null,
+            "tier": null
+          }
+        ]
+      }
+    ]
+  },
+  "timeline": [
+    {
+      "day": 0,
+      "timestamp": "2025-09-21T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.025,
+              "paid": 3,
+              "debt": 0
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.020000000000000004,
+              "paid": 3,
+              "debt": 0
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 0,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 0
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 0
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 0
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 0
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 1,
+      "timestamp": "2025-09-22T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.010000000000000002,
+              "paid": 2,
+              "debt": 1
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.005000000000000001,
+              "paid": 1,
+              "debt": 2
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 3,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 1
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 2
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 1
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 2
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 2,
+      "timestamp": "2025-09-23T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 4
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 5
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 9,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 4
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 5
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 4
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 5
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 3,
+      "timestamp": "2025-09-24T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 7
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 8
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 15,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 7
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 8
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 7
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 8
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 4,
+      "timestamp": "2025-09-25T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 10
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 11
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 21,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 10
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 11
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 10
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 11
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 5,
+      "timestamp": "2025-09-26T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 13
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 14
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 27,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 13
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 14
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 13
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 14
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    },
+    {
+      "day": 6,
+      "timestamp": "2025-09-27T17:59:55.375018+00:00",
+      "releases": [
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_alex (Tier basic)",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 1,
+              "tier": "basic",
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 16
+            }
+          }
+        },
+        {
+          "headline": "Seasonal Commitment Update \u2014 sim_bao",
+          "type": "seasonal_commitment_update",
+          "metadata": {
+            "commitment": {
+              "id": 2,
+              "tier": null,
+              "base_cost": 3,
+              "relationship_modifier": 0.0,
+              "paid": 0,
+              "debt": 17
+            }
+          }
+        }
+      ],
+      "seasonal_totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 33,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 16
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 17
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 16
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 17
+          }
+        }
+      },
+      "investment_totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      }
+    }
+  ],
+  "summary": {
+    "generated_at": "2025-09-28T17:59:55.375018+00:00",
+    "seasonal_commitments": {
+      "totals": {
+        "active": 2,
+        "base_cost_total": 6,
+        "outstanding_debt": 33,
+        "per_faction": {
+          "Academic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 16
+          },
+          "Industry": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 17
+          }
+        },
+        "per_tier": {
+          "basic": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 16
+          },
+          "default": {
+            "commitments": 1,
+            "base_cost_total": 3,
+            "outstanding_debt": 17
+          }
+        }
+      },
+      "config": {
+        "relationship_weight": 0.05,
+        "reprisal_threshold": 4,
+        "reprisal_penalty": 2,
+        "reprisal_cooldown_days": 7
+      },
+      "commitments": [
+        {
+          "id": 1,
+          "player_id": "sim_alex",
+          "faction": "Academic",
+          "tier": "basic",
+          "base_cost": 3,
+          "start_at": "2025-09-21T17:59:55.367865+00:00",
+          "end_at": "2025-10-05T17:59:55.367865+00:00",
+          "status": "active",
+          "last_processed_at": "2025-09-27T17:59:55.375018+00:00",
+          "updated_at": "2025-09-27T17:59:55.375018+00:00",
+          "outstanding_debt": 16,
+          "reprisal_level": 1,
+          "last_reprisal_at": "2025-09-23T17:59:55.375018+00:00"
+        },
+        {
+          "id": 2,
+          "player_id": "sim_bao",
+          "faction": "Industry",
+          "tier": "default",
+          "base_cost": 3,
+          "start_at": "2025-09-21T17:59:55.373176+00:00",
+          "end_at": "2025-10-19T17:59:55.373176+00:00",
+          "status": "active",
+          "last_processed_at": "2025-09-27T17:59:55.375018+00:00",
+          "updated_at": "2025-09-27T17:59:55.375018+00:00",
+          "outstanding_debt": 17,
+          "reprisal_level": 1,
+          "last_reprisal_at": "2025-09-23T17:59:55.375018+00:00"
+        }
+      ]
+    },
+    "faction_investments": {
+      "totals": {
+        "count": 0,
+        "amount": 0,
+        "per_faction": {},
+        "per_program": {},
+        "per_player": {}
+      },
+      "investments": []
+    },
+    "archive_endowments": {
+      "totals": {
+        "count": 0,
+        "amount": 0,
+        "per_program": {},
+        "per_player": {}
+      },
+      "endowments": []
+    },
+    "symposium": {
+      "backlog_size": 0,
+      "slots_remaining": 12,
+      "scoring": [],
+      "debts": [],
+      "debt_summary": {},
+      "debt_totals": {
+        "total_outstanding": 0,
+        "players_in_debt": 0
+      },
+      "config": {
+        "max_backlog": 12,
+        "recent_window": 4,
+        "fresh_bonus": 0.5,
+        "repeat_penalty": 0.75,
+        "age_weight": 1.0,
+        "max_age_days": 28
+      }
+    },
+    "orders": {
+      "totals": {
+        "pending": 2,
+        "per_type": {
+          "followup:symposium_reprimand": {
+            "count": 2,
+            "oldest": "2025-09-23T17:59:55.375018+00:00"
+          }
+        }
+      },
+      "orders": [
+        {
+          "id": 1,
+          "order_type": "followup:symposium_reprimand",
+          "actor_id": "sim_alex",
+          "subject_id": "sim_alex",
+          "status": "pending",
+          "scheduled_at": "2025-09-23T17:59:55.375018+00:00",
+          "created_at": "2025-09-21T17:59:55.409752+00:00",
+          "updated_at": "2025-09-21T17:59:55.409752+00:00",
+          "payload": {
+            "player_id": "sim_alex",
+            "display_name": "sim_alex",
+            "faction": "Academic",
+            "penalty_influence": 0,
+            "penalty_reputation": 1,
+            "reprisal_level": 1,
+            "remaining": 4
+          }
+        },
+        {
+          "id": 2,
+          "order_type": "followup:symposium_reprimand",
+          "actor_id": "sim_bao",
+          "subject_id": "sim_bao",
+          "status": "pending",
+          "scheduled_at": "2025-09-23T17:59:55.375018+00:00",
+          "created_at": "2025-09-21T17:59:55.421009+00:00",
+          "updated_at": "2025-09-21T17:59:55.421009+00:00",
+          "payload": {
+            "player_id": "sim_bao",
+            "display_name": "sim_bao",
+            "faction": "Industry",
+            "penalty_influence": 0,
+            "penalty_reputation": 1,
+            "reprisal_level": 1,
+            "remaining": 5
+          }
+        }
+      ]
+    },
+    "telemetry": {
+      "product_kpis": {
+        "engagement": {
+          "window_hours": 24,
+          "long_window_days": 7,
+          "active_players_24h": 0.0,
+          "command_count_24h": 0.0,
+          "avg_commands_per_player_24h": 0.0,
+          "active_players_7d": 0.0,
+          "command_count_7d": 0.0,
+          "avg_commands_per_player_7d": 0.0,
+          "last_command_at": null
+        },
+        "manifestos": {
+          "window_days": 7,
+          "manifesto_events_7d": 0.0,
+          "manifesto_value_7d": 0.0,
+          "manifesto_players_7d": 0.0,
+          "adoption_rate_7d": 0.0,
+          "last_manifesto_at": null
+        },
+        "archive": {
+          "window_days": 7,
+          "lookup_events_7d": 0.0,
+          "lookup_value_7d": 0.0,
+          "lookup_players_7d": 0.0,
+          "engaged_share_7d": 0.0,
+          "last_lookup_at": null
+        },
+        "nicknames": {
+          "window_days": 7,
+          "nickname_events_7d": 0.0,
+          "nickname_players_7d": 0.0,
+          "nickname_rate_7d": 0.0,
+          "last_nickname_at": null
+        },
+        "press_shares": {
+          "window_days": 7,
+          "press_shares_7d": 0.0,
+          "press_share_players_7d": 0.0,
+          "press_share_rate_7d": 0.0,
+          "last_share_at": null
+        }
+      },
+      "kpi_targets": {},
+      "kpi_history": {
+        "window_days": 30,
+        "daily": [],
+        "summary": {}
+      },
+      "engagement_cohorts": {
+        "window_days": 7,
+        "window_start": "2025-09-15T03:59:55.498507",
+        "cohorts": {
+          "new": {
+            "players": 0,
+            "command_count": 0.0,
+            "details": [],
+            "average_commands": 0.0,
+            "share": 0.0
+          },
+          "returning": {
+            "players": 0,
+            "command_count": 0.0,
+            "details": [],
+            "average_commands": 0.0,
+            "share": 0.0
+          }
+        },
+        "active_players": 0
+      }
+    },
+    "settings": {
+      "seasonal_commitment": {
+        "base_cost": 3,
+        "duration_days": 28,
+        "relationship_weight": 0.05,
+        "min_relationship": 0.0,
+        "reprisal_threshold": 4,
+        "reprisal_penalty": 2,
+        "reprisal_cooldown_days": 7
+      },
+      "symposium": {
+        "max_backlog": 12,
+        "max_per_player": 3,
+        "recent_window": 4,
+        "scoring": {
+          "age_weight": 1.0,
+          "fresh_bonus": 0.5,
+          "repeat_penalty": 0.75,
+          "max_age_days": 28
+        },
+        "debt_reprisal_threshold": 6,
+        "debt_reprisal_penalty": 2,
+        "debt_cooldown_days": 7
+      },
+      "influence_sinks": {
+        "faction_investment_min": 3,
+        "faction_investment_bonus": 0.2,
+        "archive_endowment_min": 4,
+        "archive_endowment_reputation_threshold": 12,
+        "archive_endowment_reputation_bonus": 1
+      }
+    }
+  }
+}

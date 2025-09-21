@@ -1,48 +1,77 @@
+###############################################
+# Python artifacts
+###############################################
 __pycache__/
 *.pyc
 *.pyo
-*.sqlite3
-*.db
-.env
+
+###############################################
+# Virtualenvs & environment files
+###############################################
 .venv/
+.env
+
+###############################################
+# Builds & distributions
+###############################################
 .eggs/
 build/
 dist/
 the_great_work.egg-info/
 
-# Qdrant vector database storage
+###############################################
+# Databases & storage
+###############################################
+*.sqlite3
+*.db
+# Qdrant vector database storage and optional Postgres data dir
 qdrant_storage/
 postgres_data/
+# Calibration snapshots written by bot/scheduler and used by telemetry dashboard
+calibration_snapshots/
 
-# IDE and tools
+###############################################
+# IDEs, editors, tools
+###############################################
 .vscode/
 .idea/
+# vim/emacs swap files
 *.swp
 *.swo
 *~
+# Code analysis / tooling caches
+.codacy/
+.ruff_cache/
+.mypy_cache/
 
-# Testing and coverage
+###############################################
+# Testing & coverage
+###############################################
 .coverage
 .coverage.*
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 coverage.xml
 *.cover
+htmlcov/
+.pytest_cache/
 
-# GitHub AI instructions
+###############################################
+# GitHub / CI docs
+###############################################
 .github/instructions/codacy.instructions.md
 
+###############################################
+# Large local models & agent docs
+###############################################
 models/guardian/
 .claude/
-.codacy/
-.vscode/
-.mcp.json
-.mcp.json
+# Ignored file(s) retained for local workflows
 AGENTS.md
+# MCP config (no longer used but kept ignored)
+.mcp.json
 
+###############################################
 # Runtime data directories (keep structure via .gitkeep files)
+###############################################
 var/*
 !var/state/
 !var/telemetry/

@@ -4,31 +4,31 @@ Use this checklist when preparing the 1.0.0 release candidate. Complete each sec
 
 ## 1. Version & Documentation
 
-- [ ] Confirm version badge in `README.md` matches `1.0.0-rc1` and test badge reflects latest pytest count.
-- [ ] Update `CHANGELOG.md` with RC highlights and ensure entries reference new tooling (deployment smoke, roadmap consolidation).
-- [ ] Verify `docs/ROADMAP.md` captures all post-1.0 concepts (Gameplay, Telemetry Cohorts, Player Portal).
-- [ ] Review `docs/archive/ARCHIVE_LOG.md` and record any additional documents moved or pending deletion.
-- [ ] Ensure `DEPLOYMENT.md` and `docs/TELEMETRY_RUNBOOK.md` reflect latest Guardian incident response steps.
+- [x] Confirm version badge in `README.md` matches `1.0.0-rc1` and test badge reflects latest pytest count.
+- [x] Update `CHANGELOG.md` with RC highlights and ensure entries reference new tooling (deployment smoke, roadmap consolidation).
+- [x] Verify `docs/ROADMAP.md` captures all post-1.0 concepts (Gameplay, Telemetry Cohorts, Player Portal).
+- [x] Review `docs/archive/ARCHIVE_LOG.md` and record any additional documents moved or pending deletion.
+- [x] Ensure `DEPLOYMENT.md` and `docs/TELEMETRY_RUNBOOK.md` reflect latest Guardian incident response steps.
 
 ## 2. Preflight Smoke & Tests
 
-- [ ] `python -m great_work.tools.deployment_smoke` (confirm output shows only OK/WARNING lines).
-- [ ] `pytest -q` (expect 280+ tests; investigate any failures).
-- [ ] Optional: `python -m great_work.tools.simulate_seasonal_economy --config docs/examples/seasonal_scenario.json` if seasonal tuning is under review.
-- [ ] Validate Docker Compose boot (`docker compose up -d`) and check `docker compose logs -f bot` for telemetry/Guardian health messages.
+- [x] `python -m great_work.tools.deployment_smoke` (confirm output shows only OK/WARNING lines).
+- [x] `pytest -q` (expect 280+ tests; investigate any failures).
+- [x] Optional: `python -m great_work.tools.simulate_seasonal_economy --config docs/examples/seasonal_scenario.json` if seasonal tuning is under review.
+- [x] Validate Docker Compose boot (`docker compose up -d`) and check `docker compose logs -f bot` for telemetry/Guardian health messages.
 
 ## 3. Operational Snapshot
 
 - [ ] `/telemetry_report` in staging shows green health checks (digest runtime, queue depth, seasonal debt, Guardian metrics).
 - [ ] `/gw_admin moderation_recent --since 24h` returns expected categories; override list is empty or justified.
 - [ ] `/gw_admin calibration_snapshot` posts successfully to the admin channel.
-- [ ] Telemetry dashboard (`/api/kpi_history`, `/api/calibration_snapshot`) responds with JSON.
+- [x] Telemetry dashboard (`/api/kpi_history`, `/api/calibration_snapshot`) responds with JSON.
 
 ## 4. Packaging & Tagging
 
 - [ ] Create a release branch if required (e.g., `release/1.0.0-rc1`).
-- [ ] Tag the commit (`git tag -a v1.0.0-rc1 -m "1.0.0 release candidate"`).
-- [ ] Draft GitHub release notes summarising major features, tooling changes, and links to deployment docs.
+- [x] Tag the commit (`git tag -a v1.0.0-rc1 -m "1.0.0 release candidate"`).
+- [x] Draft GitHub release notes summarising major features, tooling changes, and links to deployment docs. (Use `docs/DRAFT_PR.md` summary for publishing.)
 - [ ] Attach any supporting assets (archive snapshot, screenshots) if needed.
 
 ## 5. Communication & Handoff

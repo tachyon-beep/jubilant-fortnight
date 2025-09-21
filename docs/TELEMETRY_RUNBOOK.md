@@ -39,6 +39,16 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - Digest telemetry now records the press mix per cycle; review `/telemetry_report` → "Long-tail Economy" and "Press Cadence" sections to ensure varied templates keep firing.
 - Moderation metrics surface in `/telemetry_report` under "Moderation (24h)"—watch for spikes in specific categories and run `python -m great_work.tools.calibrate_moderation --json` when retuning Guardian thresholds.
 
+## Guardian Incident Response
+
+- Detection: the health summary flags Guardian issues; alerts may include `moderation_sidecar_offline` with strict mode.
+- Strict mode: with `GREAT_WORK_MODERATION_STRICT=true`, gameplay pauses automatically when the sidecar/local Guardian is unavailable. Operators can resume with `/gw_admin resume_game` once healthy.
+- Verify service:
+  - Sidecar: `curl -sS -X POST "$GREAT_WORK_GUARDIAN_URL" -H 'Content-Type: application/json' -d '{"text":"ping","categories":["HAP"]}' | jq .`
+  - Local: confirm `GREAT_WORK_GUARDIAN_LOCAL_PATH` exists in the container/host and that logs show the model initialised.
+- Temporary mitigations (announce to players): set `GREAT_WORK_MODERATION_PREFILTER_ONLY=true` or toggle `GREAT_WORK_MODERATION_STRICT=false` while repairing the sidecar/local model.
+- Post‑incident: review `/gw_admin moderation_recent` and overrides; calibrate categories with `python -m great_work.tools.calibrate_moderation --hours 168 --json` and update thresholds if needed.
+
 ## Health Checks & Thresholds
 
 | Metric | Default Threshold (env var) | Description | Response |

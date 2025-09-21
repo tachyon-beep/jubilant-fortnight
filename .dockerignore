@@ -12,7 +12,7 @@ build/
 telemetry.db
 *.db
 web_archive/
-web_archive_public/
+public/
 qdrant_storage/
 ops/
 !ops/telemetry-dashboard/**

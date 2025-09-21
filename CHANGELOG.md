@@ -87,14 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment-based configuration via `.env` file
 - Docker Compose support for containerized deployment
 - Makefile automation for common development tasks
-- Comprehensive test suite with 192 tests
+- Comprehensive test suite with 284 tests
 
 ### Documentation
 
 - High-level design document (HLD.md)
 - Requirements evaluation and gap analysis
 - Implementation plan with sprint tracking
-- CLAUDE.md for AI-assisted development
+- AI-assisted development notes under `.claude/`
 - Comprehensive inline code documentation
 
 ### Fixed

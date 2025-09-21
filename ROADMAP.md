@@ -57,4 +57,3 @@ The original `docs/post_1_0/` folder has been consolidated here for ease of disc
 | `docs/post_1_0/USER_TELEMETRY.md` | §3 above |
 
 Going forward, add new roadmap items directly to this document and keep the table of contents aligned with strategic focus areas.
-

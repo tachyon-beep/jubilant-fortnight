@@ -7,7 +7,7 @@ on:
       - sprint2
     paths:
       - 'web_archive/**'
-      - 'web_archive_public/**'
+      - 'public/**'
       - '.github/workflows/publish_pages.yml'
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
             fi
           }
 
-          archive_dir="$(find_nonempty_dir "${GITHUB_WORKSPACE}/web_archive_public")"
+          archive_dir="$(find_nonempty_dir "${GITHUB_WORKSPACE}/public")"
           if [ -z "$archive_dir" ]; then
             archive_dir="$(find_nonempty_dir "${GITHUB_WORKSPACE}/web_archive")"
           fi

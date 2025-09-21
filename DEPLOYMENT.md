@@ -103,7 +103,7 @@ Adjust the alert numbers to match your cadence; for example, if you expect long 
 The repository ships with a `docker-compose.yml` that includes:
 
 - `qdrant`: vector DB for embeddings and semantic search (optional)
-- `archive_server`: nginx serving `web_archive_public/`
+- `archive_server`: nginx serving the publish directory (defaults to `public/`)
 - `telemetry_dashboard` (optional): FastAPI dashboard for telemetry visuals (enables semantic press search when `ENABLE_QDRANT_SEARCH=true`)
 
 Start supporting services:
@@ -112,7 +112,7 @@ Start supporting services:
 docker compose up -d archive_server telemetry_dashboard qdrant
 ```
 
-Mount the `web_archive_public/` volume so the scheduler can sync exports (default path works out of the box). The nginx container listens on port 8080 by default; expose it or reverse proxy it as needed and open firewall access, e.g. `sudo ufw allow 8081/tcp` if you remap ports.
+Mount the publish directory specified by `GREAT_WORK_ARCHIVE_PUBLISH_DIR` (defaults to `public/`) so the scheduler can sync exports. The nginx container listens on port 8080 by default; expose it or reverse proxy it as needed and open firewall access, e.g. `sudo ufw allow 8081/tcp` if you remap ports.
 
 ## 3. Telemetry Dashboard
 
@@ -209,7 +209,7 @@ Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `
 1. **Provision weights:** run `python -m great_work.tools.download_guardian_model --target ./models/guardian` on the host (requires `huggingface_hub`).
 2. **Sidecar service:** deploy the guardian container (`docker compose up guardian-sidecar`) or start the systemd unit; the service must expose a `/score` endpoint that accepts JSON payloads `{ "category": "HAP", "text": "..." }`.
 3. **Health checks:** confirm `/health` returns `ok` and that `/gw_admin moderation_recent` shows steady Guardian latency in `/telemetry_report`.
-4. **Incident response:** if `moderation_sidecar_offline` fires, restart the sidecar and decide whether to set `GREAT_WORK_MODERATION_STRICT=false` temporarily or pause the game via `/gw_admin pause_game reason:"guardian offline"`. After recovery, audit overrides with `/gw_admin moderation_overrides`.
+4. **Incident response:** when `GREAT_WORK_MODERATION_STRICT=true`, the game auto‑pauses if the sidecar/local model is unavailable. Restore the service, verify with a probe (see below), then `/gw_admin resume_game`. If you must keep play going, temporarily set `GREAT_WORK_MODERATION_STRICT=false` or `GREAT_WORK_MODERATION_PREFILTER_ONLY=true` and announce the degraded mode. After recovery, audit `/gw_admin moderation_recent` and `/gw_admin moderation_overrides`.
 5. **Manual probes:** send a sample to the sidecar directly, e.g.
 
    ```bash
@@ -230,7 +230,7 @@ The command reports missing tokens, channel routing gaps, Guardian misconfigurat
 
 ## 4. Archive Publishing
 
-- The scheduler exports HTML to `web_archive/` each digest, syncs it into `web_archive_public/`, and uploads ZIP snapshots to the admin channel.
+- The scheduler exports HTML to `web_archive/` each digest, then syncs it into the configured publish directory (`GREAT_WORK_ARCHIVE_PUBLISH_DIR`, default `public/`), and uploads ZIP snapshots to the admin channel.
 - To serve the archive publicly, run the `archive_server` container (nginx) and map the port.
 - Retention defaults to 30 snapshots; adjust `GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS` if you require more history.
 - For a managed host, point `GREAT_WORK_ARCHIVE_PAGES_DIR` at a local clone of your GitHub Pages branch (for example, `gh-pages`). The scheduler mirrors each digest export into `<repo>/<GREAT_WORK_ARCHIVE_PAGES_SUBDIR>` (default `archive/`), drops a `.nojekyll` marker, and emits telemetry on success/failure. Commit and push the branch to publish.
@@ -238,7 +238,7 @@ The command reports missing tokens, channel routing gaps, Guardian misconfigurat
 - Snapshots are now monitored via `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`; when the total ZIP size exceeds the limit the scheduler notifies the admin channel and records telemetry.
 - Configure `GREAT_WORK_ALERT_WEBHOOK_URL` and optional email settings (`GREAT_WORK_ALERT_EMAIL_*`) so guardrail hits reach your operations channels even when no one is watching Discord; leave them blank to rely on console logs only. For local smoke tests you can run `python -m great_work.tools.simple_alert_webhook --port 8085` and target `http://localhost:8085` to inspect payloads.
   For recovery steps, GitHub Pages workflow details, and manual export instructions, keep an internal runbook aligned with your hosting setup.
-- Optional: enable the `Publish Archive to Pages` GitHub Action to auto-commit/push updates. Seed the `gh-pages` branch once, then run the workflow (push-trigger or manual dispatch) whenever `web_archive_public/` contains fresh exports.
+- Optional: enable the `Publish Archive to Pages` GitHub Action to auto-commit/push updates. Seed the `gh-pages` branch once, then run the workflow (push-trigger or manual dispatch) whenever the publish directory contains fresh exports.
 - `settings.yaml` also exposes `archive_publishing.github_pages` defaults so deployments can enable/disable Pages mirroring without environment overrides.
 - Configure `GREAT_WORK_ALERT_WEBHOOK_URL` plus cooldown/muting (and optional email) variables to forward guardrail hits to the operations webhook of your choice (Discord/Slack/etc.). When unset, alerts log to the bot console only.
 

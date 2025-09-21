@@ -1,0 +1,24 @@
+{
+  "days": 7,
+  "players": [
+    {
+      "player_id": "sim_alex",
+      "influence": {"Academic": 5, "Government": 3},
+      "commitments": [
+        {"faction": "Academic", "tier": "basic", "base_cost": 3, "duration_days": 14}
+      ]
+    },
+    {
+      "player_id": "sim_bao",
+      "influence": {"Industry": 4, "Religious": 2},
+      "commitments": [
+        {"faction": "Industry"}
+      ]
+    }
+  ],
+  "settings": {
+    "seasonal_commitment_base_cost": 3,
+    "seasonal_commitment_duration_days": 28,
+    "seasonal_commitment_relationship_weight": 0.05
+  }
+}

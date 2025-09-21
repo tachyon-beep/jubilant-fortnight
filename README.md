@@ -141,7 +141,7 @@ GREAT_WORK_ALERT_MIN_PRESS_SHARES=1
 ### Archive & calibration
 
 ```text
-GREAT_WORK_ARCHIVE_PUBLISH_DIR=web_archive_public
+GREAT_WORK_ARCHIVE_PUBLISH_DIR=public
 GREAT_WORK_ARCHIVE_PAGES_ENABLED=true
 GREAT_WORK_ARCHIVE_PAGES_DIR=/opt/the-great-work-pages
 GREAT_WORK_ARCHIVE_PAGES_SUBDIR=archive
@@ -181,7 +181,7 @@ Administrators can run `/gw_admin search_press query:"…"` (Discord) to inspect
 ```text
 # Qdrant connection
 QDRANT_URL=http://localhost:6333
-COLLECTION_NAME=great-work-knowledge
+QDRANT_COLLECTION=great-work-knowledge
 
 # Embedding model (SentenceTransformer name)
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
@@ -200,8 +200,8 @@ ENABLE_QDRANT_SEARCH=true
 Basic operations (see docs/QDRANT_SETUP.md):
 
 ```text
-# Start Qdrant locally
-docker-compose up -d qdrant
+  # Start Qdrant locally
+  docker compose up -d qdrant
 
 # Create/verify collection sized to the model
 python -m great_work.tools.qdrant_manager --setup
@@ -218,7 +218,7 @@ python -m great_work.tools.qdrant_manager --stats
 - **Local development:** `make run` after filling `.env`. Guardian is optional; set `GREAT_WORK_MODERATION_STRICT=false` when developing without it.
 - **Docker Compose:** `docker compose up -d` starts the bot, telemetry dashboard, and archive server. View logs with `docker compose logs -f bot`.
 - **Guardian sidecar:** see [DEPLOYMENT.md](DEPLOYMENT.md#guardian-sidecar-operations) for setup and validation steps.
-- **Archive & GitHub Pages:** digest snapshots land in `web_archive_public/`; configure `GREAT_WORK_ARCHIVE_PAGES_*` to mirror into a Pages repository.
+- **Archive & GitHub Pages:** digest snapshots land in the publish directory (`GREAT_WORK_ARCHIVE_PUBLISH_DIR`, default `public/`); configure `GREAT_WORK_ARCHIVE_PAGES_*` to mirror into a Pages repository.
 - **Qdrant embeddings:** optional setup documented in [docs/QDRANT_SETUP.md](docs/QDRANT_SETUP.md).
 
 ## Testing & Tooling
@@ -226,7 +226,7 @@ python -m great_work.tools.qdrant_manager --stats
 | Command | Purpose |
 | --- | --- |
 | `python -m great_work.tools.deployment_smoke` | Validates environment, channel routing, Guardian configuration, and alert fan-out. |
-| `pytest -q` or `make test` | Full unit/integration suite (283+ tests). |
+| `pytest -q` or `make test` | Full unit/integration suite (284+ tests). |
 | `python -m great_work.tools.simulate_seasonal_economy --config scenario.json` | Dry-run seasonal commitment & mentorship tuning scenarios. |
 | `python -m great_work.tools.recommend_kpi_thresholds --apply` | Persist KPI guardrail recommendations to telemetry DB. |
 | `python -m great_work.tools.export_product_metrics` | Export KPI snapshots, history, and cohorts to JSON/CSV. |
