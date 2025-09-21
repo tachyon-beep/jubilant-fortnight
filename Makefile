@@ -5,7 +5,7 @@ PY ?= python3.12
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
-DB ?= great_work.db
+DB ?= var/state/great_work.db
 
 .PHONY: help venv install upgrade test lint seed run env clean-venv clean-db
 
@@ -16,7 +16,9 @@ help:
 	@echo "  make upgrade        Upgrade project deps"
 	@echo "  make test           Run pytest"
 	@echo "  make lint           Run ruff if available"
-	@echo "  make seed DB=...    Seed the SQLite DB (default: great_work.db)"
+	@echo "  make validate-narrative  Run narrative YAML validator"
+	@echo "  make preview-narrative   Print sample narrative previews"
+	@echo "  make seed DB=...    Seed the SQLite DB (default: var/state/great_work.db)"
 	@echo "  make run            Run Discord bot (loads .env if present)"
 	@echo "  make env            Create .env from .env.example if missing"
 	@echo "  make clean-venv     Remove virtualenv"
@@ -40,14 +42,22 @@ upgrade: venv
 test:
 	$(PYTHON) -m pytest -q
 
+validate-narrative:
+	$(PYTHON) -m great_work.tools.validate_narrative --all
+
+preview-narrative:
+	$(PYTHON) -m great_work.tools.preview_narrative
+
 lint:
 	@if [ -x "$(VENV)/bin/ruff" ]; then \
-		$(VENV)/bin/ruff . ; \
+		$(VENV)/bin/ruff check . ; \
 	else \
 		echo "ruff not installed; skipping lint"; \
 	fi
 
+
 seed: venv
+	@mkdir -p $(dir $(DB))
 	$(PYTHON) -m great_work.tools.seed_db $(DB)
 
 run: venv
@@ -65,4 +75,3 @@ clean-venv:
 
 clean-db:
 	rm -f $(DB)
-

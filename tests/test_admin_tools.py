@@ -1,7 +1,9 @@
 """Test admin tools implementation."""
+
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
 
 from great_work.models import ConfidenceLevel, ExpeditionPreparation
 from great_work.service import GameService
@@ -9,6 +11,7 @@ from great_work.service import GameService
 
 def test_admin_tools():
     """Test admin tool functionality."""
+    os.environ.setdefault("LLM_MODE", "mock")
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         service = GameService(db_path)
@@ -25,10 +28,10 @@ def test_admin_tools():
             admin_id=admin_id,
             player_id=player_id,
             delta=10,
-            reason="Testing positive adjustment"
+            reason="Testing positive adjustment",
         )
         assert press is not None
-        assert "reputation adjusted" in press.body.lower()
+        assert "reputation" in press.headline.lower()
 
         player = service.state.get_player(player_id)
         assert player.reputation == 10
@@ -38,7 +41,7 @@ def test_admin_tools():
             admin_id=admin_id,
             player_id=player_id,
             delta=-5,
-            reason="Testing negative adjustment"
+            reason="Testing negative adjustment",
         )
         player = service.state.get_player(player_id)
         assert player.reputation == 5
@@ -49,10 +52,10 @@ def test_admin_tools():
             player_id=player_id,
             faction="academia",
             delta=20,
-            reason="Testing influence boost"
+            reason="Testing influence boost",
         )
         assert press is not None
-        assert "influence adjusted" in press.body.lower()
+        assert "influence" in press.headline.lower()
 
         player = service.state.get_player(player_id)
         assert player.influence["academia"] == 20
@@ -66,10 +69,10 @@ def test_admin_tools():
             admin_id=admin_id,
             scholar_id=scholar.id,
             new_faction="industry",
-            reason="Testing forced defection"
+            reason="Testing forced defection",
         )
         assert press is not None
-        assert "defection" in press.body.lower()
+        assert "defection" in press.headline.lower()
 
         # Reload scholar to check contract
         scholar = service.state.get_scholar(scholar.id)
@@ -91,20 +94,39 @@ def test_admin_tools():
                 expertise_bonus=0,
                 site_friction=0,
                 political_friction=0,
-            )
+            ),
         )
+        assert expedition_press is not None
 
         # Now cancel it
         press = service.admin_cancel_expedition(
-            admin_id=admin_id,
-            expedition_code="TEST-001",
-            reason="Testing cancellation"
+            admin_id=admin_id, expedition_code="TEST-001", reason="Testing cancellation"
         )
         assert press is not None
-        assert "cancelled" in press.body.lower()
+        assert "cancelled" in press.headline.lower()
 
         # Check that expedition is no longer pending
         assert "TEST-001" not in service._pending_expeditions
+
+        # Dispatcher order listing and cancellation
+        order_id = service.state.enqueue_order(
+            "test_manual",
+            actor_id="system",
+            subject_id="subject",
+            payload={"note": "for testing"},
+        )
+        orders = service.admin_list_orders(
+            order_type="test_manual", status="pending", limit=5
+        )
+        assert any(order["id"] == order_id for order in orders)
+
+        summary = service.admin_cancel_order(order_id=order_id, reason="cleanup")
+        assert summary["id"] == order_id
+        assert summary["order_type"] == "test_manual"
+
+        cancelled = service.state.get_order(order_id)
+        assert cancelled is not None
+        assert cancelled["status"] == "cancelled"
 
         print("Admin tools test passed!")
 

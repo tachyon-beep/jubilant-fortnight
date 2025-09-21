@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - sprint2
+  pull_request:
+    branches:
+      - main
+      - sprint2
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-report:
+    name: Test and Upload Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run tests with coverage
+        run: |
+          set -euo pipefail
+          pytest --cov=great_work --cov=models --cov-report=xml --cov-report=term-missing
+
+      - name: Deployment smoke checks
+        env:
+          DISCORD_TOKEN: dummy
+          DISCORD_APP_ID: "123"
+          GREAT_WORK_CHANNEL_TABLE_TALK: "999"
+          GREAT_WORK_GUARDIAN_MODE: sidecar
+          GREAT_WORK_GUARDIAN_URL: http://localhost:8085/score
+          GREAT_WORK_ALERT_WEBHOOK_URL: https://example/webhook
+        run: |
+          set -euo pipefail
+          python -m great_work.tools.deployment_smoke
+
+      - name: Upload coverage to Codacy
+        if: ${{ secrets.CODACY_API_TOKEN != '' }}
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          api-token: ${{ secrets.CODACY_API_TOKEN }}
+          coverage-reports: coverage.xml
+          organization-provider: gh
+          username: tachyon-beep
+          project-name: jubilant-fortnight
+
+      - name: Skip Codacy upload (token missing)
+        if: ${{ secrets.CODACY_API_TOKEN == '' }}
+        run: echo "CODACY_API_TOKEN not provided; skipping coverage upload."

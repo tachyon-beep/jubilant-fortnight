@@ -1,23 +1,18 @@
 """Tests for multi-layer press generation."""
-import pytest
-from unittest.mock import Mock, MagicMock
 
-from great_work.multi_press import (
-    PressDepth,
-    PressLayer,
-    MultiPressGenerator
-)
-from great_work.models import (
-    Scholar,
-    ExpeditionResult,
-    ExpeditionOutcome,
-    PressRelease
-)
+import os
+import random
+from unittest.mock import Mock
+
+import pytest
+
+from great_work.models import ExpeditionOutcome, ExpeditionResult, PressRelease, Scholar
+from great_work.multi_press import MultiPressGenerator, PressDepth, PressLayer
 from great_work.press import (
+    BulletinContext,
+    DefectionContext,
     ExpeditionContext,
     OutcomeContext,
-    DefectionContext,
-    BulletinContext
 )
 
 
@@ -61,7 +56,7 @@ def test_generate_expedition_layers():
         expedition_type="field",
         objective="Test the limits",
         team=["Scholar1", "Scholar2"],
-        funding=["Academic"]
+        funding=["Academic"],
     )
 
     result = ExpeditionResult(
@@ -70,7 +65,7 @@ def test_generate_expedition_layers():
         final_score=95,
         outcome=ExpeditionOutcome.SUCCESS,
         sideways_discovery="Unexpected finding",
-        failure_detail=None
+        failure_detail=None,
     )
 
     outcome_ctx = OutcomeContext(
@@ -79,7 +74,7 @@ def test_generate_expedition_layers():
         expedition_type="field",
         result=result,
         reputation_change=5,
-        reactions=["Amazing!", "Incredible!"]
+        reactions=["Amazing!", "Incredible!"],
     )
 
     # Create mock scholars
@@ -123,7 +118,7 @@ def test_generate_defection_layers():
         scholar="Dr. Smith",
         outcome="accepted",
         new_faction="Industry",
-        probability=0.75
+        probability=0.75,
     )
 
     scholar = Mock(spec=Scholar)
@@ -137,11 +132,7 @@ def test_generate_defection_layers():
 
     # Generate layers
     layers = generator.generate_defection_layers(
-        defection_ctx,
-        scholar,
-        "Academic",
-        other_scholars,
-        PressDepth.EXTENSIVE
+        defection_ctx, scholar, "Academic", other_scholars, PressDepth.EXTENSIVE
     )
 
     # Should have main notice plus reactions and statements
@@ -150,12 +141,61 @@ def test_generate_defection_layers():
     assert layers[0].delay_minutes == 0
 
     # Should include colleague reactions
-    gossip_layers = [l for l in layers if l.type == "academic_gossip"]
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
     assert len(gossip_layers) > 0
 
     # Should include faction statements for extensive coverage
-    statement_layers = [l for l in layers if l.type == "faction_statement"]
+    statement_layers = [layer for layer in layers if layer.type == "faction_statement"]
     assert len(statement_layers) > 0
+
+
+def test_landmark_layers_include_preparation():
+    """Landmark expeditions should schedule a preparation brief."""
+    generator = MultiPressGenerator()
+
+    exp_ctx = ExpeditionContext(
+        code="EXP999",
+        player="TestPlayer",
+        expedition_type="think_tank",
+        objective="Restore the Array",
+        team=["Scholar1", "Scholar2"],
+        funding=["Academic"],
+    )
+
+    result = ExpeditionResult(
+        roll=95,
+        modifier=15,
+        final_score=110,
+        outcome=ExpeditionOutcome.LANDMARK,
+        sideways_discovery="Landmark reveal rehearsed",
+    )
+    outcome_ctx = OutcomeContext(
+        code="EXP999",
+        player="TestPlayer",
+        expedition_type="think_tank",
+        result=result,
+        reputation_change=12,
+        reactions=[],
+    )
+
+    prep_summary = {
+        "strengths": [{"label": "Think tank modelling", "value": 8}],
+        "frictions": [{"label": "Site friction", "value": -3}],
+        "strengths_text": ["Think tank modelling +8"],
+        "frictions_text": ["Site friction -3"],
+    }
+
+    layers = generator.generate_expedition_layers(
+        exp_ctx,
+        outcome_ctx,
+        scholars=[],
+        depth=PressDepth.MINIMAL,
+        prep_depth="deep",
+        preparation_summary=prep_summary,
+        team_names=["Scholar One", "Scholar Two"],
+    )
+
+    assert any(layer.type == "landmark_preparation" for layer in layers)
 
 
 def test_generate_conference_layers():
@@ -168,7 +208,7 @@ def test_generate_conference_layers():
         outcome="validated",
         participants=["Alice", "Bob", "Charlie"],
         reputation_changes={"Alice": 5, "Bob": -3},
-        depth=PressDepth.EXTENSIVE
+        depth=PressDepth.EXTENSIVE,
     )
 
     # Should have opening bulletin
@@ -176,11 +216,11 @@ def test_generate_conference_layers():
     assert layers[0].delay_minutes == 0
 
     # Should have debate quotes for non-minimal depth
-    gossip_layers = [l for l in layers if l.type == "academic_gossip"]
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
     assert len(gossip_layers) > 0
 
     # Should have outcome for extensive depth
-    outcome_layers = [l for l in layers if l.type == "conference_outcome"]
+    outcome_layers = [layer for layer in layers if layer.type == "conference_outcome"]
     assert len(outcome_layers) > 0
 
 
@@ -189,10 +229,7 @@ def test_reaction_quote_generation():
     generator = MultiPressGenerator()
 
     quote = generator._generate_reaction_quote(
-        "Dr. Jones",
-        "dark matter",
-        "success",
-        "enthusiasm"
+        "Dr. Jones", "dark matter", "success", "enthusiasm"
     )
     assert isinstance(quote, str)
     assert len(quote) > 0
@@ -200,10 +237,7 @@ def test_reaction_quote_generation():
     # Test different emotions
     for emotion in ["skepticism", "concern", "admiration", "curiosity"]:
         quote = generator._generate_reaction_quote(
-            "Dr. Smith",
-            "test objective",
-            "failure",
-            emotion
+            "Dr. Smith", "test objective", "failure", emotion
         )
         assert isinstance(quote, str)
 
@@ -217,22 +251,18 @@ def test_apply_layers():
         delay_minutes=0,
         type="test",
         generator=lambda ctx: PressRelease(
-            type="test",
-            headline="Immediate",
-            body="Immediate release"
+            type="test", headline="Immediate", body="Immediate release"
         ),
-        context={}
+        context={},
     )
 
     delayed_layer = PressLayer(
         delay_minutes=30,
         type="test",
         generator=lambda ctx: PressRelease(
-            type="test",
-            headline="Delayed",
-            body="Delayed release"
+            type="test", headline="Delayed", body="Delayed release"
         ),
-        context={}
+        context={},
     )
 
     layers = [immediate_layer, delayed_layer]
@@ -262,7 +292,9 @@ def test_find_colleagues():
         mock_scholar.name = f"Scholar{i}"
         all_scholars.append(mock_scholar)
 
-    colleagues = generator._find_colleagues(main_scholar, all_scholars, max_colleagues=2)
+    colleagues = generator._find_colleagues(
+        main_scholar, all_scholars, max_colleagues=2
+    )
 
     # Should not include the main scholar
     assert main_scholar not in colleagues
@@ -270,6 +302,51 @@ def test_find_colleagues():
     assert len(colleagues) <= 2
     # All should be from the scholar list
     assert all(c in all_scholars for c in colleagues)
+
+
+def test_generate_mentorship_layers_dual_schedule():
+    """Mentorship cadence should produce fast gossip and long-form updates."""
+    generator = MultiPressGenerator()
+    generator.fast_layer_delays = [30, 60]
+    generator.long_layer_delays = [720, 1440]
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Dr. Vega"
+    scholar.id = "s.mentor-001"
+    scholar.career = {"track": "Academia"}
+
+    layers = generator.generate_mentorship_layers(
+        mentor="Professor Hale",
+        scholar=scholar,
+        phase="queued",
+        track="Academia",
+    )
+
+    gossip_layers = [layer for layer in layers if layer.type == "academic_gossip"]
+    update_layers = [layer for layer in layers if layer.type == "mentorship_update"]
+
+    assert len(gossip_layers) == 2
+    assert sorted(layer.delay_minutes for layer in gossip_layers) == [30, 60]
+    assert len(update_layers) == 2
+    assert sorted(layer.delay_minutes for layer in update_layers) == [720, 1440]
+
+
+def test_generate_admin_layers_includes_reason():
+    """Administrative layers should surface context and delay metadata."""
+    generator = MultiPressGenerator()
+    generator.fast_layer_delays = [15]
+    generator.long_layer_delays = [120]
+
+    layers = generator.generate_admin_layers(
+        event="pause",
+        actor="Ops Team",
+        reason="LLM offline",
+    )
+
+    assert any(layer.type == "admin_update" for layer in layers)
+    update_layer = next(layer for layer in layers if layer.type == "admin_update")
+    release = update_layer.generator(update_layer.context)
+    assert "LLM offline" in release.body
 
 
 def test_generate_analysis_layer():
@@ -282,7 +359,7 @@ def test_generate_analysis_layer():
         expedition_type="great_project",
         objective="unified theory",
         team=["Team"],
-        funding=["Funding"]
+        funding=["Funding"],
     )
 
     result = ExpeditionResult(
@@ -291,7 +368,7 @@ def test_generate_analysis_layer():
         final_score=100,
         outcome=ExpeditionOutcome.SUCCESS,
         sideways_discovery=None,
-        failure_detail=None
+        failure_detail=None,
     )
 
     outcome_ctx = OutcomeContext(
@@ -300,7 +377,7 @@ def test_generate_analysis_layer():
         expedition_type="great_project",
         result=result,
         reputation_change=15,
-        reactions=[]
+        reactions=[],
     )
 
     layer = generator._generate_analysis_layer(exp_ctx, outcome_ctx, 120)
@@ -320,10 +397,7 @@ def test_faction_statement_generation():
 
     # Test regret statement
     regret_layer = generator._generate_faction_statement(
-        "Academic",
-        "Dr. Smith",
-        "regret",
-        120
+        "Academic", "Dr. Smith", "regret", 120
     )
 
     assert regret_layer.type == "faction_statement"
@@ -334,11 +408,156 @@ def test_faction_statement_generation():
 
     # Test welcome statement
     welcome_layer = generator._generate_faction_statement(
-        "Industry",
-        "Dr. Smith",
-        "welcome",
-        150
+        "Industry", "Dr. Smith", "welcome", 150
     )
 
     release = welcome_layer.generator(welcome_layer.context)
     assert "welcome" in release.body.lower() or "delighted" in release.body.lower()
+
+
+def test_multi_press_includes_tone_seed(monkeypatch):
+    """Tone packs should attach seeds to mentorship follow-up layers."""
+    monkeypatch.setenv("GREAT_WORK_PRESS_SETTING", "high_fantasy")
+    generator = MultiPressGenerator()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Aria"
+    scholar.id = "s.aria"
+    scholar.career = {"track": "Academia"}
+
+    layers = generator.generate_mentorship_layers(
+        mentor="Professor Lorian",
+        scholar=scholar,
+        phase="completion",
+    )
+
+    tone_seeds = [
+        layer.tone_seed
+        for layer in layers
+        if layer.type in {"mentorship_update", "academic_gossip"}
+    ]
+    assert tone_seeds
+    assert all(seed is not None for seed in tone_seeds)
+
+
+def test_generate_recruitment_layers_uses_yaml_templates():
+    """Recruitment coverage should pick headlines and callouts from YAML templates."""
+
+    random.seed(42)
+    generator = MultiPressGenerator()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Prof. Vale"
+    scholar.id = "scholar-001"
+
+    observers = []
+    for idx in range(6):
+        mock_obs = Mock(spec=Scholar)
+        mock_obs.name = f"Observer{idx}"
+        mock_obs.id = f"observer-{idx}"
+        observers.append(mock_obs)
+
+    layers = generator.generate_recruitment_layers(
+        player="Player One",
+        scholar=scholar,
+        success=True,
+        faction="Academic",
+        chance=0.72,
+        observers=observers,
+    )
+
+    digest_layer = next(
+        layer for layer in layers if layer.type == "recruitment_followup"
+    )
+    briefing_layer = next(
+        layer for layer in layers if layer.type == "recruitment_brief"
+    )
+
+    success_headlines = generator._recruitment_templates["recruitment"]["digest"][
+        "success"
+    ]["headlines"]
+    assert digest_layer.context["headline"] in success_headlines
+    assert digest_layer.context["metadata"]["callouts"]
+    assert all(
+        isinstance(item, str) for item in digest_layer.context["metadata"]["callouts"]
+    )
+
+    assert briefing_layer.context["metadata"]["callouts"]
+    assert all(
+        isinstance(item, str) for item in briefing_layer.context["metadata"]["callouts"]
+    )
+
+
+def test_generate_table_talk_layers_produces_roundup_callouts():
+    """Table-talk coverage should surface roundup callouts from YAML templates."""
+
+    random.seed(24)
+    generator = MultiPressGenerator()
+
+    scholars = []
+    for idx in range(5):
+        mock_scholar = Mock(spec=Scholar)
+        mock_scholar.name = f"Scholar{idx}"
+        mock_scholar.id = f"scholar-{idx}"
+        scholars.append(mock_scholar)
+
+    message = "We should broaden the sideways catalogue and layer our table-talk press."
+    layers = generator.generate_table_talk_layers(
+        speaker="Dr. Echo",
+        message=message,
+        scholars=scholars,
+    )
+
+    digest_layer = next(layer for layer in layers if layer.type == "table_talk_digest")
+    roundup_layer = next(
+        layer for layer in layers if layer.type == "table_talk_roundup"
+    )
+
+    digest_headlines = generator._table_talk_templates["table_talk"]["digest"][
+        "headlines"
+    ]
+    assert digest_layer.context["headline"] in digest_headlines
+
+    roundup_metadata = roundup_layer.context["metadata"]
+    assert roundup_metadata["callouts"]
+    assert all(isinstance(item, str) for item in roundup_metadata["callouts"])
+
+
+def test_generate_sidecast_layers_returns_plan():
+    """Sidecast layers should draw from YAML arcs and schedule next phases."""
+
+    random.seed(7)
+    generator = MultiPressGenerator()
+    arc_key = generator.pick_sidecast_arc()
+
+    scholar = Mock(spec=Scholar)
+    scholar.name = "Dr. Sidecast"
+    plan = generator.generate_sidecast_layers(
+        arc_key=arc_key,
+        phase="debut",
+        scholar=scholar,
+        sponsor="Dr. Sponsor",
+        expedition_type="field",
+        expedition_code="EXP-001",
+    )
+
+    assert isinstance(plan.layers, list)
+    assert plan.layers
+    assert plan.next_phase in {"integration", "spotlight", None}
+
+
+def test_generate_defection_epilogue_layers():
+    """Defection epilogue layers should return configured press artifacts."""
+
+    generator = MultiPressGenerator()
+    layers = generator.generate_defection_epilogue_layers(
+        scenario="reconciliation",
+        scholar_name="Dr. Quill",
+        former_faction="The Academy",
+        new_faction="Industry",
+        former_employer="Professor Hale",
+    )
+
+    assert layers
+    primary = layers[0]
+    assert primary.type == "defection_epilogue"

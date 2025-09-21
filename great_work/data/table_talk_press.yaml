@@ -1,0 +1,24 @@
+table_talk:
+  reactions:
+    - "{commentator} riffs on {speaker}'s aside about {topic_hint}."
+    - "{commentator} spins {speaker}'s note into faction gossip."
+    - "{commentator} wonders if {speaker}'s message foreshadows fresh expeditions."
+    - "{commentator} contrasts {speaker}'s tone with last week's symposium." 
+  digest:
+    headlines:
+      - "Table Talk Digest — {speaker}"
+      - "Commons Digest — {speaker}'s thread"
+    body_templates:
+      - "{speaker}'s post '{snippet}' keeps the lounges buzzing.\n{bullet_lines}"
+      - "Discussion boards loop '{snippet}' from {speaker}. Reactions:\n{bullet_lines}"
+  roundup:
+    headlines:
+      - "Commons Roundup — Re: {speaker}"
+      - "Whisper Ledger — {speaker}"
+    body_templates:
+      - "Whispers across the faculty warren:\n{bullet_lines}"
+      - "Archivists note repeated murmurs:\n{bullet_lines}"
+    callouts:
+      - "Highlight top responses in the evening digest"
+      - "Flag tone shifts for symposium prep"
+      - "Archive thread in the public ledger"

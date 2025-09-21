@@ -6,6 +6,62 @@ timing:
     - "13:00"
     - "21:00"
   symposium_day: "Friday"
+symposium:
+  reminder_hours:
+    first: 12
+    escalation: 24
+  proposal_backlog: 12
+  proposal_expiry_days: 28
+  max_per_player: 3
+  pledge:
+    base_influence: 2
+    escalation_cap: 5
+  grace:
+    window_days: 28
+    misses: 1
+  scoring:
+    recent_window: 4
+    max_age_days: 28
+    age_weight: 1.0
+    fresh_bonus: 0.5
+    repeat_penalty: 0.75
+  debt:
+    reprisal_threshold: 6
+    reprisal_penalty: 2
+    reprisal_cooldown_days: 7
+contracts:
+  upkeep_per_scholar: 1
+  debt:
+    reprisal_threshold: 0
+    reprisal_penalty: 0
+    reprisal_cooldown_days: 7
+seasonal_commitments:
+  base_cost: 3
+  duration_days: 28
+  relationship_weight: 0.05
+  min_relationship: 0.0
+  reprisal_threshold: 4
+  reprisal_penalty: 2
+  reprisal_cooldown_days: 7
+faction_projects:
+  base_progress_weight: 0.08
+  relationship_weight: 5.0
+  completion_reward: 6
+faction_investments:
+  min_amount: 3
+  feeling_step: 3
+  feeling_bonus: 0.2
+archive_endowment:
+  min_amount: 4
+  reputation_threshold: 12
+  reputation_bonus: 1
+
+archive_publishing:
+  github_pages:
+    enabled: false
+    directory: ""
+    subdir: "archive"
+    nojekyll: true
 confidence_wagers:
   suspect:
     reward: 2

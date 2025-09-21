@@ -1,4 +1,5 @@
 """Tests for GameState edge cases and error handling."""
+
 from __future__ import annotations
 
 import json
@@ -8,13 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from great_work.models import (
-    Event,
-    ExpeditionRecord,
-    Player,
-    Scholar,
-    TheoryRecord,
-)
+from great_work.models import Event, ExpeditionRecord, Player, Scholar, TheoryRecord
 from great_work.rng import DeterministicRNG
 from great_work.scholars import ScholarRepository
 from great_work.state import GameState
@@ -23,7 +18,7 @@ from great_work.state import GameState
 def test_gamestate_init_creates_database_structure(tmp_path):
     """GameState initialization should create all required tables."""
     db_path = tmp_path / "test.db"
-    state = GameState(db_path=db_path, start_year=1923)
+    GameState(db_path=db_path, start_year=1923)
 
     # Verify database structure
     with sqlite3.connect(db_path) as conn:
@@ -32,8 +27,16 @@ def test_gamestate_init_creates_database_structure(tmp_path):
         tables = {row[0] for row in cursor.fetchall()}
 
     expected_tables = {
-        "players", "scholars", "relationships", "theories",
-        "expeditions", "events", "press_releases", "timeline", "followups", "offers"
+        "players",
+        "scholars",
+        "relationships",
+        "theories",
+        "expeditions",
+        "events",
+        "press_releases",
+        "timeline",
+        "followups",
+        "offers",
     }
     assert expected_tables.issubset(tables)
 
@@ -55,7 +58,7 @@ def test_player_cache_invalidation(tmp_path):
         display_name="Test Player",
         reputation=10,
         influence={"academia": 5},
-        cooldowns={}
+        cooldowns={},
     )
     state.upsert_player(player)
 
@@ -66,8 +69,7 @@ def test_player_cache_invalidation(tmp_path):
     # Bypass cache and update database directly
     with sqlite3.connect(state._db_path) as conn:
         conn.execute(
-            "UPDATE players SET reputation = ? WHERE id = ?",
-            (20, "test_player")
+            "UPDATE players SET reputation = ? WHERE id = ?", (20, "test_player")
         )
         conn.commit()
 
@@ -91,11 +93,11 @@ def test_scholar_removal_cascades(tmp_path):
     with sqlite3.connect(state._db_path) as conn:
         conn.execute(
             "INSERT INTO relationships (scholar_id, subject_id, feeling) VALUES (?, ?, ?)",
-            ("test_scholar", "other_scholar", -0.5)
+            ("test_scholar", "other_scholar", -0.5),
         )
         conn.execute(
             "INSERT INTO followups (scholar_id, kind, resolve_at, payload) VALUES (?, ?, ?, ?)",
-            ("test_scholar", "grudge", datetime.now(timezone.utc).isoformat(), "{}")
+            ("test_scholar", "grudge", datetime.now(timezone.utc).isoformat(), "{}"),
         )
         conn.commit()
 
@@ -106,16 +108,36 @@ def test_scholar_removal_cascades(tmp_path):
     with sqlite3.connect(state._db_path) as conn:
         relationships = conn.execute(
             "SELECT * FROM relationships WHERE scholar_id = ? OR subject_id = ?",
-            ("test_scholar", "test_scholar")
+            ("test_scholar", "test_scholar"),
         ).fetchall()
         followups = conn.execute(
-            "SELECT * FROM followups WHERE scholar_id = ?",
-            ("test_scholar",)
+            "SELECT * FROM followups WHERE scholar_id = ?", ("test_scholar",)
         ).fetchall()
 
     assert len(relationships) == 0
     assert len(followups) == 0
     assert state.get_scholar("test_scholar") is None
+
+
+def test_dispatcher_admin_notifier(tmp_path, monkeypatch):
+    """Dispatcher backlog alerts should enqueue admin notifications when thresholds are exceeded."""
+
+    messages: list[str] = []
+
+    def notifier(message: str) -> None:
+        messages.append(message)
+
+    monkeypatch.setenv("GREAT_WORK_ALERT_MAX_ORDER_PENDING", "1")
+    state = GameState(
+        db_path=tmp_path / "test.db",
+        start_year=1923,
+        admin_notifier=notifier,
+    )
+
+    state.enqueue_order("mentorship_activation", payload={})
+    state.fetch_due_orders("mentorship_activation", datetime.now(timezone.utc))
+
+    assert any("dispatcher backlog" in message.lower() for message in messages)
 
 
 def test_scholar_not_found_returns_none(tmp_path):
@@ -135,7 +157,7 @@ def test_all_players_with_malformed_data(tmp_path):
         display_name="Valid",
         reputation=5,
         influence={"academia": 1},
-        cooldowns={}
+        cooldowns={},
     )
     state.upsert_player(valid_player)
 
@@ -143,7 +165,7 @@ def test_all_players_with_malformed_data(tmp_path):
     with sqlite3.connect(state._db_path) as conn:
         conn.execute(
             "INSERT INTO players (id, display_name, reputation, influence, cooldowns) VALUES (?, ?, ?, ?, ?)",
-            ("malformed", "Malformed", 0, "not valid json", "{}")
+            ("malformed", "Malformed", 0, "not valid json", "{}"),
         )
         conn.commit()
 
@@ -173,7 +195,7 @@ def test_expedition_record_persistence(tmp_path):
         team=["scholar1", "scholar2"],
         funding=["academia"],
         prep_depth="deep",
-        confidence="certain"
+        confidence="certain",
     )
 
     state.record_expedition(record)
@@ -181,8 +203,7 @@ def test_expedition_record_persistence(tmp_path):
     # Verify persistence
     with sqlite3.connect(state._db_path) as conn:
         row = conn.execute(
-            "SELECT * FROM expeditions WHERE code = ?",
-            ("EX-001",)
+            "SELECT * FROM expeditions WHERE code = ?", ("EX-001",)
         ).fetchone()
 
     assert row is not None
@@ -201,7 +222,7 @@ def test_theory_record_persistence(tmp_path):
         theory="Test theory",
         confidence="suspect",
         supporters=["scholar1"],
-        deadline="2024-12-31"
+        deadline="2024-12-31",
     )
 
     state.record_theory(record)
@@ -209,8 +230,7 @@ def test_theory_record_persistence(tmp_path):
     # Verify persistence
     with sqlite3.connect(state._db_path) as conn:
         row = conn.execute(
-            "SELECT * FROM theories WHERE theory = ?",
-            ("Test theory",)
+            "SELECT * FROM theories WHERE theory = ?", ("Test theory",)
         ).fetchone()
 
     assert row is not None
@@ -232,7 +252,7 @@ def test_expedition_record_can_be_stored(tmp_path):
         team=["scholar3"],
         funding=["government"],
         prep_depth="shallow",
-        confidence="suspect"
+        confidence="suspect",
     )
 
     state.record_expedition(record)
@@ -253,7 +273,7 @@ def test_theory_record_can_be_stored(tmp_path):
         theory="Alternative theory",
         confidence="certain",
         supporters=[],
-        deadline="2025-01-01"
+        deadline="2025-01-01",
     )
 
     state.record_theory(record)
@@ -261,8 +281,7 @@ def test_theory_record_can_be_stored(tmp_path):
     # Verify stored in database
     with sqlite3.connect(state._db_path) as conn:
         row = conn.execute(
-            "SELECT * FROM theories WHERE theory = ?",
-            ("Alternative theory",)
+            "SELECT * FROM theories WHERE theory = ?", ("Alternative theory",)
         ).fetchone()
 
     assert row is not None
@@ -303,13 +322,13 @@ def test_event_log_append_and_export(tmp_path):
         Event(
             timestamp=datetime.now(timezone.utc),
             action="test_action_1",
-            payload={"data": "value1"}
+            payload={"data": "value1"},
         ),
         Event(
             timestamp=datetime.now(timezone.utc),
             action="test_action_2",
-            payload={"data": "value2", "nested": {"key": "value"}}
-        )
+            payload={"data": "value2", "nested": {"key": "value"}},
+        ),
     ]
 
     for event in events:
@@ -347,7 +366,7 @@ def test_timeline_year_progression(tmp_path):
     with sqlite3.connect(state._db_path) as conn:
         conn.execute(
             "UPDATE timeline SET last_advanced = ? WHERE singleton = 1",
-            (past_time.isoformat(),)
+            (past_time.isoformat(),),
         )
         conn.commit()
 
@@ -373,10 +392,8 @@ def test_list_press_releases_ordering(tmp_path):
         record = PressRecord(
             timestamp=timestamp,
             release=PressRelease(
-                type="test_release",
-                headline=f"Headline {i}",
-                body=f"Body {i}"
-            )
+                type="test_release", headline=f"Headline {i}", body=f"Body {i}"
+            ),
         )
         state.record_press_release(record)
 
@@ -400,23 +417,13 @@ def test_followup_scheduling_and_retrieval(tmp_path):
     future = datetime.now(timezone.utc) + timedelta(days=365)  # Actually in the future
     now = datetime.now(timezone.utc)
 
-    state.schedule_followup(
-        "scholar1",
-        "grudge",
-        past,
-        {"reason": "betrayal"}
-    )
+    state.schedule_followup("scholar1", "grudge", past, {"reason": "betrayal"})
 
-    state.schedule_followup(
-        "scholar2",
-        "reconciliation",
-        future,
-        {"reason": "apology"}
-    )
+    state.schedule_followup("scholar2", "reconciliation", future, {"reason": "apology"})
 
     # Get due followups (should only get the past one)
     due = state.due_followups(now)
     assert len(due) == 1
     assert due[0][1] == "scholar1"  # scholar_id is second element
-    assert due[0][2] == "grudge"    # followup_type is third element
+    assert due[0][2] == "grudge"  # followup_type is third element
     assert due[0][3]["reason"] == "betrayal"  # payload is fourth element

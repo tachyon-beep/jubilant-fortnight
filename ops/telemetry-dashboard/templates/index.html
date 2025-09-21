@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>The Great Work – Telemetry Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; background: #0f172a; color: #f1f5f9; }
+      h1, h2 { color: #38bdf8; }
+      table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
+      th, td { border: 1px solid #1e293b; padding: 0.5rem 0.75rem; text-align: left; }
+      th { background: #1d4ed8; color: #f8fafc; }
+      tr:nth-child(even) { background: #111827; }
+      .meta { font-size: 0.9rem; color: #cbd5f5; margin-bottom: 2rem; }
+      .section { margin-bottom: 3rem; }
+      .filter-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+      .filter-bar label { font-size: 0.9rem; }
+      .filter-bar select { padding: 0.25rem 0.5rem; background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; }
+      .filter-bar button { padding: 0.35rem 0.75rem; background: #38bdf8; color: #0f172a; border: none; cursor: pointer; border-radius: 4px; }
+      .filter-bar button:hover { background: #0ea5e9; }
+      .filter-bar a { color: #f8fafc; text-decoration: none; font-size: 0.9rem; }
+      .filter-bar a:hover { text-decoration: underline; }
+      .chart-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+      .chart-row canvas { flex: 1 1 240px; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.5rem; }
+      .semantic-results { margin-top: 1rem; }
+      .semantic-item { border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; background: #111827; }
+      .semantic-item h3 { margin: 0 0 0.35rem; color: #fbbf24; font-size: 1.05rem; }
+      .semantic-item small { display: block; color: #94a3b8; margin-bottom: 0.35rem; }
+      .semantic-item p { margin: 0; color: #e2e8f0; }
+    </style>
+  </head>
+  <body>
+    <h1>The Great Work – Telemetry Dashboard</h1>
+    <div class="meta">
+      <div>Generated at: {{ report.generated_at }}</div>
+      <div>Uptime: {{ '%.2f' | format(report.uptime_seconds / 3600) }} hours</div>
+      <div>Total events: {{ report.overall.total_events }} | Unique players: {{ report.overall.unique_players }}</div>
+    </div>
+
+    {% if qdrant_search_enabled %}
+    <div class="section" id="semantic-search">
+      <h2>Semantic Press Search</h2>
+      <form class="filter-bar" id="semantic-search-form">
+        <label>
+          Query
+          <input type="text" id="semantic-query" name="query" placeholder="Bronze Age discoveries" required />
+        </label>
+        <label>
+          Limit
+          <input type="number" id="semantic-limit" name="limit" min="1" max="10" value="3" />
+        </label>
+        <button type="submit">Search</button>
+      </form>
+      <div id="semantic-results" class="semantic-results"></div>
+    </div>
+    <script>
+      (function () {
+        const form = document.getElementById('semantic-search-form');
+        if (!form) { return; }
+        const resultsContainer = document.getElementById('semantic-results');
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const queryInput = document.getElementById('semantic-query');
+          const limitInput = document.getElementById('semantic-limit');
+          const query = queryInput.value.trim();
+          const limit = limitInput.value || '3';
+          if (!query) {
+            resultsContainer.innerHTML = '<p>Please enter a search query.</p>';
+            return;
+          }
+          resultsContainer.innerHTML = '<p>Searching…</p>';
+          try {
+            const response = await fetch(`/api/semantic-press?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.detail || response.statusText);
+            }
+            const payload = await response.json();
+            if (!Array.isArray(payload) || payload.length === 0) {
+              resultsContainer.innerHTML = '<p>No related press found.</p>';
+              return;
+            }
+            const html = payload.map((item) => {
+              const timestamp = item.timestamp ? `<small>${item.timestamp}</small>` : '';
+              const score = item.score ? `<small>Score: ${item.score.toFixed(3)}</small>` : '';
+              return `<div class="semantic-item"><h3>${item.headline}</h3>${timestamp}${score}<p>${item.excerpt}</p></div>`;
+            }).join('');
+            resultsContainer.innerHTML = html;
+          } catch (err) {
+            resultsContainer.innerHTML = `<p style="color:#f87171;">Search failed: ${err.message}</p>`;
+          }
+        });
+      })();
+    </script>
+    {% elif qdrant_search_error %}
+    <div class="section">
+      <h2>Semantic Press Search</h2>
+      <p style="color:#f87171;">{{ qdrant_search_error }}</p>
+    </div>
+    {% endif %}
+
+    {% if calibration_snapshot %}
+    <div class="section">
+      <h2>Calibration Snapshot</h2>
+      <p>
+        Latest snapshot generated at {{ calibration_snapshot.generated_at or '—' }}
+        (<a href="/api/calibration_snapshot">download JSON</a>)
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Seasonal Commitments (Active)</td>
+            <td>{{ calibration_snapshot.seasonal_active }}</td>
+          </tr>
+          <tr>
+            <td>Seasonal Debt Outstanding</td>
+            <td>{{ calibration_snapshot.seasonal_debt }}</td>
+          </tr>
+          <tr>
+            <td>Total Faction Investments</td>
+            <td>{{ calibration_snapshot.investment_amount }}</td>
+          </tr>
+          <tr>
+            <td>Total Archive Endowments</td>
+            <td>{{ calibration_snapshot.endowment_amount }}</td>
+          </tr>
+          <tr>
+            <td>Pending Orders</td>
+            <td>{{ calibration_snapshot.orders_pending }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div class="section">
+      <h2>Dispatcher Backlog Filters</h2>
+      <form class="filter-bar" action="/api/orders" method="get">
+        <label>
+          Order Type
+          <input type="text" name="order_type" placeholder="followup:defection_grudge" />
+        </label>
+        <label>
+          Event
+          <input type="text" name="event" placeholder="poll" />
+        </label>
+        <label>
+          Min Pending
+          <input type="number" step="1" min="0" name="min_pending" />
+        </label>
+        <label>
+          Min Age (hours)
+          <input type="number" step="0.1" min="0" name="min_age_hours" />
+        </label>
+        <label>
+          Window (hours)
+          <input type="number" step="1" min="1" name="hours" value="24" />
+        </label>
+        <label>
+          Limit
+          <input type="number" step="1" min="1" max="500" name="limit" value="250" />
+        </label>
+        <button type="submit">Fetch JSON</button>
+        <a href="/api/orders.csv">CSV Export</a>
+      </form>
+      <p style="font-size:0.9rem; color:#cbd5f5;">
+        Submit the form to open filtered JSON results in a new tab, or adjust the link for CSV downloads.
+      </p>
+    </div>
+
+    {% if health_checks %}
+    <div class="section">
+      <h2>Health Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Status</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in health_checks %}
+          {% set icon = '✅' if check.status == 'ok' else '⚠️' if check.status == 'warning' else '🛑' %}
+          <tr>
+            <td>{{ check.label }}</td>
+            <td>{{ icon }} {{ check.status|capitalize }}</td>
+            <td>{{ check.detail }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div class="section">
+      <h2>Product KPIs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Window</th>
+            <th>Active Players</th>
+            <th>Command Count</th>
+            <th>Avg Cmds / Player</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>24h</td>
+            <td>{{ '%.0f' | format(product_engagement.get('active_players_24h', 0) or 0) }}</td>
+            <td>{{ '%.0f' | format(product_engagement.get('command_count_24h', 0) or 0) }}</td>
+            <td>{{ '%.1f' | format(product_engagement.get('avg_commands_per_player_24h', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>7d</td>
+            <td>{{ '%.0f' | format(product_engagement.get('active_players_7d', 0) or 0) }}</td>
+            <td>{{ '%.0f' | format(product_engagement.get('command_count_7d', 0) or 0) }}</td>
+            <td>{{ '%.1f' | format(product_engagement.get('avg_commands_per_player_7d', 0) or 0) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Manifesto Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Players Publishing (7d)</td>
+            <td>{{ '%.0f' | format(product_manifestos.get('manifesto_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Total Manifestos (7d)</td>
+            <td>{{ '%.0f' | format(product_manifestos.get('manifesto_events_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Adoption Rate</td>
+            <td>{{ '%.0f%%' | format((product_manifestos.get('adoption_rate_7d', 0) or 0) * 100) }}</td>
+          </tr>
+          <tr>
+            <td>Last Manifesto</td>
+            <td>{{ product_manifestos.get('last_manifesto_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Archive Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Lookups (7d)</td>
+            <td>{{ '%.0f' | format(product_archive.get('lookup_events_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Players (7d)</td>
+            <td>{{ '%.0f' | format(product_archive.get('lookup_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Reach (Active Share)</td>
+            <td>{{ '%.0f%%' | format((product_archive.get('engaged_share_7d', 0) or 0) * 100) }}</td>
+          </tr>
+          <tr>
+            <td>Last Lookup</td>
+            <td>{{ product_archive.get('last_lookup_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Nickname Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Nicknames (7d)</td>
+            <td>{{ '%.0f' | format(product_nicknames.get('nickname_events_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Players (7d)</td>
+            <td>{{ '%.0f' | format(product_nicknames.get('nickname_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Adoption Rate</td>
+            <td>{{ '%.0f%%' | format((product_nicknames.get('nickname_rate_7d', 0) or 0) * 100) }}</td>
+          </tr>
+          <tr>
+            <td>Last Nickname</td>
+            <td>{{ product_nicknames.get('last_nickname_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Press Share Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Shares (7d)</td>
+            <td>{{ '%.0f' | format(product_shares.get('press_shares_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Players (7d)</td>
+            <td>{{ '%.0f' | format(product_shares.get('press_share_players_7d', 0) or 0) }}</td>
+          </tr>
+          <tr>
+            <td>Last Share</td>
+            <td>{{ product_shares.get('last_share_at') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% if kpi_targets %}
+      <h3>Canonical KPI Targets</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Warning</th>
+            <th>Notes</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for metric, payload in kpi_targets|dictsort %}
+          <tr>
+            <td>{{ metric }}</td>
+            <td>{{ payload.target }}</td>
+            <td>{{ payload.warning if payload.warning is not none else '—' }}</td>
+            <td>{{ payload.notes or '—' }}</td>
+            <td>{{ payload.updated_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% set cohorts = engagement_cohorts.get('cohorts', {}) %}
+      {% if cohorts %}
+      <h3>Engagement Cohorts ({{ engagement_cohorts.window_days }}d)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Cohort</th>
+            <th>Players</th>
+            <th>Share</th>
+            <th>Total Commands</th>
+            <th>Avg Commands</th>
+          </tr>
+        </thead>
+        <tbody>
+      {% for cohort_name, payload in cohorts|dictsort %}
+          <tr>
+            <td>{{ cohort_name|capitalize }}</td>
+            <td>{{ payload.players }}</td>
+            <td>{{ '%.0f%%' | format((payload.share or 0) * 100) }}</td>
+            <td>{{ '%.0f' | format(payload.command_count or 0) }}</td>
+            <td>{{ '%.1f' | format(payload.average_commands or 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Commands</th>
+            <th>Cohort</th>
+            <th>Breakdown</th>
+            <th>Last Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cohort_name, payload in cohorts|dictsort %}
+            {% for player in payload.details[:5] %}
+            <tr>
+              <td>{{ player.player_id }}</td>
+              <td>{{ '%.0f' | format(player.command_count or 0) }}</td>
+              <td>{{ cohort_name }}</td>
+              <td>
+                {% for cmd, count in player.by_command.items() %}
+                  {{ cmd }}: {{ '%.0f' | format(count) }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+              <td>{{ player.last_command_at or '—' }}</td>
+            </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>KPI Trend (Daily)</h2>
+      <div class="chart-row">
+        <canvas id="kpi-active-chart" height="120"></canvas>
+        <canvas id="kpi-manifesto-chart" height="120"></canvas>
+        <canvas id="kpi-archive-chart" height="120"></canvas>
+        <canvas id="kpi-nickname-chart" height="120"></canvas>
+        <canvas id="kpi-share-chart" height="120"></canvas>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Average</th>
+            <th>Median</th>
+            <th>P90</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Active Players</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('active_players', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Manifesto Events</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('manifesto_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Archive Lookups</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('archive_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Nicknames</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('nickname_events', {}).get('p90', 0)) }}</td>
+          </tr>
+          <tr>
+            <td>Press Shares</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('average', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('median', 0)) }}</td>
+            <td>{{ '%.1f' | format(product_history_summary.get('press_share_events', {}).get('p90', 0)) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Active Players</th>
+            <th>Manifesto Events</th>
+            <th>Manifesto Players</th>
+            <th>Archive Lookups</th>
+            <th>Nicknames</th>
+            <th>Press Shares</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in product_history[-14:] %}
+          <tr>
+            <td>{{ entry.date }}</td>
+            <td>{{ '%.0f' | format(entry.active_players or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.manifesto_events or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.manifesto_players or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.archive_events or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.nickname_events or 0) }}</td>
+            <td>{{ '%.0f' | format(entry.press_share_events or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7">No KPI history recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Command Usage</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Uses</th>
+            <th>Success Rate</th>
+            <th>Unique Players</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for command, stats in command_stats_sorted[:15] %}
+          <tr>
+            <td>{{ command }}</td>
+            <td>{{ stats.usage_count }}</td>
+            <td>{{ '%.0f%%' | format(stats.success_rate * 100) }}</td>
+            <td>{{ stats.unique_players }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No command data recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Press Cadence (24h)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Layer</th>
+            <th>Layers</th>
+            <th>Avg Delay (m)</th>
+            <th>Max Delay (m)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in press_cadence %}
+          <tr>
+            <td>{{ entry.event_type }}</td>
+            <td>{{ entry.layer_type }}</td>
+            <td>{{ entry.layer_count }}</td>
+            <td>{{ '%.1f' | format(entry.avg_delay_minutes) }}</td>
+            <td>{{ '%.1f' | format(entry.max_delay_minutes) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No layered press recorded in the past 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Queue Depth (24h)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Horizon</th>
+            <th>Average Pending</th>
+            <th>Max Pending</th>
+            <th>Samples</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for horizon, stats in queue_depth %}
+          <tr>
+            <td>≤ {{ horizon }}h</td>
+            <td>{{ '%.1f' | format(stats.avg_queue) }}</td>
+            <td>{{ '%.0f' | format(stats.max_queue) }}</td>
+            <td>{{ '%.0f' | format(stats.samples) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No queue depth samples recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Digest Health (24h)</h2>
+      {% set digest = report.digest_health_24h %}
+      {% if digest.total_digests > 0 %}
+      <table>
+        <tbody>
+          <tr><th>Total Digests</th><td>{{ digest.total_digests }}</td></tr>
+          <tr><th>Average Runtime</th><td>{{ '%.0f ms' | format(digest.avg_duration_ms) }}</td></tr>
+          <tr><th>Max Runtime</th><td>{{ '%.0f ms' | format(digest.max_duration_ms) }}</td></tr>
+          <tr><th>Average Releases</th><td>{{ '%.1f' | format(digest.avg_release_count) }}</td></tr>
+          <tr><th>Max Releases</th><td>{{ digest.max_release_count }}</td></tr>
+          <tr><th>Average Queue Size</th><td>{{ '%.1f' | format(digest.avg_queue_size) }}</td></tr>
+          <tr><th>Max Queue Size</th><td>{{ digest.max_queue_size }}</td></tr>
+        </tbody>
+      </table>
+      {% else %}
+      <p>No digest runs recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Dispatcher Backlog</h2>
+      <div class="filter-bar">
+        <label>Order Type
+          <select id="order-filter">
+            <option value="">All</option>
+            {% for order_type in order_types %}
+            <option value="{{ order_type }}">{{ order_type.replace('_', ' ') }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Window
+          <select id="order-window">
+            {% for window in [6, 12, 24, 48, 72, 168] %}
+            <option value="{{ window }}" {% if window == 24 %}selected{% endif %}>{{ window }}h</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Limit
+          <select id="order-limit">
+            {% for cap in [50, 100, 250, 500, 1000] %}
+            <option value="{{ cap }}" {% if cap == 250 %}selected{% endif %}>{{ cap }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button id="order-refresh" type="button">Refresh</button>
+        <a id="order-export" href="#" download="order_backlog.csv">Export CSV</a>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Order Type</th>
+            <th>Current Pending</th>
+            <th>Max Pending (24h)</th>
+            <th>Oldest Pending Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order_type, stats in order_backlog[:10] %}
+          <tr>
+            <td>{{ order_type.replace('_', ' ') }}</td>
+            <td>{{ '%.0f' | format(stats.latest_pending) }}</td>
+            <td>{{ '%.0f' | format(stats.max_pending) }}</td>
+            <td>{{ '%.1f' | format(stats.latest_oldest_seconds / 3600) }} h</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No dispatcher activity recorded in the last 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <h3>Recent Events</h3>
+      <table id="order-records-table">
+        <thead>
+          <tr>
+            <th>Order Type</th>
+            <th>Pending</th>
+            <th>Oldest Pending Age</th>
+            <th>Event</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="order-records-body">
+          <tr><td colspan="5">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>LLM Activity (24h)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Press Type</th>
+            <th>Total Calls</th>
+            <th>Successes</th>
+            <th>Success Rate</th>
+            <th>Avg Duration</th>
+            <th>Max Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for press_type, stats in llm_activity %}
+          <tr>
+            <td>{{ press_type.replace('_', ' ') }}</td>
+            <td>{{ stats.total_calls }}</td>
+            <td>{{ stats.successes }}</td>
+            <td>{{ '%.0f%%' | format(stats.success_rate * 100) }}</td>
+            <td>{{ '%.0f ms' | format(stats.avg_duration_ms) }}</td>
+            <td>{{ '%.0f ms' | format(stats.max_duration_ms) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No LLM activity recorded in the past 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Symposium Participation ({{ symposium_participation.window_hours or 24 }}h)</h2>
+      {% if symposium_participation.unique_players %}
+      <p>
+        Unique participants: {{ symposium_participation.unique_players }} |
+        Total commands: {{ '%.0f' | format(symposium_participation.total_commands or 0) }}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Usage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for command, count in symposium_participation.by_command.items() %}
+          <tr>
+            <td>{{ command }}</td>
+            <td>{{ '%.0f' | format(count) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Total Commands</th>
+            <th>Breakdown</th>
+            <th>Last Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for participant in symposium_participation.players[:15] %}
+          <tr>
+            <td>{{ participant.player_id }}</td>
+            <td>{{ '%.0f' | format(participant.command_count or 0) }}</td>
+            <td>
+              {% for cmd, count in participant.by_command.items() %}
+                {{ cmd }}: {{ '%.0f' | format(count) }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </td>
+            <td>{{ participant.last_command_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No symposium command usage recorded in the selected window.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Symposium Scoring (24h)</h2>
+      {% if symposium_scoring.count %}
+      <p>
+        Proposals scored: {{ symposium_scoring.count }} |
+        Average score: {{ '%.2f' | format(symposium_scoring.average) }}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Score</th>
+            <th>Age (days)</th>
+            <th>Recorded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_scoring_top[:10] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ '%.2f' | format(entry.score) }}</td>
+            <td>{{ '%.1f' | format(entry.age_days) }}</td>
+            <td>{{ entry.recorded_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No scored proposals in the last 24 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No proposal scoring telemetry recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Symposium Debt Snapshot</h2>
+      {% if symposium_debts %}
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Debt</th>
+            <th>Faction</th>
+            <th>Recorded At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_debts[:15] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ '%.1f' | format(entry.debt) }}</td>
+            <td>{{ entry.faction or '—' }}</td>
+            <td>{{ entry.recorded_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No outstanding symposium debt recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Symposium Reprisals (24h)</h2>
+      {% if symposium_reprisal %}
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Reprisals</th>
+            <th>Total Penalty</th>
+            <th>Factions</th>
+            <th>Last Reprisal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in symposium_reprisal[:15] %}
+          <tr>
+            <td>{{ entry.player_id }}</td>
+            <td>{{ entry.count }}</td>
+            <td>{{ '%.1f' | format(entry.total_penalty) }}</td>
+            <td>{{ entry.factions | join(', ') if entry.factions else '—' }}</td>
+            <td>{{ entry.last_reprisal_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No reprisals recorded in the last 24 hours.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Recent System Events</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Event</th>
+            <th>Source</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in report.system_events_24h %}
+          <tr>
+            <td>{{ event.timestamp }}</td>
+            <td>{{ event.event }}</td>
+            <td>{{ event.source or '—' }}</td>
+            <td>{{ event.reason or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No system events recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha256-CcG2A+qsSVqS+8CA0nVddOZXS6jttuPAHyBs+K6TfGs=" crossorigin="anonymous"></script>
+    <script>
+      function formatOldest(seconds) {
+        if (seconds === null || seconds === undefined || seconds === "") {
+          return "—";
+        }
+        const value = Number(seconds);
+        if (Number.isNaN(value)) {
+          return "—";
+        }
+        if (value >= 3600) {
+          return `${(value / 3600).toFixed(1)} h`;
+        }
+        if (value >= 60) {
+          return `${(value / 60).toFixed(0)} m`;
+        }
+        return `${value.toFixed(0)} s`;
+      }
+
+      function refreshOrderRecords() {
+        const orderSelect = document.getElementById("order-filter");
+        const windowSelect = document.getElementById("order-window");
+        const limitSelect = document.getElementById("order-limit");
+        const params = new URLSearchParams({
+          hours: windowSelect.value,
+          limit: limitSelect.value,
+        });
+        if (orderSelect.value) {
+          params.append("order_type", orderSelect.value);
+        }
+
+        fetch(`/api/orders?${params.toString()}`)
+          .then((response) => response.json())
+          .then((payload) => {
+            const tbody = document.getElementById("order-records-body");
+            tbody.innerHTML = "";
+            if (!payload.records || payload.records.length === 0) {
+              const row = document.createElement("tr");
+              const cell = document.createElement("td");
+              cell.colSpan = 5;
+              cell.textContent = "No backlog events in the selected window.";
+              row.appendChild(cell);
+              tbody.appendChild(row);
+            } else {
+              payload.records.forEach((record) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                  <td>${record.order_type.replace(/_/g, " ")}</td>
+                  <td>${Number(record.pending).toFixed(0)}</td>
+                  <td>${formatOldest(record.oldest_pending_seconds)}</td>
+                  <td>${(record.event || "").replace(/_/g, " ")}</td>
+                  <td>${record.timestamp}</td>
+                `;
+                tbody.appendChild(row);
+              });
+            }
+
+            const exportLink = document.getElementById("order-export");
+            exportLink.href = `/api/orders.csv?${params.toString()}`;
+          })
+          .catch((error) => {
+            console.error("Failed to load dispatcher backlog records", error);
+            const tbody = document.getElementById("order-records-body");
+            tbody.innerHTML = "";
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 5;
+            cell.textContent = "Failed to load dispatcher backlog records.";
+            row.appendChild(cell);
+            tbody.appendChild(row);
+          });
+      }
+
+      document.getElementById("order-refresh").addEventListener("click", refreshOrderRecords);
+      document.addEventListener("DOMContentLoaded", refreshOrderRecords);
+
+      function renderKpiCharts() {
+        fetch('/api/kpi_history?days=30')
+          .then((response) => response.json())
+          .then((payload) => {
+            const daily = payload.daily || [];
+            if (!daily.length || typeof Chart === 'undefined') {
+              return;
+            }
+
+            const labels = daily.map((entry) => entry.date);
+            const active = daily.map((entry) => entry.active_players || 0);
+            const manifestos = daily.map((entry) => entry.manifesto_events || 0);
+            const archive = daily.map((entry) => entry.archive_events || 0);
+            const nicknames = daily.map((entry) => entry.nickname_events || 0);
+            const shares = daily.map((entry) => entry.press_share_events || 0);
+
+            const options = {
+              type: 'line',
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { mode: 'index', intersect: false },
+                },
+                interaction: { mode: 'nearest', intersect: false },
+                scales: {
+                  x: { ticks: { color: '#f1f5f9' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
+                  y: { beginAtZero: true, ticks: { color: '#f1f5f9' }, grid: { color: 'rgba(148, 163, 184, 0.2)' } },
+                },
+              },
+            };
+
+            new Chart(
+              document.getElementById('kpi-active-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Active Players', data: active, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-manifesto-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Manifesto Events', data: manifestos, borderColor: '#f472b6', backgroundColor: 'rgba(244,114,182,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-archive-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Archive Lookups', data: archive, borderColor: '#c084fc', backgroundColor: 'rgba(192,132,252,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-nickname-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Nicknames', data: nicknames, borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+
+            new Chart(
+              document.getElementById('kpi-share-chart'),
+              {
+                ...options,
+                data: {
+                  labels,
+                  datasets: [{ label: 'Press Shares', data: shares, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.35)', tension: 0.25 }],
+                },
+              }
+            );
+          })
+          .catch((error) => {
+            console.error('Failed to load KPI history', error);
+          });
+      }
+
+      document.addEventListener('DOMContentLoaded', renderKpiCharts);
+    </script>
+  </body>
+</html>

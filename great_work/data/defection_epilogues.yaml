@@ -1,0 +1,29 @@
+epilogues:
+  reconciliation:
+    primary:
+      headline: "Reconciliation Wire — {scholar}"
+      body: |
+        {scholar} submits a formal letter acknowledging the missteps that led them to {new_faction}.
+        They cite shared history with {former_faction} and pledge to rebuild trust in the labs they once called home.
+    gossip:
+      - "Staffers spotted {scholar} and {former_employer} in a closed-door meeting hashing out new boundaries."
+      - "Faculty whisper that {scholar} offered to spearhead a joint communiqué to calm the factions."
+    faction_brief:
+      headline: "Faction Briefing: {former_faction} Welcomes {scholar}"
+      body: |
+        The {former_faction} council circulates terms of {scholar}'s reinstatement, citing reparations to {new_faction}
+        and a joint symposium session to demonstrate unity. Administrators monitor sentiment closely.
+  rivalry:
+    primary:
+      headline: "Rivalry Escalates — {scholar} Declines Reconciliation"
+      body: |
+        Attempts to negotiate {scholar}'s return broke down overnight. Confidential memos describe curt messages and
+        a refusal to release critical project notes. {new_faction} vows to protect their investment.
+    gossip:
+      - "{scholar} reportedly shredded their old lab access card in front of {former_employer}."
+      - "Alumni networks rally behind {former_employer}, urging them to outshine {scholar}'s new patrons."
+    faction_brief:
+      headline: "Faction Briefing: {new_faction} Fortifies {scholar}'s Position"
+      body: |
+        Internal briefings from {new_faction} celebrate {scholar}'s resolve and outline countermeasures against
+        any sabotage claims. Analysts expect rivalry editorials to dominate the Gazette for the next digest.

@@ -1,7 +1,10 @@
 """Tests for sideways discovery mechanical effects."""
-import pytest
+
+import os
 from datetime import datetime, timezone
 from typing import List
+
+import pytest
 
 from great_work.expeditions import ExpeditionResolver, FailureTables
 from great_work.models import (
@@ -12,7 +15,7 @@ from great_work.models import (
     SidewaysEffectType,
 )
 from great_work.rng import DeterministicRNG
-from great_work.service import GameService
+from great_work.service import ExpeditionOrder, GameService
 from great_work.state import GameState
 
 
@@ -27,6 +30,7 @@ def test_state(tmp_path):
 def test_service(tmp_path):
     """Create a test game service."""
     db_path = tmp_path / "test.db"
+    os.environ.setdefault("LLM_MODE", "mock")
     return GameService(db_path)
 
 
@@ -35,7 +39,6 @@ class TestSidewaysEffectGeneration:
 
     def test_think_tank_shallow_generates_theory(self):
         """Test that shallow think tank discovery spawns a theory."""
-        rng = DeterministicRNG(42)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=10,
@@ -57,7 +60,10 @@ class TestSidewaysEffectGeneration:
             result = resolver.resolve(test_rng, prep, "shallow", "think_tank")
 
         # Now check results if we got partial or landmark with sideways
-        if result.sideways_discovery and "coffeehouse gossip" in result.sideways_discovery.lower():
+        if (
+            result.sideways_discovery
+            and "coffeehouse gossip" in result.sideways_discovery.lower()
+        ):
             assert result.sideways_effects is not None
 
             # Check for theory spawn effect
@@ -66,14 +72,16 @@ class TestSidewaysEffectGeneration:
             assert SidewaysEffectType.REPUTATION_CHANGE in effect_types
 
             # Verify theory effect details
-            theory_effect = next(e for e in result.sideways_effects
-                               if e.effect_type == SidewaysEffectType.SPAWN_THEORY)
+            theory_effect = next(
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.SPAWN_THEORY
+            )
             assert theory_effect.payload["confidence"] == "suspect"
             assert "forgotten thesis" in theory_effect.payload["theory"].lower()
 
     def test_think_tank_deep_generates_conference(self):
         """Test that deep think tank discovery schedules a conference."""
-        rng = DeterministicRNG(43)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=10,
@@ -95,13 +103,15 @@ class TestSidewaysEffectGeneration:
                 assert SidewaysEffectType.QUEUE_ORDER in effect_types
 
                 # Check conference queue
-                conf_effect = next(e for e in result.sideways_effects
-                                 if e.effect_type == SidewaysEffectType.QUEUE_ORDER)
+                conf_effect = next(
+                    e
+                    for e in result.sideways_effects
+                    if e.effect_type == SidewaysEffectType.QUEUE_ORDER
+                )
                 assert conf_effect.payload["order_type"] == "conference"
 
     def test_field_shallow_generates_opportunity(self):
         """Test that shallow field discovery creates government opportunity."""
-        rng = DeterministicRNG(44)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=0,
@@ -123,14 +133,16 @@ class TestSidewaysEffectGeneration:
                 assert SidewaysEffectType.UNLOCK_OPPORTUNITY in effect_types
 
                 # Check opportunity details
-                opp_effect = next(e for e in result.sideways_effects
-                                if e.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY)
+                opp_effect = next(
+                    e
+                    for e in result.sideways_effects
+                    if e.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY
+                )
                 assert opp_effect.payload["type"] == "dignitary_contract"
                 assert "expires_in_days" in opp_effect.payload["details"]
 
     def test_landmark_discovery_major_effects(self):
         """Test that landmark discoveries have major mechanical effects."""
-        rng = DeterministicRNG(45)
         resolver = ExpeditionResolver()
         prep = ExpeditionPreparation(
             think_tank_bonus=20,
@@ -150,17 +162,48 @@ class TestSidewaysEffectGeneration:
             # Landmark should have multiple major effects
             assert len(result.sideways_effects) >= 2
 
+            assert result.sideways_discovery is not None
+            assert "landmark" in result.sideways_discovery.lower()
+
             # Check for major faction shift
-            faction_effects = [e for e in result.sideways_effects
-                             if e.effect_type == SidewaysEffectType.FACTION_SHIFT]
+            faction_effects = [
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.FACTION_SHIFT
+            ]
             if faction_effects:
                 assert faction_effects[0].payload["amount"] >= 3
 
             # Check for reputation boost
-            rep_effects = [e for e in result.sideways_effects
-                         if e.effect_type == SidewaysEffectType.REPUTATION_CHANGE]
+            rep_effects = [
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.REPUTATION_CHANGE
+            ]
             if rep_effects:
                 assert rep_effects[0].payload["amount"] >= 2
+
+    def test_vignette_queue_order_payload(self):
+        """Deep-prep sideways vignettes should enqueue narrative follow-ups."""
+
+        rng = DeterministicRNG(101)
+        resolver = ExpeditionResolver()
+        effects = resolver._generate_sideways_effects(  # noqa: SLF001
+            rng,
+            discovery_text="Hidden Archive Unearthed",
+            expedition_type="field",
+            prep_depth="deep",
+            is_landmark=False,
+        )
+
+        assert effects is not None
+        queue_effect = next(
+            e for e in effects if e.effect_type == SidewaysEffectType.QUEUE_ORDER
+        )
+        payload = queue_effect.payload["order_data"]
+        assert payload["headline"]
+        assert payload["body"]
+        assert "gossip" in payload
 
 
 class TestSidewaysEffectApplication:
@@ -186,10 +229,11 @@ class TestSidewaysEffectApplication:
             confidence=ConfidenceLevel.SUSPECT,
             prep_depth="shallow",
         )
+        assert press is not None
 
         # Get the player state before resolution
         player = test_service.state.get_player("alice")
-        initial_academic = player.influence.get("Academic", 0)
+        assert player is not None
 
         # Resolve expeditions - this should apply any sideways effects
         releases = test_service.resolve_expeditions()
@@ -209,10 +253,6 @@ class TestSidewaysEffectApplication:
         # Ensure some scholars exist for the expedition
         test_service._ensure_roster()
 
-        # Count initial theories
-        initial_theories = test_service.state.list_theories()
-        initial_count = len(initial_theories)
-
         # Launch expedition that might spawn theories
         scholars = list(test_service.state.all_scholars())[:3]
         team = [s.id for s in scholars]
@@ -229,6 +269,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Check if any theories were spawned (depends on RNG outcome)
         new_theories = test_service.state.list_theories()
@@ -243,7 +284,6 @@ class TestSidewaysEffectApplication:
         test_service._ensure_roster()
 
         player = test_service.state.get_player("charlie")
-        initial_rep = player.reputation
 
         # Launch great project (more likely to have reputation effects)
         scholars = list(test_service.state.all_scholars())[:3]
@@ -265,6 +305,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Check player reputation is still valid
         updated_player = test_service.state.get_player("charlie")
@@ -277,9 +318,6 @@ class TestSidewaysEffectApplication:
         test_service.ensure_player("diana")
         # Ensure some scholars exist for the expedition
         test_service._ensure_roster()
-
-        # Count initial followups
-        initial_followups = test_service.state.list_followups()
 
         # Launch field expedition (can create opportunities)
         scholars = list(test_service.state.all_scholars())[:3]
@@ -297,6 +335,7 @@ class TestSidewaysEffectApplication:
 
         # Resolve expeditions
         releases = test_service.resolve_expeditions()
+        assert isinstance(releases, list)
 
         # Just verify the system works - we can't control outcomes
         new_followups = test_service.state.list_followups()
@@ -314,7 +353,6 @@ class TestIntegrationWithExpeditions:
         test_service._ensure_roster()
 
         # Launch expedition
-        player = test_service.state.get_player("eve")
         scholars = list(test_service.state.all_scholars())[:3]
         team = [s.id for s in scholars]
 
@@ -333,7 +371,6 @@ class TestIntegrationWithExpeditions:
         # Get expedition code
         expeditions = list(test_service._pending_expeditions.keys())
         assert len(expeditions) > 0
-        exp_code = expeditions[0]
 
         # Resolve expedition (this should apply sideways effects)
         releases = test_service.resolve_expeditions()
@@ -358,7 +395,11 @@ class TestIntegrationWithExpeditions:
         # Launch a few expeditions of different types
         for exp_type in ["think_tank", "field"]:
             team = [s.id for s in scholars[:3]]
-            funding = {"Academic": 1} if exp_type == "think_tank" else {"Academic": 1, "Government": 1}
+            funding = (
+                {"Academic": 1}
+                if exp_type == "think_tank"
+                else {"Academic": 1, "Government": 1}
+            )
 
             test_service.launch_expedition(
                 player_id="frank",
@@ -381,3 +422,59 @@ class TestIntegrationWithExpeditions:
         assert player is not None
         assert player.reputation >= -50
         assert player.reputation <= 50
+
+
+def test_schedule_sideways_followups_enqueue_press_and_order(test_service):
+    """Scheduling sideways followups should queue press and dispatcher orders."""
+
+    test_service.ensure_player("eve")
+    order = ExpeditionOrder(
+        code="EXP-FOLLOW",
+        player_id="eve",
+        expedition_type="think_tank",
+        objective="Test followups",
+        team=[],
+        funding=[],
+        preparation=ExpeditionPreparation(),
+        prep_depth="shallow",
+        confidence=ConfidenceLevel.SUSPECT,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    followups = {
+        "press": [
+            {
+                "delay_minutes": 15,
+                "type": "academic_bulletin",
+                "headline": "Follow-up bulletin",
+                "body": "Additional notes will circulate via the archive.",
+            }
+        ],
+        "orders": [
+            {
+                "type": "press_highlight",
+                "delay_minutes": 30,
+                "payload": {"note": "Sideways follow-up"},
+            }
+        ],
+    }
+
+    initial_press = test_service.state.count_queued_press()
+    initial_orders = test_service.state.list_orders(order_type="press_highlight")
+
+    test_service._schedule_sideways_followups(
+        order=order,
+        followups=followups,
+        timestamp=datetime.now(timezone.utc),
+        tags=["archives"],
+    )
+
+    assert test_service.state.count_queued_press() == initial_press + 1
+    queued_payload = test_service.state.list_queued_press()[-1][2]
+    assert queued_payload["metadata"]["tags"] == ["archives"]
+
+    orders = test_service.state.list_orders(order_type="press_highlight")
+    assert len(orders) == len(initial_orders) + 1
+    latest_order = orders[-1]
+    assert latest_order["payload"]["tags"] == ["archives"]
+    assert latest_order["payload"]["source"] == "sideways_followup"

@@ -1,4 +1,5 @@
 """Additional tests to improve overall coverage to ~80%."""
+
 from __future__ import annotations
 
 import json
@@ -60,7 +61,7 @@ def test_memory_fact_creation():
         timestamp=now,
         type="expedition_success",
         subject="darwin",
-        details={"outcome": "success", "reputation": "5"}
+        details={"outcome": "success", "reputation": "5"},
     )
 
     assert fact.timestamp == now
@@ -72,12 +73,7 @@ def test_memory_fact_creation():
 def test_scholar_stats_creation():
     """ScholarStats should hold all stat values."""
     stats = ScholarStats(
-        talent=80,
-        reliability=75,
-        integrity=90,
-        theatrics=60,
-        loyalty=85,
-        risk=40
+        talent=80, reliability=75, integrity=90, theatrics=60, loyalty=85, risk=40
     )
 
     assert stats.talent == 80
@@ -117,7 +113,7 @@ def test_expedition_result_with_sideways_discovery():
         modifier=5,
         final_score=65,
         failure_detail=None,
-        sideways_discovery="Unexpected fossil found"
+        sideways_discovery="Unexpected fossil found",
     )
 
     assert result.sideways_discovery == "Unexpected fossil found"
@@ -130,7 +126,7 @@ def test_press_release_with_metadata():
         type="special_announcement",
         headline="Breaking News",
         body="Important discovery made",
-        metadata={"importance": "high", "verified": True}
+        metadata={"importance": "high", "verified": True},
     )
 
     assert release.metadata["importance"] == "high"
@@ -142,7 +138,7 @@ def test_event_model_serialization():
     event = Event(
         timestamp=datetime.now(timezone.utc),
         action="test_action",
-        payload={"nested": {"data": [1, 2, 3]}, "flag": True}
+        payload={"nested": {"data": [1, 2, 3]}, "flag": True},
     )
 
     assert event.payload["nested"]["data"] == [1, 2, 3]
@@ -154,8 +150,9 @@ def test_gossip_context_with_long_quote():
     """GossipContext should handle long quotes."""
     ctx = GossipContext(
         scholar="Prof. Verbose",
-        quote="This is a very long quote that goes on and on about various academic matters " * 5,
-        trigger="conference presentation"
+        quote="This is a very long quote that goes on and on about various academic matters "
+        * 5,
+        trigger="conference presentation",
     )
 
     press = academic_gossip(ctx)
@@ -170,7 +167,7 @@ def test_recruitment_context_low_chance():
         scholar="Dr. Elusive",
         outcome="FAILURE",
         chance=0.01,
-        faction="foreign"
+        faction="foreign",
     )
 
     press = recruitment_report(ctx)
@@ -184,7 +181,7 @@ def test_defection_context_high_probability():
         scholar="Dr. Opportunist",
         outcome="accepted",
         new_faction="Wealthy Patron",
-        probability=0.99
+        probability=0.99,
     )
 
     press = defection_notice(ctx)
@@ -233,9 +230,7 @@ def test_gamestate_with_custom_repository(tmp_path):
     """GameState should accept custom ScholarRepository."""
     custom_repo = ScholarRepository()
     state = GameState(
-        db_path=tmp_path / "custom.db",
-        repository=custom_repo,
-        start_year=1920
+        db_path=tmp_path / "custom.db", repository=custom_repo, start_year=1920
     )
 
     assert state._repo == custom_repo
@@ -268,10 +263,7 @@ def test_gamestate_clear_followup(tmp_path):
 
     # Schedule a followup
     state.schedule_followup(
-        "test_scholar",
-        "test_type",
-        datetime.now(timezone.utc),
-        {"data": "test"}
+        "test_scholar", "test_type", datetime.now(timezone.utc), {"data": "test"}
     )
 
     # Get the followup
@@ -291,11 +283,7 @@ def test_press_record_model():
     """PressRecord should store press releases with timestamps."""
     record = PressRecord(
         timestamp=datetime.now(timezone.utc),
-        release=PressRelease(
-            type="test",
-            headline="Test Headline",
-            body="Test body"
-        )
+        release=PressRelease(type="test", headline="Test Headline", body="Test body"),
     )
 
     assert record.release.headline == "Test Headline"
@@ -310,7 +298,7 @@ def test_theory_record_model():
         theory="Grand unified theory",
         confidence="certain",
         supporters=["s1", "s2"],
-        deadline="2025-01-01"
+        deadline="2025-01-01",
     )
 
     assert record.theory == "Grand unified theory"
@@ -328,7 +316,7 @@ def test_expedition_record_model():
         team=["s1", "s2", "s3"],
         funding=["academia", "government"],
         prep_depth="deep",
-        confidence="certain"
+        confidence="certain",
     )
 
     assert record.code == "EXP-123"

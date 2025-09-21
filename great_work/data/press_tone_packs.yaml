@@ -1,0 +1,266 @@
+settings:
+  post_cyberpunk_collapse:
+    digest_highlight:
+      headline:
+        - "Signal Echo — {count} stories warm up"
+        - "Relay Chorus — {count} filings hum"
+      blurb_template:
+        - "{headline} in {relative_time}. {call_to_action}."
+        - "{relative_time} until {headline}; {call_to_action}."
+      callout:
+        - "Tune relays; missed windows void salvage rights."
+        - "Calibrate dish arrays before the window seals."
+    expedition_followup:
+      headline:
+        - "Ashstorm Addendum — Expedition {code}"
+        - "Dustwake Bulletin — Expedition {code}"
+      blurb:
+        - "{persona} crackles over the band: '{summary}'"
+        - "{persona} stitches a burst transmission: '{summary}'"
+      callout:
+        - "Operators ready the rad-shelters before {deadline}."
+        - "Seal bulkheads; archive drones redeploy by {deadline}."
+    mentorship_longform:
+      headline:
+        - "Field Briefing — {scholar} / {mentor}"
+        - "Mentor Log — {mentor} briefing {scholar}"
+      blurb:
+        - "Past the fallout gates, {scholar} tests {artifact}; {mentor} logs every anomaly."
+        - "{mentor}'s diagnostics trace {scholar}'s arc through volatile {artifact} trials."
+      callout:
+        - "Vault clerks to notarise results by {deadline}."
+        - "Schedule redundancy checks before the {deadline} broadcast."
+    defection_followup:
+      headline:
+        - "Transfer Wire — {scholar}"
+        - "Alignment Shift — {scholar}"
+      blurb:
+        - "{scholar} reroutes allegiance to {new_faction}; {old_faction} ops claim failsafes arm in {hours}h."
+        - "{scholar} defects toward {new_faction}; {old_faction} protocols flag contested assets in {hours}h."
+      callout:
+        - "Verify escrow bundles before releasing access credentials."
+        - "Lock audit trails; revoke compromised keycards."
+    defection_epilogue:
+      headline:
+        - "Epilogue Ledger — {scholar}"
+        - "Aftermath Bulletin — {scholar}"
+      blurb:
+        - "Dispatch summarises {scholar}'s epilogue with {former_faction} and {new_faction}."
+        - "Operators log the fallout from {scholar}'s defection arc."
+      callout:
+        - "Review outstanding reprisals and mentorship hooks."
+        - "Notify moderators if rivalry persists beyond threshold."
+    symposium_resolution:
+      headline:
+        - "Grid Consensus: {topic}"
+        - "Consensus Checksum: {topic}"
+      blurb:
+        - "{vote_share}% back {option}; cooling stacks flare gold. {analyst} warns of load-shed in {hours}h."
+        - "{option} holds {vote_share}% backing; {analyst} flags heat dispersal risk inside {hours}h."
+      callout:
+        - "Patch uplink scripts; transcripts drop at 0600."
+        - "Route synth scribes; release summaries at 0600."
+    admin_recovery:
+      headline:
+        - "Narrative Grid Stabilised"
+        - "Story Fabric Relinked"
+      blurb:
+        - "Queues resume in {minutes}m; {persona} retunes safety interlocks."
+        - "Expect staged resume in {minutes} minutes as {persona} reinspects dampeners."
+      callout:
+        - "Review telemetry tile 'Narrative Health' before unpausing."
+        - "Confirm dispatcher backlog clears before cueing new beats."
+    sidecast_followup:
+      headline:
+        - "Sidecast Dispatch — {scholar}"
+        - "Field Log Supplement — {scholar}"
+      blurb:
+        - "{scholar}'s arc with {sponsor} fans out in the layered dispatch."
+        - "Archivists slot {scholar}'s latest update beside {expedition_code}."
+      callout:
+        - "Mark pending mentorship invites before the next digest."
+        - "Flag any rivalry flare-ups for admin review."
+    sideways_vignette:
+      headline:
+        - "Archive Vignette — {scholar}"
+        - "Mission Chronicle — {scholar}"
+      blurb:
+        - "Narrative snapshots circulate from the latest sideways discovery."
+        - "Dispatchers package vignette copy for Gazette highlights."
+      callout:
+        - "Route the vignette to Gazette editors for spotlight consideration."
+        - "Tag faction analysts if rivalry threads emerge."
+
+  high_fantasy:
+    digest_highlight:
+      headline:
+        - "Moonlit Gazette — {count} oaths stir"
+        - "Silver Annals — {count} vows kindle"
+      blurb_template:
+        - "{headline} due in {relative_time}; heralds already polishing the trumpets."
+        - "In {relative_time}, {headline}; bells already toll in rehearsal."
+      callout:
+        - "Scribes, ready vellum and sealing wax."
+        - "Illuminators, mend the lapis bands before dusk."
+    expedition_followup:
+      headline:
+        - "Starfall Codex — Expedition {code}"
+        - "Celestial Ledger — Expedition {code}"
+      blurb:
+        - "Beneath twin moons, {scholar} inscribes: '{summary}'"
+        - "{scholar} etches twilight runes: '{summary}'"
+      callout:
+        - "Order of Lanterns convenes before the bells of {deadline}."
+        - "Stewards summon the lantern guard ahead of {deadline}."
+    mentorship_longform:
+      headline:
+        - "Apprentice Ledger — {scholar} & {mentor}"
+        - "Master's Chronicle — {mentor} and {scholar}"
+      blurb:
+        - "The Accord notes {scholar}'s triumph with the {relic}; {mentor} decrees festivities at {hall}."
+        - "{mentor} proclaims {scholar}'s ascent, parading the {relic} through {hall}."
+      callout:
+        - "Patrons may petition the council at dawn."
+        - "Bring tribute scrolls when the dawn horns sound."
+    defection_followup:
+      headline:
+        - "Oathbreaker Chronicle — {scholar}"
+        - "Fealty Ledger Rewritten — {scholar}"
+      blurb:
+        - "Before the elder trees, {scholar} swears fealty to {new_faction}; {old_faction} seers foretell storms within {hours} hours."
+        - "{scholar} bends the knee to {new_faction}; augurs warn tempests lash {old_faction} halls in {hours} hours."
+      callout:
+        - "Stewards prepare amnesty rites or gird for reprisal."
+        - "Heralds script counter-oaths before the third bell."
+    defection_epilogue:
+      headline:
+        - "Epilogue Chronicle — {scholar}"
+        - "Return Ledger — {scholar}"
+      blurb:
+        - "Chroniclers record how {scholar} squares debts with {former_faction}."
+        - "Fateweavers debate {scholar}'s bond to {new_faction}."
+      callout:
+        - "Summon mediators if rivalries persist."
+        - "Prepare songs of reconciliation or challenge."
+    symposium_resolution:
+      headline:
+        - "Conclave Decree: {topic}"
+        - "Council Verdict: {topic}"
+      blurb:
+        - "{vote_share}% favor {option}; the Argent Choir prepares hymns."
+        - "By {vote_share}%, {option} prevails; choristers stitch refrains."
+      callout:
+        - "Palace heralds to post transcripts at first light."
+        - "Archivists unfurl the verdict scroll at dawn."
+    admin_recovery:
+      headline:
+        - "The Loom of Tales Rekindled"
+        - "Saga Loom Reawakened"
+      blurb:
+        - "Storytellers resume their weave within {minutes} minutes; {persona} blesses the ink."
+        - "Within {minutes} minutes the narrative loom hums anew under {persona}'s ward."
+      callout:
+        - "Bards consult the great ledger ere they sing."
+        - "Review the errata codex before the first verses."
+    sidecast_followup:
+      headline:
+        - "Sidecast Chronicle — {scholar}"
+        - "Courtly Ledger — {scholar}"
+      blurb:
+        - "Scribes chart {scholar}'s ascent under {sponsor}."
+        - "Heralds note {scholar}'s whispers about {expedition_code}."
+      callout:
+        - "Invite patrons to the mentorship salon."
+        - "Queue bardic verses celebrating the new alliance."
+    sideways_vignette:
+      headline:
+        - "Vignetta di Campo — {scholar}"
+        - "Cronaca Laterale — {scholar}"
+      blurb:
+        - "Narratori annotano la storia emersa dalla scoperta laterale."
+        - "I cantori preparano un resoconto pubblico della vignetta."
+      callout:
+        - "Avvisare i moderatori se la vignetta riaccende rivalità." 
+        - "Consigliare ai maestri di integrare la vignetta nei prossimi simposi."
+
+  renaissance_europe_1400s:
+    digest_highlight:
+      headline:
+        - "Gazetta Straordinaria — {count} dispatches"
+        - "Gazzetta Alchemica — {count} relazioni"
+      blurb_template:
+        - "Expect delivery in {relative_time}; couriers ride under papal seal."
+        - "{headline} scheduled in {relative_time}; clerks ready the chancery."
+      callout:
+        - "Guilds ready hall ledgers for notarisation."
+        - "Stewards prepare the bronze lecterns for signatures."
+    expedition_followup:
+      headline:
+        - "Addendum a Sera — Impresa {code}"
+        - "Bollettino d'Impresa — Missione {code}"
+      blurb:
+        - "From {city}, Maestro {scholar} pens: '{summary}'"
+        - "Maestro {scholar} cables from {city}: '{summary}'"
+      callout:
+        - "Archivists assemble in the loggia before {deadline}."
+        - "Archivio Maggiore convenes scribes ahead of {deadline}."
+    mentorship_longform:
+      headline:
+        - "Bottega Registro — {mentor} con {scholar}"
+        - "Registro Maestri — {mentor} & {scholar}"
+      blurb:
+        - "Within the atelier, {scholar} drafts the {treatise}; patrons witness before the Signoria."
+        - "{mentor} escorts {scholar}'s {treatise} through the guild hall, drafts sealed before the Signoria."
+      callout:
+        - "Depositions accepted at the bronze portal."
+        - "Submit guild petitions before second vespers."
+    defection_followup:
+      headline:
+        - "Affidavit di Defezione — {scholar}"
+        - "Portolano di Cambio — {scholar}"
+      blurb:
+        - "Notaries record {scholar}'s passage to {new_faction}; {old_faction} dispatches envoys within {hours} ore."
+        - "{scholar} tenders allegiance to {new_faction}; {old_faction} scribes draft remonstrations within {hours} ore."
+      callout:
+        - "Curia insists escrow ledgers be reviewed before sunset."
+        - "Treasury clerks audit the counter-seals before dusk."
+    defection_epilogue:
+      headline:
+        - "Epilogo Diplomatico — {scholar}"
+        - "Relazione di Ritorno — {scholar}"
+      blurb:
+        - "La Cancelleria valuta se {scholar} torna nel dogado di {former_faction}."
+        - "Memoriali analizzano il legame tra {scholar} e {new_faction}."
+      callout:
+        - "Convene the council to ratify reconciliation terms."
+        - "Archivists annotate rivalry clauses for future audits."
+    symposium_resolution:
+      headline:
+        - "Convocazione Esito: {topic}"
+        - "Consiglio Sentenza: {topic}"
+      blurb:
+        - "By {vote_share}%, the collegium upholds {option}; bells of Santa Maria will toll thrice."
+        - "{option} carries {vote_share}% assent; tintinnabuli sound thrice across the piazza."
+      callout:
+        - "Masters present counter-theses by vespers."
+        - "Guild captains lodge dissent forms before vespers."
+    admin_recovery:
+      headline:
+        - "Cancelleria Avvisa: Scriptoria riaperte"
+        - "La Cancelleria riaccende le scritture"
+      blurb:
+        - "Quills resume within {minutes} minuti; {persona} affixes seal and sign."
+        - "{persona} proclaims the scriptoria reopen within {minutes} minuti."
+      callout:
+        - "Notaries consult the ledger of errata first."
+        - "Archivists collate the errata folio before resuming ink."
+    sidecast_followup:
+      headline:
+        - "Gazzetta di Sidecast — {scholar}"
+        - "Supplemento di Bottega — {scholar}"
+      blurb:
+        - "{scholar} rafforza i laboratori di {sponsor}; memoriali si compilano."
+        - "Le cronache annotano il contributo di {scholar} alla missione {expedition_code}."
+      callout:
+        - "Maestri convocano il collegio per valutare il nuovo talento."
+        - "Cancelleria richiede appunti aggiornati entro vespri."

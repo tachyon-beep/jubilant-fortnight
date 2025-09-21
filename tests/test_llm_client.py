@@ -1,34 +1,44 @@
 """Tests for LLM client integration."""
-import pytest
+
 import asyncio
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from great_work.llm_client import (
-    LLMConfig,
-    LLMClient,
     ContentModerator,
+    LLMClient,
+    LLMConfig,
+    LLMGenerationError,
     SafetyLevel,
     enhance_press_release,
-    get_llm_client
+    get_llm_client,
 )
 
 
 def test_llm_config_from_env():
     """Test loading LLM configuration from environment variables."""
-    with patch.dict(os.environ, {
-        "LLM_API_BASE": "http://test:8080/v1",
-        "LLM_API_KEY": "test-key",
-        "LLM_MODEL_NAME": "test-model",
-        "LLM_TEMPERATURE": "0.5",
-        "LLM_MAX_TOKENS": "300",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "LLM_API_BASE": "http://test:8080/v1",
+            "LLM_API_KEY": "test-key",
+            "LLM_MODEL_NAME": "test-model",
+            "LLM_TEMPERATURE": "0.5",
+            "LLM_MAX_TOKENS": "300",
+            "LLM_MODE": "mock",
+            "LLM_RETRY_SCHEDULE": "1,5,15",
+        },
+    ):
         config = LLMConfig.from_env()
         assert config.api_base == "http://test:8080/v1"
         assert config.api_key == "test-key"
         assert config.model_name == "test-model"
         assert config.temperature == 0.5
         assert config.max_tokens == 300
+        assert config.mock_mode is True
+        assert config.retry_schedule == [1.0, 5.0, 15.0]
 
 
 def test_llm_config_defaults():
@@ -38,8 +48,10 @@ def test_llm_config_defaults():
     assert config.api_key == "not-needed-for-local"
     assert config.model_name == "local-model"
     assert config.temperature == 0.8
-    assert config.use_fallback_templates == True
-    assert config.safety_enabled == True
+    assert config.use_fallback_templates
+    assert config.safety_enabled
+    assert config.mock_mode is False
+    assert config.retry_schedule is None
 
 
 def test_content_moderator_safe():
@@ -49,23 +61,21 @@ def test_content_moderator_safe():
     assert result == SafetyLevel.SAFE
 
 
+def test_content_moderator_blocked():
+    """Ensure blocked words trigger the expected safety level."""
+    moderator = ContentModerator()
+    result = moderator.check_content("The report mentions a bomb threat.")
+    assert result == SafetyLevel.BLOCKED
+
+
 def test_llm_client_initialization():
     """Test LLM client initialization."""
-    config = LLMConfig()
+    config = LLMConfig(mock_mode=True)
+    client = LLMClient(config)
 
-    # Mock the openai import and client creation
-    with patch('great_work.llm_client.LLMClient.__init__') as mock_init:
-        mock_init.return_value = None
-        client = LLMClient.__new__(LLMClient)
-        client.config = config
-        client.moderator = ContentModerator()
-        client.enabled = False  # Simulate openai not installed
-        client.openai = None
-        client.client = None
-
-        assert client.config.api_base == "http://localhost:5000/v1"
-        assert client.moderator is not None
-        assert client.enabled == False
+    assert client.config.mock_mode is True
+    assert client.enabled is True
+    client.close()
 
 
 def test_persona_prompt_generation():
@@ -78,8 +88,8 @@ def test_persona_prompt_generation():
         {
             "personality": "eccentric",
             "specialization": "quantum physics",
-            "quirks": ["speaks in riddles", "loves tea"]
-        }
+            "quirks": ["speaks in riddles", "loves tea"],
+        },
     )
 
     assert "Dr. Smith" in prompt
@@ -93,11 +103,7 @@ def test_fallback_template():
     client = LLMClient.__new__(LLMClient)
     client.config = LLMConfig()
 
-    context = {
-        "type": "discovery",
-        "player": "Alice",
-        "action": "made a breakthrough"
-    }
+    context = {"type": "discovery", "player": "Alice", "action": "made a breakthrough"}
 
     result = client._fallback_template(context)
     assert "Alice" in result
@@ -113,6 +119,7 @@ async def test_generate_narrative_with_fallback():
     client.enabled = False  # Simulate LLM disabled
     client.moderator = None
     client._executor = None  # No executor needed for fallback
+    client._loop = asyncio.get_event_loop()
 
     # Mock the fallback method
     client._fallback_template = Mock(return_value="Fallback text")
@@ -128,9 +135,12 @@ async def test_generate_narrative_with_fallback():
 async def test_enhance_press_release():
     """Test enhancing press release with LLM."""
     from unittest.mock import AsyncMock
-    with patch('great_work.llm_client.get_llm_client') as mock_get_client:
+
+    with patch("great_work.llm_client.get_llm_client") as mock_get_client:
         mock_client = Mock()
-        mock_client.generate_narrative = AsyncMock(return_value="Enhanced narrative text")
+        mock_client.generate_narrative = AsyncMock(
+            return_value="Enhanced narrative text"
+        )
         mock_get_client.return_value = mock_client
 
         result = await enhance_press_release(
@@ -138,7 +148,7 @@ async def test_enhance_press_release():
             "Base content",
             {"player": "Charlie"},
             "Dr. Jones",
-            {"personality": "serious"}
+            {"personality": "serious"},
         )
 
         assert result == "Enhanced narrative text"
@@ -146,12 +156,13 @@ async def test_enhance_press_release():
 
 def test_singleton_client():
     """Test singleton LLM client pattern."""
-    with patch('great_work.llm_client.LLMClient') as MockLLMClient:
+    with patch("great_work.llm_client.LLMClient") as MockLLMClient:
         mock_instance = Mock()
         MockLLMClient.return_value = mock_instance
 
         # Reset the singleton
         import great_work.llm_client
+
         great_work.llm_client._llm_client = None
 
         client1 = get_llm_client()
@@ -160,6 +171,8 @@ def test_singleton_client():
         # Should only create one instance
         MockLLMClient.assert_called_once()
         assert client1 is client2
+
+        great_work.llm_client._llm_client = None
 
 
 @pytest.mark.asyncio
@@ -189,3 +202,19 @@ async def test_generate_batch():
     assert "Generated for 1" in results[0]
     assert "Generated for 2" in results[1]
     assert "Generated for 3" in results[2]
+
+
+def test_generate_narrative_sync_mock():
+    """Synchronous helper should work when mock mode is enabled."""
+    config = LLMConfig(mock_mode=True)
+    client = LLMClient(config)
+
+    result = client.generate_narrative_sync(
+        prompt="Describe the discovery",
+        context={"summary": "a curious artefact"},
+        persona_name="Dr. Mock",
+    )
+
+    assert "[MOCK]" in result
+    assert "Dr. Mock" in result
+    client.close()

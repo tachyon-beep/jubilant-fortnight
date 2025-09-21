@@ -66,15 +66,21 @@ sideways:
   think_tank:
     shallow:
       - "Coffeehouse gossip surfaces about a forgotten thesis."
+      - "Break room whispers revive a forgotten thesis from the archives."
     deep:
       - "Symposium attendees demand a follow-up colloquium." 
+      - "Scholars petition for a follow-up colloquium to settle the debate." 
   field:
     shallow:
       - "Local dignitaries offer provisional support if appeased." 
+      - "Local dignitaries hint at backing if ceremonial niceties are observed." 
     deep:
       - "A rival faction quietly invites joint stewardship." 
+      - "Joint stewardship invitations arrive from a rival faction's envoy." 
   great_project:
     shallow:
       - "Internal auditors flag an innovation council review." 
+      - "Innovation council auditors schedule an unsmiling compliance review." 
     deep:
       - "Foreign observers float a transnational summit." 
+      - "A transnational summit proposal circulates among foreign observers." 

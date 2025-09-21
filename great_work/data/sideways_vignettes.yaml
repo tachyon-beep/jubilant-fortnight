@@ -1,0 +1,215 @@
+vignettes:
+  field:
+    deep:
+      - id: "field_hidden_archive"
+        headline: "Hidden Archive Unearthed"
+        body: |
+          Expedition notes describe a buried archive sealed with sigils. Scholars pore over wind-bitten ledgers and
+          unearth rival guild correspondences that may reshape faction alliances.
+        gossip:
+          - "Archivists argue over who should steward the unearthed ledgers."
+          - "Expedition delegates quietly petition to keep the archive under their patronage."
+        tags: ["archives", "field"]
+      - id: "field_zephyr_observatory"
+        headline: "Skyward Observatory Stabilised"
+        body: |
+          Engineers reinforce a windswept observatory perched above the dig site. The restored lenses expose
+          ley-line signatures that change how factions view the region's strategic value.
+        gossip:
+          - "{scholar} claims the observatory registered rival faction couriers circling the site."
+          - "Logisticians beg for more funding to keep the observatory powered through storms."
+        tags: ["infrastructure", "intelligence"]
+      - id: "field_cultural_consortium"
+        headline: "Cultural Consortium Brokers Access"
+        body: |
+          Mediators convene a cultural consortium of local stewards and expedition leaders. Agreements grant
+          limited access to sacred chambers in exchange for future symposium seats.
+        gossip:
+          - "Religious envoys insist the consortium publish a respectful treatment manual before further digs."
+          - "Foreign observers wonder if the consortium will demand tribute from every future expedition."
+        tags: ["diplomacy", "religious"]
+      - id: "field_covert_listeners"
+        headline: "Covert Listening Posts Activated"
+        body: |
+          Signal-workers thread resonant wire through canyon strata, triangulating whispers between rival campfires.
+          The team now hears when competing factions reroute supplies or slip new envoys past the cordon.
+        gossip:
+          - "Industry attachés quietly offer to bankroll an expanded wire network."
+          - "Foreign dignitaries accuse the expedition of wiretapping inter-faction parleys."
+        tags: ["intelligence", "foreign"]
+    standard:
+      - id: "field_trading_post"
+        headline: "Trading Post Rescued"
+        body: |
+          Field crews stabilize a collapsing trading post, salvaging correspondence that ties distant factions to the
+          expedition objective.
+        gossip:
+          - "Logisticians celebrate the supply windfall from the rescued post."
+        tags: ["logistics"]
+      - id: "field_cartographers_cache"
+        headline: "Cartographer's Cache Discovered"
+        body: |
+          Crates of annotated maps reveal forgotten supply routes and rival claim markers. The cache hints that
+          another sponsor abandoned a similar project decades ago.
+        gossip:
+          - "Regional cartographers debate whether to release the maps or sell copies to the highest bidder."
+          - "Industry reps argue for exclusive access before the routes flood with smugglers."
+        tags: ["mapping", "industry"]
+      - id: "field_local_guild_alliance"
+        headline: "Guild Alliance Ratified"
+        body: |
+          Local artisan guilds sign a pact with the expedition, promising bespoke components in exchange for
+          a share of upcoming discoveries and representation at the next symposium.
+        gossip:
+          - "Guildmasters hint that failure to deliver on promises could void the alliance overnight."
+          - "{scholar} is tasked with drafting the guild-friendly appendix for the official report."
+        tags: ["economy", "alliances"]
+    shallow:
+      - id: "field_pop_up_clinic"
+        headline: "Pop-Up Clinic Earns Goodwill"
+        body: |
+          Expedition medics establish a pop-up clinic treating injuries from the dig and the nearby settlement.
+          The gesture wins goodwill, though supplies dwindle faster than planned.
+        gossip:
+          - "Local dignitaries praise the expedition but ask for a permanent infirmary."
+          - "Quartermasters warn the clinic may delay the next milestone without resupply."
+        tags: ["community", "logistics"]
+      - id: "field_ballast_discovery"
+        headline: "Ballast Caves Charted"
+        body: |
+          Scouts chart ballast caves that stabilise the valley floor. The discovery could lower costs for
+          upcoming dig operations if factions agree to respect the fragile ecosystem.
+        gossip:
+          - "Environmental stewards petition for a protected status before industry arrives."
+          - "Field engineers argue the caves can double as emergency shelters."
+        tags: ["environment", "infrastructure"]
+      - id: "field_oral_history_drive"
+        headline: "Oral History Drive Launches"
+        body: |
+          Cultural liaisons record oral histories from nearby communities, capturing myths that align with expedition
+          hypotheses. Participation builds trust but surfaces contradictions to accepted timelines.
+        gossip:
+          - "Archive staff race to transcribe stories before dialect nuances are lost."
+          - "Some theorists worry the new myths undercut their favourite theses."
+        tags: ["culture", "archives"]
+      - id: "field_sabotage_countermeasure"
+        headline: "Sabotage Countermeasure Implemented"
+        body: |
+          After detecting tampered ballast weights, engineers deploy resonance wards and rotating watchers. The move
+          reassures patrons but stretches the already thin logistics crew.
+        gossip:
+          - "{scholar} swears the saboteurs left a calling card tied to a rival patron."
+          - "Government envoys request access to the ward schematics for their own frontier sites."
+        tags: ["security", "sabotage"]
+  think_tank:
+    deep:
+      - id: "think_tank_forbidden_thesis"
+        headline: "Forbidden Thesis Resurrected"
+        body: |
+          The think tank's deep-prep session reconstructs a forbidden thesis, outlining perilous methodologies that the
+          faculty banned decades ago.
+        gossip:
+          - "Committee chairs debate whether to circulate the thesis or seal it again."
+        tags: ["scholarship"]
+      - id: "think_tank_spatial_simulation"
+        headline: "Spatial Simulation Achieves Breakthrough"
+        body: |
+          Analysts run a full spatial simulation of the expedition theatre, revealing hidden strata and political flashpoints.
+          The simulation's recommendations could upend resource allocation.
+        gossip:
+          - "Mathematical purists question the model's assumptions, while pragmatists rush to implement it."
+          - "A sponsorship bidding war looms over access to the simulation outputs."
+        tags: ["analysis", "politics"]
+      - id: "think_tank_psychometric_report"
+        headline: "Psychometric Report Sparks Debate"
+        body: |
+          Behavioural specialists publish a psychometric report warning that expedition crews are nearing burnout.
+          The report advocates mandatory downtime and a rebalancing of leadership duties.
+        gossip:
+          - "{scholar} lobbies for structured mentorship rotations in response to the report."
+          - "Skeptics argue the timing conveniently stalls a rival's proposal."
+        tags: ["wellbeing", "governance"]
+    standard:
+      - id: "think_tank_rivalry_whitepaper"
+        headline: "Rivalry Whitepaper Circulates"
+        body: |
+          A coalition of theorists releases a whitepaper comparing rival hypotheses and highlighting seams where
+          collaboration could accelerate results.
+        gossip:
+          - "Reviewers accuse the authors of favouring {player}'s agenda."
+          - "Symposium organisers hint the whitepaper may become required reading."
+        tags: ["collaboration", "politics"]
+      - id: "think_tank_archival_dossier"
+        headline: "Archival Dossier Re-shelved"
+        body: |
+          Dusty dossiers resurface, revealing forgotten grant promises and unfinished experiments that mirror the current work.
+          The dossier raises questions about prior art and credit.
+        gossip:
+          - "Senior scholars whisper about revoking accolades tied to the old experiments."
+          - "Archivists remind everyone that historical debts rarely stay buried."
+        tags: ["archives", "reputation"]
+      - id: "think_tank_mentorship_roundtable"
+        headline: "Mentorship Roundtable Drafts New Charter"
+        body: |
+          Mentors assemble to rewrite the internal charter, setting expectations for lab rotations, publication cadence,
+          and apprentice recognition.
+        gossip:
+          - "Junior scholars celebrate the proposed credit-sharing clauses."
+          - "Traditionalists grumble about losing unilateral control over breakout manuscripts."
+        tags: ["mentorship", "policy"]
+    shallow:
+      - id: "think_tank_quickfire_session"
+        headline: "Quickfire Session Lights Up the Commons"
+        body: |
+          A lightning round of hypothesis pitches forces scholars to summarise their boldest ideas in sixty seconds.
+          The session rejuvenates stalled debates.
+        gossip:
+          - "Audience members vote to spin up an auxiliary salon to keep the momentum."
+          - "A rival faction records the session and rumours of selective editing surface."
+        tags: ["engagement", "innovation"]
+      - id: "think_tank_data_cleanup"
+        headline: "Data Cleanup Uncovers Anomalies"
+        body: |
+          Routine data hygiene reveals anomalies in prior measurements, prompting the think tank to re-run calculations and
+          notify expedition leads.
+        gossip:
+          - "Statisticians quietly celebrate finally catching the error."
+          - "Field leads scramble to adjust logistics affected by the corrected numbers."
+        tags: ["analysis", "operations"]
+      - id: "think_tank_guest_lecturer"
+        headline: "Guest Lecturer Shakes Foundations"
+        body: |
+          A visiting scholar presents contrarian evidence that challenges entrenched views, forcing the think tank to revisit
+          long-held assumptions.
+        gossip:
+          - "Some mentors schedule emergency study groups to unpack the lecture."
+          - "Others quietly move their funding pitches to align with the new outlook."
+        tags: ["debate", "culture"]
+  great_project:
+    deep:
+      - id: "project_zephyr_engine"
+        headline: "Zephyr Engine Blueprint Recovered"
+        body: |
+          Engineers recover blueprints for the legendary Zephyr Engine, a device capable of stabilising high-altitude
+          dig operations. Implementation risks inflaming faction rivalries.
+        gossip:
+          - "Industry faction envoys lobby for exclusive access to the engine plans."
+        tags: ["industry", "innovation"]
+      - id: "project_aeon_siphon"
+        headline: "Aeon Siphon Prototype Tested"
+        body: |
+          Prototype energy siphons stabilise the temporal flux surrounding the great project site. Early tests succeed but
+          drain regional infrastructure, demanding political concessions.
+        gossip:
+          - "Government officials demand a public briefing before authorising further siphon use."
+          - "Religious observers debate whether the siphon violates sacred covenants."
+        tags: ["energy", "politics"]
+      - id: "project_transcendent_manifest"
+        headline: "Transcendent Manifest Issued"
+        body: |
+          Project leads publish a manifesto detailing philosophical ramifications of the breakthrough. The document
+          invites broad input and hints at a coming symposium showdown.
+        gossip:
+          - "Scholars rush to sign the manifesto, hoping to steer its amendments."
+          - "Opponents coordinate counter-essays warning of unchecked ambition."
+        tags: ["philosophy", "symposium"]
