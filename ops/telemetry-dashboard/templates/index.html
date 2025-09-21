@@ -31,6 +31,46 @@
       <div>Total events: {{ report.overall.total_events }} | Unique players: {{ report.overall.unique_players }}</div>
     </div>
 
+    {% if calibration_snapshot %}
+    <div class="section">
+      <h2>Calibration Snapshot</h2>
+      <p>
+        Latest snapshot generated at {{ calibration_snapshot.generated_at or '—' }}
+        (<a href="/api/calibration_snapshot">download JSON</a>)
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Seasonal Commitments (Active)</td>
+            <td>{{ calibration_snapshot.seasonal_active }}</td>
+          </tr>
+          <tr>
+            <td>Seasonal Debt Outstanding</td>
+            <td>{{ calibration_snapshot.seasonal_debt }}</td>
+          </tr>
+          <tr>
+            <td>Total Faction Investments</td>
+            <td>{{ calibration_snapshot.investment_amount }}</td>
+          </tr>
+          <tr>
+            <td>Total Archive Endowments</td>
+            <td>{{ calibration_snapshot.endowment_amount }}</td>
+          </tr>
+          <tr>
+            <td>Pending Orders</td>
+            <td>{{ calibration_snapshot.orders_pending }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
     {% if health_checks %}
     <div class="section">
       <h2>Health Summary</h2>

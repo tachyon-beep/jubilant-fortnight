@@ -135,6 +135,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Not Evaluated | 1 | 25% |
 
 **Notes:** Telemetry now tracks manifesto adoption, nickname adoption, archive lookups, press shares, engagement cohorts, and symposium participation; canonical KPI targets persist in `telemetry.db`, override alert thresholds, and ship with calibration helpers for seasonal/engagement tuning. Iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L360】【F:great_work/tools/recommend_kpi_thresholds.py†L1-L180】【F:great_work/tools/recommend_seasonal_settings.py†L1-L120】
+Calibration snapshots (`/gw_admin calibration_snapshot`, `python -m great_work.tools.export_calibration_snapshot`) and the dashboard’s `/api/calibration_snapshot` endpoint now capture seasonal debt + investment totals for tuning; revisit after 1.0 telemetry to set canonical defaults and formalise iteration metrics.【F:great_work/analytics/calibration.py†L1-L244】【F:ops/telemetry-dashboard/app.py†L1-L230】
 
 ### Open-Source Readiness (5 requirements)
 

@@ -162,6 +162,15 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 2. Update `settings.yaml` (or environment overrides) with the recommended values so seasonal pledges clear on schedule without generating runaway debt.
 3. Adjust `GREAT_WORK_ALERT_MAX_SEASONAL_DEBT` to match the suggested ceiling so the new health check triggers before reprisals spiral.
 
+### Calibration Snapshot Automation
+
+1. Enable recurring snapshots by setting `GREAT_WORK_CALIBRATION_SNAPSHOTS=true` (or specifying `GREAT_WORK_CALIBRATION_SNAPSHOT_DIR` for the output directory). Optional knobs: `GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP` (retention, default 12) and `GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS=false` for aggregate-only payloads.
+2. The Gazette scheduler now writes timestamped JSON files plus `latest.json` after each digest. Mirror the directory to long-term storage if you need historical tuning records.
+3. Run `/gw_admin calibration_snapshot` or `python -m great_work.tools.export_calibration_snapshot --stdout` to generate a snapshot on demand; both honour the same environment configuration and return summaries covering seasonal debt, faction investment totals, endowments, and pending orders.
+4. The telemetry dashboard exposes the most recent snapshot at `/api/calibration_snapshot` and surfaces key totals at the top of the UI.
+
+Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `telemetry.db` with deterministic sample data when rehearsing the workflow before live players arrive.
+
 ## 4. Archive Publishing
 
 - The scheduler exports HTML to `web_archive/` each digest, syncs it into `web_archive_public/`, and uploads ZIP snapshots to the admin channel.

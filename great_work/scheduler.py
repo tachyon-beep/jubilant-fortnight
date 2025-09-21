@@ -11,6 +11,7 @@ from typing import Callable, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from .analytics import write_calibration_snapshot
 from .config import get_settings
 from .models import PressRelease
 from .service import GameService
@@ -79,6 +80,38 @@ class GazetteScheduler:
             logger.warning("Invalid GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=%s; ignoring", os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB"))
             self._archive_storage_limit_mb = 0.0
 
+        calibration_flag = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOTS", "")
+        calibration_dir_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DIR", "")
+        calibration_keep_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP", "")
+        calibration_details_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS", "")
+
+        enabled_by_flag = calibration_flag.lower() in {"1", "true", "yes", "on"}
+        enabled_by_dir = bool(calibration_dir_env.strip())
+        self._calibration_snapshots_enabled = enabled_by_flag or enabled_by_dir
+        self._calibration_snapshot_dir: Optional[Path]
+        if self._calibration_snapshots_enabled:
+            target_dir = calibration_dir_env.strip() or "calibration_snapshots"
+            self._calibration_snapshot_dir = Path(target_dir).expanduser().resolve()
+        else:
+            self._calibration_snapshot_dir = None
+
+        try:
+            self._calibration_snapshot_keep = int(calibration_keep_env or "12")
+        except ValueError:
+            logger.warning(
+                "Invalid GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP=%s; defaulting to 12",
+                calibration_keep_env,
+            )
+            self._calibration_snapshot_keep = 12
+
+        if self._calibration_snapshot_keep < 0:
+            self._calibration_snapshot_keep = 0
+
+        if calibration_details_env:
+            self._calibration_include_details = calibration_details_env.lower() not in {"0", "false", "off"}
+        else:
+            self._calibration_include_details = True
+
     def start(self) -> None:
         for digest_time in self.settings.gazette_times:
             hour, minute = map(int, digest_time.split(":"))
@@ -123,6 +156,7 @@ class GazetteScheduler:
             except Exception:  # pragma: no cover
                 logger.exception("Failed to record digest telemetry")
             self._evaluate_alerts(duration_ms=duration_ms, release_count=0)
+            self._maybe_write_calibration_snapshot(current_time)
             self._emit_upcoming_highlights()
             return
         
@@ -150,12 +184,13 @@ class GazetteScheduler:
                 scheduled_queue_size=self.service.pending_press_count(),
             )
         except Exception:  # pragma: no cover - defensive logging only
-            logger.exception("Failed to record digest telemetry")
+                logger.exception("Failed to record digest telemetry")
 
         self._evaluate_alerts(
             duration_ms=duration_ms,
             release_count=release_count,
         )
+        self._maybe_write_calibration_snapshot(current_time)
         self._emit_upcoming_highlights()
 
     def _host_symposium(self) -> None:
@@ -190,6 +225,24 @@ class GazetteScheduler:
     def _emit_admin_notifications(self) -> None:
         for message in self.service.drain_admin_notifications():
             self._notify_admin(message)
+
+    def _maybe_write_calibration_snapshot(self, current_time: datetime) -> None:
+        if not self._calibration_snapshots_enabled or self._calibration_snapshot_dir is None:
+            return
+
+        telemetry = get_telemetry()
+        try:
+            path = write_calibration_snapshot(
+                self.service,
+                telemetry,
+                self._calibration_snapshot_dir,
+                now=current_time,
+                include_details=self._calibration_include_details,
+                keep_last=self._calibration_snapshot_keep,
+            )
+            logger.debug("Calibration snapshot written to %s", path)
+        except Exception:  # pragma: no cover - diagnostics only
+            logger.exception("Failed to write calibration snapshot")
 
     def _package_archive(self, archive_dir: Path) -> Path:
         """Create a timestamped ZIP snapshot of the archive directory."""

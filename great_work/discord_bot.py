@@ -1,6 +1,7 @@
 """Discord bot entry point for The Great Work."""
 from __future__ import annotations
 
+import io
 import atexit
 import asyncio
 import logging
@@ -14,6 +15,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .analytics import collect_calibration_snapshot, write_calibration_snapshot
 from .models import ConfidenceLevel, ExpeditionPreparation, PressRelease, PressRecord
 from .scheduler import GazetteScheduler
 from .service import GameService
@@ -2369,6 +2371,69 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             + (f" Reason: {reason}" if reason else "")
         )
         await interaction.response.send_message(response, ephemeral=True)
+        await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="calibration_snapshot",
+        description="Generate and upload a calibration snapshot for tuning",
+    )
+    @track_command
+    async def admin_calibration_snapshot(interaction: discord.Interaction) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        include_details_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS", "")
+        include_details = include_details_env.lower() not in {"0", "false", "off"}
+        snapshot_dir_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DIR", "calibration_snapshots")
+        snapshot_dir = Path(snapshot_dir_env).expanduser().resolve()
+        keep_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP", "12") or "12"
+        try:
+            keep_last = max(0, int(keep_env))
+        except ValueError:
+            keep_last = 12
+
+        telemetry = get_telemetry()
+        now = datetime.now(timezone.utc)
+
+        try:
+            snapshot = collect_calibration_snapshot(
+                service,
+                telemetry,
+                now=now,
+                include_details=include_details,
+            )
+            output_path = write_calibration_snapshot(
+                service,
+                telemetry,
+                snapshot_dir,
+                now=now,
+                include_details=include_details,
+                keep_last=keep_last,
+                snapshot=snapshot,
+            )
+            file_buffer = io.BytesIO(output_path.read_bytes())
+            file_buffer.seek(0)
+            upload = discord.File(file_buffer, filename=output_path.name)
+            seasonal_totals = snapshot.get("seasonal_commitments", {}).get("totals", {})
+            message_lines = [
+                f"Calibration snapshot captured at {snapshot.get('generated_at', now.isoformat())}",
+                f"Seasonal commitments: {seasonal_totals.get('active', 0)} active / debt {seasonal_totals.get('outstanding_debt', 0)}",
+                f"Stored at `{output_path}` (keep_last={keep_last}).",
+            ]
+            await interaction.followup.send("\n".join(message_lines), file=upload, ephemeral=True)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception("Failed to generate calibration snapshot")
+            await interaction.followup.send(
+                f"Failed to generate calibration snapshot: {exc}",
+                ephemeral=True,
+            )
+
         await _flush_admin_notifications()
 
     @gw_admin.command(

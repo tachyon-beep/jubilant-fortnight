@@ -9,6 +9,16 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `/telemetry_report` – one-shot health snapshot inside Discord (admin only).
 - `ops/telemetry-dashboard` – historical charts for digests, queue depth, and command usage (run via `make telemetry-dashboard`).
 - `sqlite3 telemetry.db` – direct access if you need to export raw metrics.
+- `/gw_admin calibration_snapshot` – capture a calibration snapshot JSON and archive it in the admin channel.
+- `python -m great_work.tools.export_calibration_snapshot` – export the same snapshot on disk (supports summary-only mode and retention pruning).
+- `python -m great_work.tools.generate_sample_telemetry` – seed synthetic telemetry for dry runs before live data arrives.
+
+## Calibration Snapshots & Tuning Workflow
+
+- **Scheduler integration:** enable automated snapshots by setting `GREAT_WORK_CALIBRATION_SNAPSHOTS=true` or pointing `GREAT_WORK_CALIBRATION_SNAPSHOT_DIR` at a writable directory (defaults to `calibration_snapshots/`). The scheduler honours `GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP` (default 12) and `GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS` (`false` to emit aggregate-only files).
+- **On-demand export:** run `/gw_admin calibration_snapshot` or `python -m great_work.tools.export_calibration_snapshot --stdout` to capture the latest totals before a tuning review. Both commands respect the same environment configuration and pin a `latest.json` alongside timestamped files.
+- **Dashboard visibility:** the telemetry dashboard now surfaces the latest snapshot summary and exposes the raw JSON at `/api/calibration_snapshot`.
+- **Live-data follow-up:** once 1.0 telemetry is available, analyse seasonal debt, investment totals, and archival endowments from the snapshot to adjust defaults in `settings.yaml`. Use `python -m great_work.tools.recommend_seasonal_settings` to fold the findings back into configuration and update this runbook with the chosen baselines.
 
 ## Health Checks & Thresholds
 

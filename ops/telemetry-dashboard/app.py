@@ -1,6 +1,7 @@
 """Containerised telemetry dashboard for The Great Work."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Iterable, Optional
@@ -14,6 +15,7 @@ from great_work.telemetry import TelemetryCollector
 APP_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = APP_DIR / "templates"
 DEFAULT_DB_PATH = Path(os.environ.get("TELEMETRY_DB_PATH", "/data/telemetry.db"))
+CALIBRATION_DIR = Path(os.environ.get("CALIBRATION_SNAPSHOT_DIR", "/data/calibration_snapshots"))
 
 collector = TelemetryCollector(DEFAULT_DB_PATH)
 
@@ -35,6 +37,20 @@ def build_report() -> dict:
 
     collector.flush()
     return collector.generate_report()
+
+
+def _load_latest_calibration_snapshot() -> Optional[dict]:
+    """Return the most recent calibration snapshot if available."""
+
+    if not CALIBRATION_DIR:
+        return None
+    latest_path = CALIBRATION_DIR / "latest.json"
+    if not latest_path.exists():
+        return None
+    try:
+        return json.loads(latest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+        return None
 
 
 def build_context(report: dict) -> dict:
@@ -79,6 +95,22 @@ def build_context(report: dict) -> dict:
     history_summary = product_history.get("summary", {})
     engagement_cohorts = report.get("engagement_cohorts", {})
     kpi_targets = report.get("kpi_targets", {})
+    calibration_snapshot = None
+    raw_snapshot = _load_latest_calibration_snapshot()
+    if raw_snapshot:
+        seasonal_totals = raw_snapshot.get("seasonal_commitments", {}).get("totals", {})
+        investment_totals = raw_snapshot.get("faction_investments", {}).get("totals", {})
+        endowment_totals = raw_snapshot.get("archive_endowments", {}).get("totals", {})
+        order_totals = raw_snapshot.get("orders", {}).get("totals", {})
+        calibration_snapshot = {
+            "generated_at": raw_snapshot.get("generated_at"),
+            "seasonal_active": seasonal_totals.get("active", 0),
+            "seasonal_debt": seasonal_totals.get("outstanding_debt", 0),
+            "investment_amount": investment_totals.get("amount", 0),
+            "endowment_amount": endowment_totals.get("amount", 0),
+            "orders_pending": order_totals.get("pending", 0),
+        }
+
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
@@ -104,6 +136,7 @@ def build_context(report: dict) -> dict:
         "product_history_summary": history_summary,
         "engagement_cohorts": engagement_cohorts,
         "kpi_targets": kpi_targets,
+        "calibration_snapshot": calibration_snapshot,
     }
     return context
 
@@ -215,3 +248,13 @@ async def api_kpi_history(days: int = 30) -> JSONResponse:
         "daily": history.get("daily", []),
         "summary": history.get("summary", {}),
     })
+
+
+@app.get("/api/calibration_snapshot", response_class=JSONResponse)
+async def api_calibration_snapshot() -> JSONResponse:
+    """Expose the most recent calibration snapshot for automation."""
+
+    snapshot = _load_latest_calibration_snapshot()
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="calibration snapshot not available")
+    return JSONResponse(snapshot)

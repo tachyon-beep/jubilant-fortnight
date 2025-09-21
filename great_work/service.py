@@ -158,6 +158,8 @@ class GameService:
         settings: Settings | None = None,
         repository: ScholarRepository | None = None,
         failure_tables: FailureTables | None = None,
+        *,
+        auto_seed: bool = True,
     ) -> None:
         self.settings = settings or get_settings()
         self.repository = repository or ScholarRepository()
@@ -183,9 +185,11 @@ class GameService:
         self._telemetry = get_telemetry()
         self._latest_symposium_scoring: List[Dict[str, object]] = []
         self._moderator = GuardianModerator()
-        if not any(True for _ in self.state.all_scholars()):
-            self.state.seed_base_scholars()
-        self._ensure_roster()
+        self._auto_seed = auto_seed
+        if auto_seed:
+            if not any(True for _ in self.state.all_scholars()):
+                self.state.seed_base_scholars()
+            self._ensure_roster()
 
     def is_paused(self) -> bool:
         return self._paused

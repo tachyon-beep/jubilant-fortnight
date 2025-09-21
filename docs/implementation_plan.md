@@ -110,7 +110,8 @@ Last Updated: 2025-09-21 (Guardian moderation, seasonal telemetry)
 
 ## 11. Telemetry and Operational Reporting – **Partial / Runbook backlog**
    - Telemetry collector persists metrics in `telemetry.db`; `/telemetry_report` now includes command usage, LLM latency/failure stats, layered-press cadence summaries, digest runtimes, queue depth, channel-level usage, investment/endowment analytics, and seasonal commitment debt snapshots.【F:great_work/telemetry.py†L72-L1504】【F:great_work/telemetry_decorator.py†L12-L80】【F:great_work/discord_bot.py†L720-L1637】
-   - **Remaining work:** extend historical dashboards for KPI trending and fold the new guardrails into the on-call playbook once playtest targets are agreed.
+   - Calibration snapshots now run after each digest (optional via `GREAT_WORK_CALIBRATION_SNAPSHOTS`), `/gw_admin calibration_snapshot` uploads the latest JSON, `python -m great_work.tools.export_calibration_snapshot` + `...generate_sample_telemetry` support offline analysis, and the telemetry dashboard surfaces the latest totals with a raw `/api/calibration_snapshot` endpoint.【F:great_work/analytics/calibration.py†L1-L244】【F:great_work/scheduler.py†L29-L210】【F:great_work/discord_bot.py†L2260-L2333】【F:ops/telemetry-dashboard/app.py†L1-L230】
+   - **Remaining work:** tune thresholds/knobs once live telemetry arrives (calibrate seasonal costs, investment incentives, symposium heuristics) and fold the results into the ops playbook.
 
 ## Phase 3 Detailed Plan – Narrative & Operations
 
