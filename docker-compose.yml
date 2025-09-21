@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  bot:
+    build: .
+    container_name: great-work-bot
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    env_file:
+      - .env
+    environment:
+      - GREAT_WORK_DB=/data/great_work.db
+    volumes:
+      - ./web_archive_public:/app/web_archive_public:Z
+      - ./data:/data
   qdrant:
     image: qdrant/qdrant:latest
     container_name: great-work-qdrant
