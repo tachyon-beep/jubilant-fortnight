@@ -41,3 +41,12 @@ models/guardian/
 .mcp.json
 .mcp.json
 AGENTS.md
+
+# Runtime data directories (keep structure via .gitkeep files)
+var/*
+!var/state/
+!var/telemetry/
+var/state/*
+!var/state/.gitkeep
+var/telemetry/*
+!var/telemetry/.gitkeep

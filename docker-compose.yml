@@ -13,7 +13,7 @@ services:
       - GREAT_WORK_DB=/app/var/state/great_work.db
     volumes:
       - ./web_archive_public:/app/web_archive_public:Z
-      - ./var:/app/var
+      - ./var:/app/var:Z
   qdrant:
     image: qdrant/qdrant:latest
     container_name: great-work-qdrant
