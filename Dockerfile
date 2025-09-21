@@ -27,5 +27,5 @@ RUN pip install --upgrade pip \
 # Default runtime env can be provided via env-file or -e flags
 # Expose no ports by default; the bot connects outbound to Discord
 
-CMD ["python", "-m", "great_work.discord_bot"]
-
+# Call module main() explicitly so the process stays running
+CMD ["python", "-c", "from great_work.discord_bot import main; main()"]

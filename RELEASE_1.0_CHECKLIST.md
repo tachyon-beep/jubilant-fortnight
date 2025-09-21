@@ -35,8 +35,8 @@
 - ❌ `the_great_work.egg-info/` - Build artifact
 
 ### Local Data Files
-- ❌ `great_work.db` - Development database (should be gitignored)
-- ❌ `telemetry.db` - Telemetry database (should be gitignored)
+- ❌ `var/state/great_work.db` - Development database (should be gitignored)
+- ❌ `var/telemetry/telemetry.db` - Telemetry database (should be gitignored)
 - ❌ `.env` - Local environment variables (already gitignored)
 
 ### Development Notes
@@ -84,7 +84,7 @@ mv AGENTS.md .claude/
 
 # Ensure databases are gitignored
 echo "*.db" >> .gitignore
-rm great_work.db telemetry.db
+rm -f var/state/great_work.db var/telemetry/telemetry.db
 ```
 
 ### Pre-Release Actions

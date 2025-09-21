@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..analytics import collect_calibration_snapshot, write_calibration_snapshot
-from ..config import get_settings
+from ..config import DEFAULT_STATE_DB, get_settings
 from ..service import GameService
 from ..telemetry import DEFAULT_TELEMETRY_DB, TelemetryCollector
 
@@ -18,8 +18,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--state-db",
         type=Path,
-        default=Path("great_work.db"),
-        help="Path to the primary game state SQLite database (default: great_work.db).",
+        default=DEFAULT_STATE_DB,
+        help=f"Path to the primary game state SQLite database (default: {DEFAULT_STATE_DB}).",
     )
     parser.add_argument(
         "--telemetry-db",

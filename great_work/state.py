@@ -309,6 +309,8 @@ class GameState:
         admin_notifier: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._db_path = db_path
+        if self._db_path.parent != Path("."):
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._repo = repository or ScholarRepository()
         self._start_year = start_year
         self._admin_notifier = admin_notifier

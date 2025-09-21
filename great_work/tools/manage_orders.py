@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..config import get_settings
+from ..config import DEFAULT_STATE_DB, get_settings
 from ..state import GameState
 
 
@@ -103,8 +103,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--state-db",
         type=Path,
-        default=Path("great_work.db"),
-        help="Path to the game state SQLite database (default: great_work.db).",
+        default=DEFAULT_STATE_DB,
+        help=f"Path to the game state SQLite database (default: {DEFAULT_STATE_DB}).",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)

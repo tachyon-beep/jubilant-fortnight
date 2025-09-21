@@ -74,7 +74,7 @@ Further reading: [High-Level Design](docs/design/HLD.md) · [System Architecture
 
    ```bash
    make seed
-   # or: python -m great_work.tools.seed_db great_work.db
+   # or: python -m great_work.tools.seed_db var/state/great_work.db
    ```
 
 5. **Run smoke checks & tests (recommended)**

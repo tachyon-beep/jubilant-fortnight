@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..analytics.calibration import collect_calibration_snapshot
-from ..config import Settings
+from ..config import DEFAULT_STATE_DB, Settings
 from ..service import GameService
 from ..telemetry import TelemetryCollector
 
@@ -192,7 +192,12 @@ def run_simulation(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a seasonal economy tuning simulation.")
-    parser.add_argument("--db", type=Path, default=Path("great_work.db"), help="Base database path for simulation state.")
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=DEFAULT_STATE_DB,
+        help=f"Base database path for simulation state (default: {DEFAULT_STATE_DB}).",
+    )
     parser.add_argument("--config", type=Path, help="JSON file describing simulation scenario.")
     parser.add_argument("--days", type=int, help="Simulation horizon in days (overrides config).")
     parser.add_argument("--output-dir", type=Path, default=Path("simulation_runs"))

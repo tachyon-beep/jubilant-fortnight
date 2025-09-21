@@ -10,10 +10,10 @@ services:
     env_file:
       - .env
     environment:
-      - GREAT_WORK_DB=/data/great_work.db
+      - GREAT_WORK_DB=/app/var/state/great_work.db
     volumes:
       - ./web_archive_public:/app/web_archive_public:Z
-      - ./data:/data
+      - ./var:/app/var
   qdrant:
     image: qdrant/qdrant:latest
     container_name: great-work-qdrant
@@ -46,7 +46,7 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      - ./telemetry.db:/data/telemetry.db:Z,ro
+      - ./var/telemetry/telemetry.db:/data/telemetry.db:Z,ro
 
   # Optional: PostgreSQL for future expansion beyond SQLite
   # postgres:

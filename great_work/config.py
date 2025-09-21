@@ -8,6 +8,7 @@ from typing import Any, Dict
 import yaml
 
 DEFAULT_SETTINGS_PATH = Path(__file__).parent / "data" / "settings.yaml"
+DEFAULT_STATE_DB = Path("var") / "state" / "great_work.db"
 
 
 @dataclass(frozen=True)

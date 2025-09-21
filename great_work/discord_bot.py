@@ -17,6 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .analytics import collect_calibration_snapshot, write_calibration_snapshot
+from .config import DEFAULT_STATE_DB
 from .models import ConfidenceLevel, ExpeditionPreparation, PressRecord, PressRelease
 from .scheduler import GazetteScheduler
 from .service import GameService
@@ -2926,7 +2927,10 @@ def main() -> None:
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         raise RuntimeError("DISCORD_TOKEN environment variable must be set")
-    db_path = Path(os.environ.get("GREAT_WORK_DB", "great_work.db"))
+    env_db = os.environ.get("GREAT_WORK_DB")
+    db_path = Path(env_db) if env_db else DEFAULT_STATE_DB
+    if db_path.parent != Path("."):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
     bot = build_bot(db_path)
     bot.run(token)
 

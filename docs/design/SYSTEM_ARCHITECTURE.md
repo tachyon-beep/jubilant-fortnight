@@ -9,7 +9,7 @@ This document supplements the high-level design (HLD) with implementation-centri
 | Presentation | Discord slash commands, embeds, admin workflows. | `great_work/discord_bot.py`, `ChannelRouter`, `gw_admin` commands |
 | Service | Game orchestration, seasonal economy, multi-press generation, telemetry hooks. | `great_work/service.py`, `multi_press.py`, `scheduler.py`, `telemetry.py` |
 | Domain | Core models and logic for scholars, expeditions, offers, press artefacts. | `great_work/models.py`, `state.py`, `expeditions.py`, `scholars.py`, `press.py` |
-| Data & Ops | Persistence, telemetry storage, archive export, deployment utilities. | `GameState` (SQLite), `telemetry.db`, `web_archive/`, tools under `great_work/tools/` |
+| Data & Ops | Persistence, telemetry storage, archive export, deployment utilities. | `GameState` (SQLite), `var/telemetry/telemetry.db`, `web_archive/`, tools under `great_work/tools/` |
 
 ### Presentation Layer
 
@@ -33,8 +33,8 @@ This document supplements the high-level design (HLD) with implementation-centri
 
 ### Data & Ops
 
-- **SQLite (`great_work.db`)** – authoritative state (players, scholars, events, commitments, orders). Event sourcing via append-only log.
-- **Telemetry (`telemetry.db`, `TelemetryCollector`)** – metrics for commands, queue depth, seasonal/mentorship debt, Guardian events. Decorated slash commands emit telemetry automatically.
+- **SQLite (`var/state/great_work.db`)** – authoritative state (players, scholars, events, commitments, orders). Event sourcing via append-only log.
+- **Telemetry (`var/telemetry/telemetry.db`, `TelemetryCollector`)** – metrics for commands, queue depth, seasonal/mentorship debt, Guardian events. Decorated slash commands emit telemetry automatically.
 - **Web Archive (`web_archive/`, `web_archive_public/`)** – static HTML exports triggered each digest, mirrored to GitHub Pages when enabled.
 - **Guardian Sidecar** – optional moderation service; configuration controlled via `GREAT_WORK_GUARDIAN_*` env vars. Safety plan lives in `docs/SAFETY_PLAN.md`.
 - **Tooling** – CLI entry points under `great_work/tools/`: seeding, calibration snapshot export, smoke tests, seasonal simulations, moderation probes, narrative validation/preview.
@@ -85,4 +85,3 @@ Guardian Moderation
 - **Telemetry API** – Baseline endpoints exist; cohort comparison and player portal expansions tracked in `docs/ROADMAP.md`.
 
 For gameplay-centric details, see `docs/HLD.md`. For operational runbooks, consult `docs/deployment.md`, `docs/TELEMETRY_RUNBOOK.md`, and `docs/SAFETY_PLAN.md`.
-
