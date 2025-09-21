@@ -21,6 +21,11 @@
       .filter-bar a:hover { text-decoration: underline; }
       .chart-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
       .chart-row canvas { flex: 1 1 240px; background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.5rem; }
+      .semantic-results { margin-top: 1rem; }
+      .semantic-item { border: 1px solid #1e293b; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; background: #111827; }
+      .semantic-item h3 { margin: 0 0 0.35rem; color: #fbbf24; font-size: 1.05rem; }
+      .semantic-item small { display: block; color: #94a3b8; margin-bottom: 0.35rem; }
+      .semantic-item p { margin: 0; color: #e2e8f0; }
     </style>
   </head>
   <body>
@@ -30,6 +35,68 @@
       <div>Uptime: {{ '%.2f' | format(report.uptime_seconds / 3600) }} hours</div>
       <div>Total events: {{ report.overall.total_events }} | Unique players: {{ report.overall.unique_players }}</div>
     </div>
+
+    {% if qdrant_search_enabled %}
+    <div class="section" id="semantic-search">
+      <h2>Semantic Press Search</h2>
+      <form class="filter-bar" id="semantic-search-form">
+        <label>
+          Query
+          <input type="text" id="semantic-query" name="query" placeholder="Bronze Age discoveries" required />
+        </label>
+        <label>
+          Limit
+          <input type="number" id="semantic-limit" name="limit" min="1" max="10" value="3" />
+        </label>
+        <button type="submit">Search</button>
+      </form>
+      <div id="semantic-results" class="semantic-results"></div>
+    </div>
+    <script>
+      (function () {
+        const form = document.getElementById('semantic-search-form');
+        if (!form) { return; }
+        const resultsContainer = document.getElementById('semantic-results');
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const queryInput = document.getElementById('semantic-query');
+          const limitInput = document.getElementById('semantic-limit');
+          const query = queryInput.value.trim();
+          const limit = limitInput.value || '3';
+          if (!query) {
+            resultsContainer.innerHTML = '<p>Please enter a search query.</p>';
+            return;
+          }
+          resultsContainer.innerHTML = '<p>Searching…</p>';
+          try {
+            const response = await fetch(`/api/semantic-press?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.detail || response.statusText);
+            }
+            const payload = await response.json();
+            if (!Array.isArray(payload) || payload.length === 0) {
+              resultsContainer.innerHTML = '<p>No related press found.</p>';
+              return;
+            }
+            const html = payload.map((item) => {
+              const timestamp = item.timestamp ? `<small>${item.timestamp}</small>` : '';
+              const score = item.score ? `<small>Score: ${item.score.toFixed(3)}</small>` : '';
+              return `<div class="semantic-item"><h3>${item.headline}</h3>${timestamp}${score}<p>${item.excerpt}</p></div>`;
+            }).join('');
+            resultsContainer.innerHTML = html;
+          } catch (err) {
+            resultsContainer.innerHTML = `<p style="color:#f87171;">Search failed: ${err.message}</p>`;
+          }
+        });
+      })();
+    </script>
+    {% elif qdrant_search_error %}
+    <div class="section">
+      <h2>Semantic Press Search</h2>
+      <p style="color:#f87171;">{{ qdrant_search_error }}</p>
+    </div>
+    {% endif %}
 
     {% if calibration_snapshot %}
     <div class="section">

@@ -7,8 +7,9 @@ from great_work.tools import validate_narrative
 
 
 def test_current_assets_pass_validation() -> None:
-    errors = validate_narrative.validate_files(validate_narrative.DEFAULT_FILES)
+    errors, related = validate_narrative.validate_files(validate_narrative.DEFAULT_FILES)
     assert errors == []
+    assert related == []
 
 
 def test_tone_pack_missing_required_field() -> None:

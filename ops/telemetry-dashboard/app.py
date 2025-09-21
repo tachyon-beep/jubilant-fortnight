@@ -6,9 +6,12 @@ import os
 from pathlib import Path
 from typing import Iterable, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import BaseModel, Field
+
+from . import qdrant_helpers
 
 from great_work.telemetry import TelemetryCollector
 
@@ -25,6 +28,15 @@ jinja_env = Environment(
 )
 
 app = FastAPI(title="The Great Work Telemetry Dashboard")
+
+
+class SemanticPressResult(BaseModel):
+    id: Optional[str]
+    headline: str
+    excerpt: str
+    score: Optional[float] = None
+    timestamp: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
 
 
 MAX_QUERY_HOURS = int(os.environ.get("TELEMETRY_MAX_QUERY_HOURS", "168") or 168)
@@ -111,6 +123,7 @@ def build_context(report: dict) -> dict:
             "orders_pending": order_totals.get("pending", 0),
         }
 
+    qdrant_status = qdrant_helpers.get_status()
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
@@ -137,6 +150,8 @@ def build_context(report: dict) -> dict:
         "engagement_cohorts": engagement_cohorts,
         "kpi_targets": kpi_targets,
         "calibration_snapshot": calibration_snapshot,
+        "qdrant_search_enabled": qdrant_status[0],
+        "qdrant_search_error": qdrant_status[1],
     }
     return context
 
@@ -219,6 +234,27 @@ async def api_order_records(
         "order_types": order_types,
     }
     return JSONResponse(payload)
+
+
+@app.get("/api/semantic-press", response_model=list[SemanticPressResult])
+async def api_semantic_press(
+    query: str = Query(..., description="Search query", min_length=1),
+    limit: int = Query(5, ge=1, le=10),
+) -> list[SemanticPressResult]:
+    """Semantic press search backed by Qdrant embeddings."""
+
+    enabled, error = qdrant_helpers.get_status()
+    if not enabled:
+        raise HTTPException(status_code=503, detail=error or "Semantic search disabled")
+
+    try:
+        results = qdrant_helpers.search_press(query, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - surfaced to client
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return [SemanticPressResult(**item) for item in results]
 
 
 @app.get("/api/orders.csv")

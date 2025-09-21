@@ -175,7 +175,7 @@ See `.env.example` for the full template.
 Enable semantic search and future retrieval features with Qdrant + embeddings.
 When indexing is enabled, the LLM press enhancer automatically pulls the top related press releases from Qdrant to provide richer, continuity-aware copy.
 
-Administrators can run `/gw_admin search_press query:"…"` (Discord) to inspect semantically similar releases directly from the bot.
+Administrators can run `/gw_admin search_press query:"…"` (Discord) to inspect semantically similar releases directly from the bot, and the telemetry dashboard exposes a semantic search panel when `ENABLE_QDRANT_SEARCH=true`.
 
 ```text
 # Qdrant connection
@@ -187,6 +187,13 @@ EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
 # Auto-index new press releases into Qdrant (GameService)
 GREAT_WORK_QDRANT_INDEXING=true
+
+# Enable semantic search in the telemetry dashboard
+ENABLE_QDRANT_SEARCH=true
+# Optional overrides for dashboard queries
+# QDRANT_URL=http://localhost:6333
+# QDRANT_COLLECTION=great-work-knowledge
+# QDRANT_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
 
 Basic operations (see docs/QDRANT_SETUP.md):

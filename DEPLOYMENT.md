@@ -87,6 +87,8 @@ GREAT_WORK_QDRANT_INDEXING=false
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 # Qdrant service URL used by tools/CLIs (override via --url as needed)
 # QDRANT_URL=http://localhost:6333
+# Enable dashboard semantic search (requires indexing + embeddings)
+ENABLE_QDRANT_SEARCH=false
 ```
 
 Informational slash commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror their output to the first available channel in this list: `GREAT_WORK_CHANNEL_TABLE_TALK`, `GREAT_WORK_CHANNEL_GAZETTE`, `GREAT_WORK_CHANNEL_UPCOMING`, `GREAT_WORK_CHANNEL_ORDERS`. Configure at least one of these so transparency requirements are met.
@@ -99,7 +101,7 @@ The repository ships with a `docker-compose.yml` that includes:
 
 - `qdrant`: vector DB for embeddings and semantic search (optional)
 - `archive_server`: nginx serving `web_archive_public/`
-- `telemetry_dashboard` (optional): FastAPI dashboard for telemetry visuals
+- `telemetry_dashboard` (optional): FastAPI dashboard for telemetry visuals (enables semantic press search when `ENABLE_QDRANT_SEARCH=true`)
 
 Start supporting services:
 
@@ -111,7 +113,7 @@ Mount the `web_archive_public/` volume so the scheduler can sync exports (defaul
 
 ## 3. Telemetry Dashboard
 
-The optional `telemetry-dashboard` service reads `var/telemetry/telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). It bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
+The optional `telemetry-dashboard` service reads `var/telemetry/telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). When embeddings are available, set `ENABLE_QDRANT_SEARCH=true` to unlock semantic press search (`/api/semantic-press`) directly from the dashboard UI. The service bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
 
 - Default port: `8081`
 - Environment requirements: same `.env` file (or a subset with `TELEMETRY_DB_PATH`)

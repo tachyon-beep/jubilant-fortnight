@@ -66,3 +66,9 @@ def test_orders_api_returns_filtered_records(dashboard_module):
     assert csv_response.status_code == 200
     body = csv_response.text.strip().splitlines()
     assert body[0] == "order_type,pending,oldest_pending_seconds,event,timestamp"
+
+
+def test_semantic_search_disabled_returns_503(dashboard_module):
+    client = TestClient(dashboard_module.app)
+    response = client.get("/api/semantic-press", params={"query": "bronze age"})
+    assert response.status_code == 503

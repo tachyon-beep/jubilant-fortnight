@@ -168,6 +168,10 @@ curl -X DELETE http://localhost:6333/collections/great-work-knowledge
 tar -czf qdrant_backup_$(date +%Y%m%d).tar.gz ./qdrant_storage/
 ```
 
+## Telemetry Dashboard
+
+When running the optional telemetry dashboard, set `ENABLE_QDRANT_SEARCH=true` so the UI exposes a “Semantic Press Search” card and `/api/semantic-press` endpoint backed by Qdrant. This reuses the same embeddings the LLM enhancer consumes to provide continuity during ops reviews.
+
 ## Troubleshooting
 
 ### Port Conflicts
