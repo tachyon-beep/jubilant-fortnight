@@ -9,6 +9,9 @@
 - Docs for post-1.0 ideas were moved under `docs/post_1_0/`; the 1.0 PR focuses on core
   gameplay, transparency, and observability.
 
+- RC sweep includes optional Qdrant + embeddings (press auto-index), containerised bot,
+  and refreshed deployment documentation.
+
 Scope is sized for playtests and operational trial; guardrails and runbooks included.
 
 ## Major Features & Enhancements
@@ -43,6 +46,13 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 - Exposed orders dispatcher telemetry with order snapshots and backlog metrics
 - Added symposium scoring telemetry with reprisal tracking
 - Integrated seasonal commitments and faction project metrics
+
+### 2.5. Embeddings & Semantic Search (optional)
+
+- Qdrant integration with SentenceTransformer embeddings via `great_work/tools/qdrant_manager.py`
+- Vector search and upserts; collection size inferred from model
+- Press auto-indexing opt-in via `GREAT_WORK_QDRANT_INDEXING=true`
+- Updated `docs/QDRANT_SETUP.md` and MCP config examples
 
 ### 3. Shared Orders Dispatcher
 
@@ -108,6 +118,11 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
   [USER_TELEMETRY.md](post_1_0/USER_TELEMETRY.md),
   [TELEMETRY_COHORT_COMPARISONS.md](post_1_0/TELEMETRY_COHORT_COMPARISONS.md))
 
+Additional RC updates:
+
+- Updated README and DEPLOYMENT with Qdrant + embeddings configuration and auto-index flag
+- Added compose targets and sidecar probe via curl in `DEPLOYMENT.md`
+
 ## Testing Improvements
 
 - Expanded test coverage for telemetry, LLM, orders dispatcher, and multi-press features
@@ -124,6 +139,7 @@ Tests also run in CI for enforcement.
 ## Infrastructure & DevOps
 
 - Docker Compose configuration for telemetry dashboard
+- Dockerfile for the bot + compose `bot` service (volumes for archive + state)
 - Systemd service example for production deployment
 - Enhanced .gitignore with comprehensive patterns
 - Cleaned up project structure for production release
@@ -148,7 +164,7 @@ Tests also run in CI for enforcement.
 ## Key Metrics
 
 - Implementation progress: 71.4% of requirements fully implemented (55 of 77)
-- 255 tests passed, 1 skipped in 21.98s (local)
+- 283 tests passed, 1 skipped (local)
 - Linting passes locally; CI enforces Ruff and pytest
 - New Discord commands: `/invest`, `/endow_archive`, `/seasonal_commitments`, `/faction_projects`, `/recruit_odds`
 - Enhanced Admin Tools: `/gw_admin list_orders`, `/gw_admin cancel_order`, `/gw_admin resume_game`
@@ -176,6 +192,14 @@ Tests also run in CI for enforcement.
 19. `b95d563` Instrument seasonal commitment telemetry alerts
 20. `d353815` Calibrate telemetry KPIs and seasonal alerts
 
+Recent RC readiness commits:
+
+21. `1352008` Add Qdrant embeddings and auto-index press
+22. `cbe17a2` Refresh README: correct doc links, add Qdrant embeddings + auto-index env, align LLM vars, and add Makefile usage
+23. `8548ebc` Tidy deployment guide: fix compose targets, align LLM vars, add Qdrant/embeddings env + auto-index flag, replace missing probe script with curl, correct safety plan link, and port notes
+24. `3f846d9` Add Dockerfile and .dockerignore for bot container; stop tracking CLAUDE.md (kept locally)
+25. `958f6d3` Add bot service to docker-compose.yml with volumes and env_file
+
 ## Ops & Configuration
 
 - LLM client
@@ -186,6 +210,10 @@ Tests also run in CI for enforcement.
   - `GREAT_WORK_ARCHIVE_PAGES_ENABLED`, `GREAT_WORK_ARCHIVE_PAGES_DIR`, `GREAT_WORK_ARCHIVE_PAGES_SUBDIR`,
     `GREAT_WORK_ARCHIVE_PAGES_NOJEKYLL`
   - Snapshot controls: `GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS`, `GREAT_WORK_ARCHIVE_MAX_STORAGE_MB`
+- Qdrant & embeddings (optional)
+  - `GREAT_WORK_QDRANT_INDEXING=true` to auto-index press into Qdrant
+  - `EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2` (override as needed)
+  - `QDRANT_URL=http://qdrant:6333` in compose networks
 - Alerts and guardrails
   - Digest: `GREAT_WORK_ALERT_MAX_DIGEST_MS`, `GREAT_WORK_ALERT_MAX_QUEUE`, `GREAT_WORK_ALERT_MIN_RELEASES`
   - Dispatcher: `GREAT_WORK_ALERT_MAX_ORDER_PENDING`, `GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`
