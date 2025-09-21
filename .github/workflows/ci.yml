@@ -42,6 +42,18 @@ jobs:
           set -euo pipefail
           pytest --cov=great_work --cov=models --cov-report=xml --cov-report=term-missing
 
+      - name: Deployment smoke checks
+        env:
+          DISCORD_TOKEN: dummy
+          DISCORD_APP_ID: "123"
+          GREAT_WORK_CHANNEL_TABLE_TALK: "999"
+          GREAT_WORK_GUARDIAN_MODE: sidecar
+          GREAT_WORK_GUARDIAN_URL: http://localhost:8085/score
+          GREAT_WORK_ALERT_WEBHOOK_URL: https://example/webhook
+        run: |
+          set -euo pipefail
+          python -m great_work.tools.deployment_smoke
+
       - name: Upload coverage to Codacy
         if: env.CODACY_API_TOKEN != ''
         run: |
