@@ -50,7 +50,7 @@ preview-narrative:
 
 lint:
 	@if [ -x "$(VENV)/bin/ruff" ]; then \
-		$(VENV)/bin/ruff . ; \
+		$(VENV)/bin/ruff check . ; \
 	else \
 		echo "ruff not installed; skipping lint"; \
 	fi
