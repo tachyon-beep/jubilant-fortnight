@@ -1,4 +1,5 @@
 """Validate narrative YAML assets for structure and required fields."""
+
 from __future__ import annotations
 
 import argparse
@@ -151,7 +152,9 @@ def validate_recruitment_press(path: Path, data: Any) -> List[str]:
         for outcome in ("success", "failure"):
             section = briefing.get(outcome)
             if not isinstance(section, dict):
-                errors.append(f"{path}: recruitment.briefing.{outcome} must be a mapping")
+                errors.append(
+                    f"{path}: recruitment.briefing.{outcome} must be a mapping"
+                )
                 continue
             errors.extend(
                 _ensure_non_empty_list(
@@ -234,12 +237,18 @@ def validate_landmark_preparations(path: Path, data: Any) -> List[str]:
 
             discoveries = entry.get("discoveries")
             if discoveries is not None:
-                errors.extend(_ensure_non_empty_list(discoveries, path, f"{entry_ctx}.discoveries"))
+                errors.extend(
+                    _ensure_non_empty_list(
+                        discoveries, path, f"{entry_ctx}.discoveries"
+                    )
+                )
 
             briefs = entry.get("briefs")
             if briefs is not None:
                 if not isinstance(briefs, list) or not briefs:
-                    errors.append(f"{path}: {entry_ctx}.briefs must be a non-empty list")
+                    errors.append(
+                        f"{path}: {entry_ctx}.briefs must be a non-empty list"
+                    )
                 else:
                     for index, brief in enumerate(briefs):
                         brief_ctx = f"{entry_ctx}.briefs[{index}]"
@@ -249,12 +258,18 @@ def validate_landmark_preparations(path: Path, data: Any) -> List[str]:
                         headline = brief.get("headline")
                         body = brief.get("body")
                         if not isinstance(headline, str) or not headline.strip():
-                            errors.append(f"{path}: {brief_ctx}.headline must be a non-empty string")
+                            errors.append(
+                                f"{path}: {brief_ctx}.headline must be a non-empty string"
+                            )
                         if not isinstance(body, str) or not body.strip():
-                            errors.append(f"{path}: {brief_ctx}.body must be a non-empty string")
+                            errors.append(
+                                f"{path}: {brief_ctx}.body must be a non-empty string"
+                            )
 
             if discoveries is None and briefs is None:
-                errors.append(f"{path}: {entry_ctx} must define 'discoveries' or 'briefs'")
+                errors.append(
+                    f"{path}: {entry_ctx} must define 'discoveries' or 'briefs'"
+                )
 
     return errors
 
@@ -343,7 +358,9 @@ def validate_sidecast_arcs(path: Path, data: Any) -> List[str]:
                     errors.append(f"{path}: {phase_ctx}.next must be a mapping")
                 else:
                     if not isinstance(next_data.get("phase"), str):
-                        errors.append(f"{path}: {phase_ctx}.next.phase must be a string")
+                        errors.append(
+                            f"{path}: {phase_ctx}.next.phase must be a string"
+                        )
                     if not isinstance(next_data.get("delay_hours"), Real):
                         errors.append(
                             f"{path}: {phase_ctx}.next.delay_hours must be numeric"
@@ -407,22 +424,20 @@ def validate_sideways_vignettes(path: Path, data: Any) -> List[str]:
                 if not isinstance(entry_id, str) or not entry_id.strip():
                     errors.append(f"{path}: {entry_ctx}.id must be a string")
                 elif entry_id in seen_ids:
-                    errors.append(f"{path}: duplicate vignette id '{entry_id}' in {ctx}")
+                    errors.append(
+                        f"{path}: duplicate vignette id '{entry_id}' in {ctx}"
+                    )
                 else:
                     seen_ids.add(entry_id)
                 for key in ("headline", "body"):
                     if not isinstance(entry.get(key), str) or not entry[key].strip():
                         errors.append(f"{path}: {entry_ctx}.{key} must be a string")
                 tags = entry.get("tags")
-                errors.extend(
-                    _ensure_non_empty_list(tags, path, f"{entry_ctx}.tags")
-                )
+                errors.extend(_ensure_non_empty_list(tags, path, f"{entry_ctx}.tags"))
                 gossip = entry.get("gossip")
                 if gossip is not None:
                     errors.extend(
-                        _ensure_non_empty_list(
-                            gossip, path, f"{entry_ctx}.gossip"
-                        )
+                        _ensure_non_empty_list(gossip, path, f"{entry_ctx}.gossip")
                     )
     return errors
 

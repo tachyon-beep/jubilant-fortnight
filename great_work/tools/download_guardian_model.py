@@ -10,6 +10,7 @@ mechanisms (`HUGGINGFACE_TOKEN` environment variable or cached login).
 No network calls are performed unless you execute the script. This file exists so
 we do not keep large model weights in the repository.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,9 @@ def ensure_dependencies() -> None:
         ) from exc
 
 
-def download_model(model_id: str, revision: Optional[str], target: Path, token: Optional[str]) -> Path:
+def download_model(
+    model_id: str, revision: Optional[str], target: Path, token: Optional[str]
+) -> Path:
     from huggingface_hub import snapshot_download
 
     logger.info("Downloading %s to %s", model_id, target)
@@ -49,7 +52,9 @@ def download_model(model_id: str, revision: Optional[str], target: Path, token: 
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download Granite Guardian moderation model")
+    parser = argparse.ArgumentParser(
+        description="Download Granite Guardian moderation model"
+    )
     parser.add_argument(
         "--model-id",
         default="ibm-granite/granite-guardian-3.2-3b-a800m",

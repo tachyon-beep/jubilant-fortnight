@@ -1,4 +1,5 @@
 """Discord bot entry point for The Great Work."""
+
 from __future__ import annotations
 
 import asyncio
@@ -147,7 +148,11 @@ def _format_message(lines: Iterable[str]) -> str:
 def _format_press(press: PressRelease) -> str:
     lines = [f"**{press.headline}**"]
     metadata = press.metadata or {}
-    scheduled = metadata.get("scheduled", {}) if isinstance(metadata.get("scheduled"), dict) else {}
+    scheduled = (
+        metadata.get("scheduled", {})
+        if isinstance(metadata.get("scheduled"), dict)
+        else {}
+    )
     release_at = scheduled.get("release_at")
     if isinstance(release_at, datetime):  # pragma: no cover - typically stored as str
         release_label = release_at.strftime("%Y-%m-%d %H:%M")
@@ -162,7 +167,9 @@ def _format_press(press: PressRelease) -> str:
     return "\n".join(lines)
 
 
-def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -> commands.Bot:
+def build_bot(
+    db_path: Path, intents: typing.Optional[discord.Intents] = None
+) -> commands.Bot:
     intents = intents or discord.Intents.default()
     app_id_raw = os.environ.get("DISCORD_APP_ID")
     application_id: typing.Optional[int] = None
@@ -171,7 +178,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             application_id = int(app_id_raw)
         except ValueError:
             logger.warning("Invalid DISCORD_APP_ID: %s", app_id_raw)
-    bot = commands.Bot(command_prefix="/", intents=intents, application_id=application_id)
+    bot = commands.Bot(
+        command_prefix="/", intents=intents, application_id=application_id
+    )
     service = GameService(db_path)
     setattr(bot, "state_service", service)
     router = ChannelRouter.from_env()
@@ -180,12 +189,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
     def _info_channel() -> typing.Optional[int]:
         """Prefer table-talk for informational posts, fall back to gazette/orders."""
 
-        return (
-            router.table_talk
-            or router.gazette
-            or router.upcoming
-            or router.orders
-        )
+        return router.table_talk or router.gazette or router.upcoming or router.orders
 
     async def _respond_and_broadcast(
         interaction: discord.Interaction,
@@ -257,13 +261,18 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             inline=False,
         )
 
-        influence_lines = [f"{faction.capitalize()}: {value}" for faction, value in sorted(data["influence"].items())]
+        influence_lines = [
+            f"{faction.capitalize()}: {value}"
+            for faction, value in sorted(data["influence"].items())
+        ]
         influence_text = "\n".join(influence_lines) if influence_lines else "None"
         embed.add_field(name="Influence", value=influence_text, inline=False)
 
         cooldowns = data.get("cooldowns") or {}
         if cooldowns:
-            cooldown_lines = [f"{key}: {value} digests" for key, value in cooldowns.items()]
+            cooldown_lines = [
+                f"{key}: {value} digests" for key, value in cooldowns.items()
+            ]
             embed.add_field(
                 name="Cooldowns",
                 value="\n".join(cooldown_lines),
@@ -272,7 +281,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         thresholds = data.get("thresholds") or {}
         if thresholds:
-            threshold_lines = [f"{action}: rep ≥ {value}" for action, value in sorted(thresholds.items())]
+            threshold_lines = [
+                f"{action}: rep ≥ {value}"
+                for action, value in sorted(thresholds.items())
+            ]
             embed.add_field(
                 name="Action Thresholds",
                 value="\n".join(threshold_lines),
@@ -334,9 +346,13 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                     else:
                         stamp_display = "recent"
                     if item.get("type") == "mentorship":
-                        timeline.append(f"{stamp_display}: mentorship {item.get('event')}")
+                        timeline.append(
+                            f"{stamp_display}: mentorship {item.get('event')}"
+                        )
                     else:
-                        timeline.append(f"{stamp_display}: sidecast {item.get('phase')}")
+                        timeline.append(
+                            f"{stamp_display}: sidecast {item.get('phase')}"
+                        )
                 history_text = " | ".join(timeline)
                 line = f"{entry['scholar']}: Δ {feeling:+.1f} ({summary})"
                 if history_text:
@@ -405,7 +421,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             logger.info("Synced %d commands", len(synced))
         except Exception as exc:  # pragma: no cover - logging only
             logger.exception("Failed to sync commands: %s", exc)
-        if scheduler is None and any(x is not None for x in (router.gazette, router.admin, router.upcoming)):
+        if scheduler is None and any(
+            x is not None for x in (router.gazette, router.admin, router.upcoming)
+        ):
             publisher = None
             if router.gazette is not None:
 
@@ -477,7 +495,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             scheduler.start()
             logger.info("Started Gazette scheduler publishing to %s", router.gazette)
 
-    @app_commands.command(name="submit_theory", description="Submit a theory to the Gazette")
+    @app_commands.command(
+        name="submit_theory", description="Submit a theory to the Gazette"
+    )
     @track_command
     @app_commands.describe(
         theory="The bold claim you are making",
@@ -485,7 +505,13 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         supporters="Comma separated scholar IDs",
         deadline="Counter-claim deadline (text)",
     )
-    async def submit_theory(interaction: discord.Interaction, theory: str, confidence: str, supporters: str, deadline: str):
+    async def submit_theory(
+        interaction: discord.Interaction,
+        theory: str,
+        confidence: str,
+        supporters: str,
+        deadline: str,
+    ):
         try:
             level = ConfidenceLevel(confidence)
         except ValueError:
@@ -516,7 +542,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.orders, message, purpose="orders")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="launch_expedition", description="Queue an expedition for resolution")
+    @app_commands.command(
+        name="launch_expedition", description="Queue an expedition for resolution"
+    )
     @track_command
     @app_commands.describe(
         code="Expedition code",
@@ -548,7 +576,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         try:
             level = ConfidenceLevel(confidence)
         except ValueError:
-            await interaction.response.send_message("Invalid confidence level", ephemeral=True)
+            await interaction.response.send_message(
+                "Invalid confidence level", ephemeral=True
+            )
             await _flush_admin_notifications()
             return
         preparation = ExpeditionPreparation(
@@ -583,7 +613,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.orders, message, purpose="orders")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="resolve_expeditions", description="Resolve all pending expeditions")
+    @app_commands.command(
+        name="resolve_expeditions", description="Resolve all pending expeditions"
+    )
     @track_command
     async def resolve_expeditions(interaction: discord.Interaction) -> None:
         try:
@@ -602,7 +634,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.orders, text, purpose="orders")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="recruit_odds", description="Preview recruitment odds for each faction")
+    @app_commands.command(
+        name="recruit_odds", description="Preview recruitment odds for each faction"
+    )
     @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
@@ -675,9 +709,14 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="theory_reference", description="Publish a snapshot of recent theories for players")
+    @app_commands.command(
+        name="theory_reference",
+        description="Publish a snapshot of recent theories for players",
+    )
     @track_command
-    @app_commands.describe(limit="Number of recent theories to include in the snapshot (default 8)")
+    @app_commands.describe(
+        limit="Number of recent theories to include in the snapshot (default 8)"
+    )
     async def theory_reference(
         interaction: discord.Interaction,
         limit: discord.app_commands.Range[int, 1, 20] = 8,
@@ -685,7 +724,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         snapshot = service.theory_reference(limit=limit)
         theories = snapshot.get("theories", [])
         if not theories:
-            await interaction.response.send_message("No theories recorded yet.", ephemeral=True)
+            await interaction.response.send_message(
+                "No theories recorded yet.", ephemeral=True
+            )
             await _flush_admin_notifications()
             return
 
@@ -729,7 +770,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 status_text = "Unscheduled"
 
             theory_text = _clamp_text(entry.get("theory", ""))
-            confidence_text = entry.get("confidence_display", entry.get("confidence", "")).strip()
+            confidence_text = entry.get(
+                "confidence_display", entry.get("confidence", "")
+            ).strip()
             field_lines = [theory_text]
             if confidence_text:
                 field_lines.append(f"Confidence: {confidence_text}")
@@ -741,9 +784,11 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
             field_value = _clamp_text("\n".join(field_lines))[:1024]
             embed.add_field(
-                name=f"[{entry.get('id')}] {entry.get('player_display')}"
-                if entry.get("player_display")
-                else f"Theory {entry.get('id')}",
+                name=(
+                    f"[{entry.get('id')}] {entry.get('player_display')}"
+                    if entry.get("player_display")
+                    else f"Theory {entry.get('id')}"
+                ),
                 value=field_value,
                 inline=False,
             )
@@ -800,7 +845,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         scholar_id: str,
         career_track: str | None = None,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             press = service.queue_mentorship(
                 player_id=str(interaction.user.display_name),
@@ -816,7 +863,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
         await _flush_admin_notifications()
 
-    @app_commands.command(name="assign_lab", description="Assign a mentored scholar to a new career track")
+    @app_commands.command(
+        name="assign_lab", description="Assign a mentored scholar to a new career track"
+    )
     @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier",
@@ -827,7 +876,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         scholar_id: str,
         career_track: str,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             press = service.assign_lab(
                 player_id=str(interaction.user.display_name),
@@ -843,7 +894,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
         await _flush_admin_notifications()
 
-    @app_commands.command(name="set_nickname", description="Assign a nickname to a scholar")
+    @app_commands.command(
+        name="set_nickname", description="Assign a nickname to a scholar"
+    )
     @track_command
     @app_commands.describe(
         scholar_id="Scholar identifier (e.g., SCH-001)",
@@ -854,7 +907,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         scholar_id: str,
         nickname: str,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             response = service.set_scholar_nickname(
                 player_id=str(interaction.user.display_name),
@@ -878,7 +933,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await interaction.response.send_message(response)
         await _flush_admin_notifications()
 
-    @app_commands.command(name="share_press", description="Share a press release to table talk")
+    @app_commands.command(
+        name="share_press", description="Share a press release to table talk"
+    )
     @track_command
     @app_commands.describe(
         press_id="Press release identifier (use /archive_link to look up IDs)",
@@ -887,7 +944,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         interaction: discord.Interaction,
         press_id: int,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             message = service.share_press_release(
                 player_id=str(interaction.user.display_name),
@@ -901,7 +960,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         target_channel_id = router.table_talk or router.gazette or router.orders
         if target_channel_id:
-            await _post_to_channel(bot, target_channel_id, message, purpose="press_share")
+            await _post_to_channel(
+                bot, target_channel_id, message, purpose="press_share"
+            )
         elif interaction.channel:
             try:
                 await interaction.channel.send(message)
@@ -914,7 +975,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="poach", description="Attempt to poach another player's scholar")
+    @app_commands.command(
+        name="poach", description="Attempt to poach another player's scholar"
+    )
     @track_command
     @app_commands.describe(
         scholar_id="Scholar to poach",
@@ -941,7 +1004,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         exclusive_research: bool = False,
         leadership_role: bool = False,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
 
         # Build influence offer
         influence_offer = {}
@@ -957,7 +1022,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             influence_offer["foreign"] = foreign_influence
 
         if not influence_offer:
-            await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            await interaction.response.send_message(
+                "You must offer at least some influence!", ephemeral=True
+            )
             await _flush_admin_notifications()
             return
 
@@ -990,7 +1057,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
 
-    @app_commands.command(name="counter", description="Counter a rival's poaching attempt")
+    @app_commands.command(
+        name="counter", description="Counter a rival's poaching attempt"
+    )
     @track_command
     @app_commands.describe(
         offer_id="ID of the offer to counter",
@@ -1015,7 +1084,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         exclusive_research: bool = False,
         leadership_role: bool = False,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
 
         # Build counter influence offer
         counter_influence = {}
@@ -1031,7 +1102,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             counter_influence["foreign"] = foreign_influence
 
         if not counter_influence:
-            await interaction.response.send_message("You must offer at least some influence!", ephemeral=True)
+            await interaction.response.send_message(
+                "You must offer at least some influence!", ephemeral=True
+            )
             await _flush_admin_notifications()
             return
 
@@ -1063,16 +1136,22 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
 
-    @app_commands.command(name="view_offers", description="View active offers involving your scholars")
+    @app_commands.command(
+        name="view_offers", description="View active offers involving your scholars"
+    )
     @track_command
     async def view_offers(interaction: discord.Interaction) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
 
         try:
             offers = service.list_player_offers(str(interaction.user.display_name))
 
             if not offers:
-                await interaction.response.send_message("No active offers involving you.", ephemeral=True)
+                await interaction.response.send_message(
+                    "No active offers involving you.", ephemeral=True
+                )
                 await _flush_admin_notifications()
                 return
 
@@ -1101,14 +1180,16 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                             f"rival {rival_name} {rival_feeling:+.1f}, "
                             f"patron {patron_name} {patron_feeling:+.1f}\n"
                         )
-                
+
             await interaction.response.send_message(message, ephemeral=True)
             await _flush_admin_notifications()
         except Exception as exc:
             await interaction.response.send_message(f"Error: {exc}", ephemeral=True)
             await _flush_admin_notifications()
 
-    @app_commands.command(name="conference", description="Launch a conference to debate a theory")
+    @app_commands.command(
+        name="conference", description="Launch a conference to debate a theory"
+    )
     @track_command
     @app_commands.describe(
         theory_id="Theory ID to debate",
@@ -1123,7 +1204,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         supporters: str,
         opposition: str,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             confidence_level = ConfidenceLevel(confidence)
         except ValueError:
@@ -1153,7 +1236,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             await interaction.response.send_message(str(exc), ephemeral=True)
             await _flush_admin_notifications()
 
-    @app_commands.command(name="symposium_vote", description="Cast your vote on the current symposium topic")
+    @app_commands.command(
+        name="symposium_vote",
+        description="Cast your vote on the current symposium topic",
+    )
     @track_command
     @app_commands.describe(
         vote="Your vote: 1 (support), 2 (oppose), 3 (further study)",
@@ -1162,7 +1248,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         interaction: discord.Interaction,
         vote: int,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             press = service.vote_symposium(
                 player_id=str(interaction.user.display_name),
@@ -1177,7 +1265,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
         await _flush_admin_notifications()
 
-    @app_commands.command(name="symposium_propose", description="Propose a symposium topic for consideration")
+    @app_commands.command(
+        name="symposium_propose",
+        description="Propose a symposium topic for consideration",
+    )
     @track_command
     @app_commands.describe(
         topic="Title of the proposed symposium debate",
@@ -1188,7 +1279,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         topic: str,
         description: str,
     ) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         try:
             press = service.submit_symposium_proposal(
                 player_id=str(interaction.user.display_name),
@@ -1212,7 +1305,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.orders, message, purpose="orders")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="symposium_proposals", description="List pending symposium proposals")
+    @app_commands.command(
+        name="symposium_proposals", description="List pending symposium proposals"
+    )
     @track_command
     async def symposium_proposals(interaction: discord.Interaction) -> None:
         now = datetime.now(timezone.utc)
@@ -1251,13 +1346,17 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 else:
                     hours = max(1, remaining.seconds // 3600)
                     expiry_str = f"in {hours}h"
-                expires_display = f"expires {expires_at.strftime('%Y-%m-%d')} ({expiry_str})"
+                expires_display = (
+                    f"expires {expires_at.strftime('%Y-%m-%d')} ({expiry_str})"
+                )
             else:
                 expires_display = "no expiry"
             lines.append(
                 f"• [{proposal['id']}] {proposal['topic']} — proposed by {proposal['proposer']} ({created_str}; {expires_display})"
             )
-        header = f"**/symposium_proposals requested by {interaction.user.display_name}**"
+        header = (
+            f"**/symposium_proposals requested by {interaction.user.display_name}**"
+        )
         await _respond_and_broadcast(
             interaction,
             lines,
@@ -1267,7 +1366,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="symposium_backlog", description="Show scoring details for pending symposium proposals")
+    @app_commands.command(
+        name="symposium_backlog",
+        description="Show scoring details for pending symposium proposals",
+    )
     @track_command
     async def symposium_backlog(interaction: discord.Interaction) -> None:
         report = service.symposium_backlog_report()
@@ -1306,7 +1408,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 if not components:
                     components.append("0.00 neutral")
                 component_text = ", ".join(components)
-                recent_flag = " (recent proposer)" if entry.get("recent_proposer") else ""
+                recent_flag = (
+                    " (recent proposer)" if entry.get("recent_proposer") else ""
+                )
                 ranking_lines.append(
                     "{topic} — {name}: {score:.2f} [{components}; age {age:.1f}d]{flag}".format(
                         topic=entry.get("topic"),
@@ -1323,7 +1427,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 inline=False,
             )
         else:
-            embed.add_field(name="Current Ranking", value="No proposals scored yet.", inline=False)
+            embed.add_field(
+                name="Current Ranking", value="No proposals scored yet.", inline=False
+            )
 
         debt_rows = report.get("debts") or []
         if debt_rows:
@@ -1373,7 +1479,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="symposium_status", description="Show your symposium pledge status and history")
+    @app_commands.command(
+        name="symposium_status",
+        description="Show your symposium pledge status and history",
+    )
     @track_command
     async def symposium_status(interaction: discord.Interaction) -> None:
         player_id = str(interaction.user.display_name)
@@ -1422,9 +1531,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             for debt in debts:
                 faction = (debt.get("faction") or "Unaligned").capitalize()
                 next_reprisal = debt.get("next_reprisal_at") or "pending"
-                record = (
-                    f"{debt.get('amount', 0)} influence ({faction}) — reprisal lvl {debt.get('reprisal_level', 0)}, next {next_reprisal}"
-                )
+                record = f"{debt.get('amount', 0)} influence ({faction}) — reprisal lvl {debt.get('reprisal_level', 0)}, next {next_reprisal}"
                 extras = []
                 if debt.get("last_reprisal_at"):
                     extras.append(f"last {debt['last_reprisal_at']}")
@@ -1445,9 +1552,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         if history:
             history_lines = []
             for entry in history[:5]:
-                line = (
-                    f"[{entry['topic_id']}] {entry['topic']} — {entry['status']} (pledge {entry.get('pledge_amount', 0)})"
-                )
+                line = f"[{entry['topic_id']}] {entry['topic']} — {entry['status']} (pledge {entry.get('pledge_amount', 0)})"
                 if entry.get("faction"):
                     line += f" / {entry['faction']}"
                 if entry.get("symposium_date"):
@@ -1461,7 +1566,11 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 inline=False,
             )
         else:
-            embed.add_field(name="Recent Participation", value="No prior symposium pledges on record.", inline=False)
+            embed.add_field(
+                name="Recent Participation",
+                value="No prior symposium pledges on record.",
+                inline=False,
+            )
 
         header = f"/symposium_status requested by {interaction.user.display_name}"
         await _respond_and_broadcast(
@@ -1473,10 +1582,14 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="status", description="Show your current influence and cooldowns")
+    @app_commands.command(
+        name="status", description="Show your current influence and cooldowns"
+    )
     @track_command
     async def status(interaction: discord.Interaction) -> None:
-        service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
+        service.ensure_player(
+            str(interaction.user.display_name), interaction.user.display_name
+        )
         data = service.player_status(str(interaction.user.display_name))
         embed = _build_status_embed(data)
         header = f"/status requested by {interaction.user.display_name}"
@@ -1489,7 +1602,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             embed=embed,
         )
 
-    @app_commands.command(name="invest", description="Invest influence into faction infrastructure")
+    @app_commands.command(
+        name="invest", description="Invest influence into faction infrastructure"
+    )
     @track_command
     @app_commands.describe(
         faction="Faction receiving the investment",
@@ -1520,7 +1635,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.gazette, message, purpose="investment")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="endow_archive", description="Donate influence to the public archive")
+    @app_commands.command(
+        name="endow_archive", description="Donate influence to the public archive"
+    )
     @track_command
     @app_commands.describe(
         amount="Influence to donate",
@@ -1551,13 +1668,19 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await _post_to_channel(bot, router.gazette, message, purpose="endowment")
         await _flush_admin_notifications()
 
-    @app_commands.command(name="wager", description="Show the confidence wager table and thresholds")
+    @app_commands.command(
+        name="wager", description="Show the confidence wager table and thresholds"
+    )
     @track_command
     async def wager(interaction: discord.Interaction) -> None:
         reference = service.wager_reference()
         lines = ["**Confidence Wagers Reference**", "Confidence wagers:"]
         for level, payload in reference["wagers"].items():
-            suffix = " (triggers recruitment cooldown)" if payload["triggers_recruitment_cooldown"] else ""
+            suffix = (
+                " (triggers recruitment cooldown)"
+                if payload["triggers_recruitment_cooldown"]
+                else ""
+            )
             lines.append(
                 f" - {level}: reward {payload['reward']}, penalty {payload['penalty']}{suffix}"
             )
@@ -1577,14 +1700,18 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             ephemeral=True,
         )
 
-    @app_commands.command(name="seasonal_commitments", description="View your seasonal commitments")
+    @app_commands.command(
+        name="seasonal_commitments", description="View your seasonal commitments"
+    )
     @track_command
     async def seasonal_commitments(interaction: discord.Interaction) -> None:
         player_id = str(interaction.user.display_name)
         service.ensure_player(player_id, interaction.user.display_name)
         commitments = service.list_seasonal_commitments(player_id)
         if not commitments:
-            await interaction.response.send_message("No seasonal commitments recorded.", ephemeral=True)
+            await interaction.response.send_message(
+                "No seasonal commitments recorded.", ephemeral=True
+            )
             return
         lines = ["**Seasonal Commitments**"]
         for entry in commitments:
@@ -1603,7 +1730,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                     end=end_text,
                 )
             )
-        header = f"**/seasonal_commitments requested by {interaction.user.display_name}**"
+        header = (
+            f"**/seasonal_commitments requested by {interaction.user.display_name}**"
+        )
         await _respond_and_broadcast(
             interaction,
             lines,
@@ -1612,12 +1741,16 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             ephemeral=True,
         )
 
-    @app_commands.command(name="faction_projects", description="Show active faction projects")
+    @app_commands.command(
+        name="faction_projects", description="Show active faction projects"
+    )
     @track_command
     async def faction_projects(interaction: discord.Interaction) -> None:
         projects = service.list_faction_projects()
         if not projects:
-            await interaction.response.send_message("No active faction projects.", ephemeral=True)
+            await interaction.response.send_message(
+                "No active faction projects.", ephemeral=True
+            )
             return
         lines = ["**Active Faction Projects**"]
         for project in projects:
@@ -1646,11 +1779,15 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
     @track_command
     async def gazette(interaction: discord.Interaction, limit: int = 5) -> None:
         if limit <= 0 or limit > 20:
-            await interaction.response.send_message("Limit must be between 1 and 20", ephemeral=True)
+            await interaction.response.send_message(
+                "Limit must be between 1 and 20", ephemeral=True
+            )
             return
         records = service.export_press_archive(limit=limit)
         if not records:
-            await interaction.response.send_message("No Gazette entries recorded yet.", ephemeral=True)
+            await interaction.response.send_message(
+                "No Gazette entries recorded yet.", ephemeral=True
+            )
             return
         embed = discord.Embed(
             title="Recent Gazette Entries",
@@ -1674,16 +1811,22 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             embed=embed,
         )
 
-    @app_commands.command(name="export_log", description="Export recent events and press")
+    @app_commands.command(
+        name="export_log", description="Export recent events and press"
+    )
     @track_command
     async def export_log(interaction: discord.Interaction, limit: int = 10) -> None:
         if limit <= 0 or limit > 50:
-            await interaction.response.send_message("Limit must be between 1 and 50", ephemeral=True)
+            await interaction.response.send_message(
+                "Limit must be between 1 and 50", ephemeral=True
+            )
             return
         log = service.export_log(limit=limit)
         press_lines = [f"Press ({len(log['press'])} entries):"]
         for record in log["press"]:
-            press_lines.append(f" - {record.timestamp.isoformat()} | {record.release.headline}")
+            press_lines.append(
+                f" - {record.timestamp.isoformat()} | {record.release.headline}"
+            )
         event_lines = [f"Events ({len(log['events'])} entries):"]
         for event in log["events"]:
             event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
@@ -1698,7 +1841,10 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="export_web_archive", description="Generate static HTML archive of game history")
+    @app_commands.command(
+        name="export_web_archive",
+        description="Generate static HTML archive of game history",
+    )
     @track_command
     async def export_web_archive(interaction: discord.Interaction) -> None:
         """Export the complete game history as a static web archive."""
@@ -1724,12 +1870,18 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             )
             await interaction.followup.send(message, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"Error generating archive: {e}", ephemeral=True)
+            await interaction.followup.send(
+                f"Error generating archive: {e}", ephemeral=True
+            )
         await _flush_admin_notifications()
 
-    @app_commands.command(name="archive_link", description="Get web archive permalink for a press release")
+    @app_commands.command(
+        name="archive_link", description="Get web archive permalink for a press release"
+    )
     @track_command
-    async def archive_link(interaction: discord.Interaction, headline_search: str) -> None:
+    async def archive_link(
+        interaction: discord.Interaction, headline_search: str
+    ) -> None:
         """Return permalink for specific press release matching the search term."""
         from pathlib import Path
 
@@ -1745,8 +1897,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         if not matches:
             await interaction.response.send_message(
-                f"No press releases found matching '{headline_search}'",
-                ephemeral=True
+                f"No press releases found matching '{headline_search}'", ephemeral=True
             )
             await _flush_admin_notifications()
             return
@@ -1767,7 +1918,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         else:
             # Multiple matches - show first 5
             lines = [f"**Found {len(matches)} matching press releases:**\n"]
-              
+
             for press_id, record in matches[:5]:
                 permalink = archive.generate_permalink(record)
                 lines.append(
@@ -1798,15 +1949,17 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await interaction.response.send_message(message, ephemeral=True)
         await _flush_admin_notifications()
 
-    @app_commands.command(name="telemetry_report", description="View telemetry and usage statistics (admin only)")
+    @app_commands.command(
+        name="telemetry_report",
+        description="View telemetry and usage statistics (admin only)",
+    )
     @track_command
     async def telemetry_report(interaction: discord.Interaction) -> None:
         """Generate and display telemetry report."""
         # Check for admin permissions
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "This command requires administrator permissions.",
-                ephemeral=True
+                "This command requires administrator permissions.", ephemeral=True
             )
             return
 
@@ -1827,123 +1980,157 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 f"• Unique players: {report['overall']['unique_players']}",
             ]
 
-            health = report.get('health', {})
-            checks = health.get('checks', [])
+            health = report.get("health", {})
+            checks = health.get("checks", [])
             if checks:
                 lines.append("\n**Health Summary:**")
                 status_icons = {"ok": "✅", "warning": "⚠️", "alert": "🛑"}
                 for check in checks[:6]:
-                    icon = status_icons.get(check.get('status'), "•")
-                    label = check.get('label', check.get('metric', 'metric'))
-                    detail = check.get('detail', '')
+                    icon = status_icons.get(check.get("status"), "•")
+                    label = check.get("label", check.get("metric", "metric"))
+                    detail = check.get("detail", "")
                     lines.append(f"{icon} {label}: {detail}")
                 if len(checks) > 6:
                     lines.append(f"…plus {len(checks) - 6} more checks")
 
-            product = report.get('product_kpis', {})
+            product = report.get("product_kpis", {})
             if product:
-                engagement = product.get('engagement', {})
-                manifestos = product.get('manifestos', {})
-                archive = product.get('archive', {})
-                nicknames = product.get('nicknames', {})
-                shares = product.get('press_shares', {})
+                engagement = product.get("engagement", {})
+                manifestos = product.get("manifestos", {})
+                archive = product.get("archive", {})
+                nicknames = product.get("nicknames", {})
+                shares = product.get("press_shares", {})
                 lines.append("\n**Product KPIs:**")
                 lines.append(
                     "• Active players (24h): {players:.0f} | Avg cmds/player {avg:.1f}".format(
-                        players=engagement.get('active_players_24h', 0.0) or 0.0,
-                        avg=engagement.get('avg_commands_per_player_24h', 0.0) or 0.0,
+                        players=engagement.get("active_players_24h", 0.0) or 0.0,
+                        avg=engagement.get("avg_commands_per_player_24h", 0.0) or 0.0,
                     )
                 )
                 lines.append(
                     "• Active players (7d): {players:.0f} | Avg cmds/player {avg:.1f}".format(
-                        players=engagement.get('active_players_7d', 0.0) or 0.0,
-                        avg=engagement.get('avg_commands_per_player_7d', 0.0) or 0.0,
+                        players=engagement.get("active_players_7d", 0.0) or 0.0,
+                        avg=engagement.get("avg_commands_per_player_7d", 0.0) or 0.0,
                     )
                 )
-                adoption_rate = manifestos.get('adoption_rate_7d', 0.0) or 0.0
+                adoption_rate = manifestos.get("adoption_rate_7d", 0.0) or 0.0
                 lines.append(
                     "• Manifesto adoption (7d): {rate:.0%} — {players:.0f} player(s), {events:.0f} events".format(
                         rate=adoption_rate,
-                        players=manifestos.get('manifesto_players_7d', 0.0) or 0.0,
-                        events=manifestos.get('manifesto_events_7d', 0.0) or 0.0,
+                        players=manifestos.get("manifesto_players_7d", 0.0) or 0.0,
+                        events=manifestos.get("manifesto_events_7d", 0.0) or 0.0,
                     )
                 )
-                archive_share = archive.get('engaged_share_7d', 0.0) or 0.0
+                archive_share = archive.get("engaged_share_7d", 0.0) or 0.0
                 lines.append(
                     "• Archive lookups (7d): {events:.0f} — {players:.0f} player(s), reach {share:.0%}".format(
-                        events=archive.get('lookup_events_7d', 0.0) or 0.0,
-                        players=archive.get('lookup_players_7d', 0.0) or 0.0,
+                        events=archive.get("lookup_events_7d", 0.0) or 0.0,
+                        players=archive.get("lookup_players_7d", 0.0) or 0.0,
                         share=archive_share,
                     )
                 )
                 lines.append(
                     "• Nicknames (7d): {events:.0f} events by {players:.0f} player(s) ({rate:.0%} adoption)".format(
-                        events=nicknames.get('nickname_events_7d', 0.0) or 0.0,
-                        players=nicknames.get('nickname_players_7d', 0.0) or 0.0,
-                        rate=nicknames.get('nickname_rate_7d', 0.0) or 0.0,
+                        events=nicknames.get("nickname_events_7d", 0.0) or 0.0,
+                        players=nicknames.get("nickname_players_7d", 0.0) or 0.0,
+                        rate=nicknames.get("nickname_rate_7d", 0.0) or 0.0,
                     )
                 )
                 lines.append(
                     "• Press shares (7d): {events:.0f} shares by {players:.0f} player(s)".format(
-                        events=shares.get('press_shares_7d', 0.0) or 0.0,
-                        players=shares.get('press_share_players_7d', 0.0) or 0.0,
+                        events=shares.get("press_shares_7d", 0.0) or 0.0,
+                        players=shares.get("press_share_players_7d", 0.0) or 0.0,
                     )
                 )
 
-            history_block = report.get('product_kpi_history', {}).get('daily', [])
-            history_summary = report.get('product_kpi_history', {}).get('summary', {})
+            history_block = report.get("product_kpi_history", {}).get("daily", [])
+            history_summary = report.get("product_kpi_history", {}).get("summary", {})
             if history_block:
                 lines.append("\n**KPI Trend (last 7 days):**")
                 for entry in history_block[-7:]:
                     lines.append(
                         "• {date}: players {players:.0f}, manifestos {m_events:.0f}, archive {a_events:.0f}, nicknames {n_events:.0f}, shares {s_events:.0f}".format(
-                            date=entry.get('date', '—'),
-                            players=entry.get('active_players', 0.0) or 0.0,
-                            m_events=entry.get('manifesto_events', 0.0) or 0.0,
-                            a_events=entry.get('archive_events', 0.0) or 0.0,
-                            n_events=entry.get('nickname_events', 0.0) or 0.0,
-                            s_events=entry.get('press_share_events', 0.0) or 0.0,
+                            date=entry.get("date", "—"),
+                            players=entry.get("active_players", 0.0) or 0.0,
+                            m_events=entry.get("manifesto_events", 0.0) or 0.0,
+                            a_events=entry.get("archive_events", 0.0) or 0.0,
+                            n_events=entry.get("nickname_events", 0.0) or 0.0,
+                            s_events=entry.get("press_share_events", 0.0) or 0.0,
                         )
                     )
                 if history_summary:
                     lines.append(
                         "• 30d averages — players {players:.1f}, manifestos {manif:.1f}, archive {archive:.1f}, nicknames {nick:.1f}, shares {share:.1f}".format(
-                            players=history_summary.get('active_players', {}).get('average', 0.0),
-                            manif=history_summary.get('manifesto_events', {}).get('average', 0.0),
-                            archive=history_summary.get('archive_events', {}).get('average', 0.0),
-                            nick=history_summary.get('nickname_events', {}).get('average', 0.0),
-                            share=history_summary.get('press_share_events', {}).get('average', 0.0),
+                            players=history_summary.get("active_players", {}).get(
+                                "average", 0.0
+                            ),
+                            manif=history_summary.get("manifesto_events", {}).get(
+                                "average", 0.0
+                            ),
+                            archive=history_summary.get("archive_events", {}).get(
+                                "average", 0.0
+                            ),
+                            nick=history_summary.get("nickname_events", {}).get(
+                                "average", 0.0
+                            ),
+                            share=history_summary.get("press_share_events", {}).get(
+                                "average", 0.0
+                            ),
                         )
                     )
 
             # Command usage
-            if report['command_stats']:
+            if report["command_stats"]:
                 lines.append("\n**Command Usage:**")
-                for cmd, stats in sorted(report['command_stats'].items(), key=lambda x: x[1]['usage_count'], reverse=True)[:10]:
-                    lines.append(f"• /{cmd}: {stats['usage_count']} uses, {stats['success_rate']:.0%} success")
+                for cmd, stats in sorted(
+                    report["command_stats"].items(),
+                    key=lambda x: x[1]["usage_count"],
+                    reverse=True,
+                )[:10]:
+                    lines.append(
+                        f"• /{cmd}: {stats['usage_count']} uses, {stats['success_rate']:.0%} success"
+                    )
 
             # Feature engagement
-            if report['feature_engagement_7d']:
+            if report["feature_engagement_7d"]:
                 lines.append("\n**Feature Engagement (7 days):**")
-                for feature, stats in sorted(report['feature_engagement_7d'].items(), key=lambda x: x[1]['total_uses'], reverse=True)[:5]:
-                    lines.append(f"• {feature}: {stats['total_uses']} uses by {stats['unique_users']} players")
+                for feature, stats in sorted(
+                    report["feature_engagement_7d"].items(),
+                    key=lambda x: x[1]["total_uses"],
+                    reverse=True,
+                )[:5]:
+                    lines.append(
+                        f"• {feature}: {stats['total_uses']} uses by {stats['unique_users']} players"
+                    )
 
             # Recent errors
-            if report['errors_24h']:
+            if report["errors_24h"]:
                 lines.append("\n**Errors (24 hours):**")
-                for error_type, count in sorted(report['errors_24h'].items(), key=lambda x: x[1], reverse=True)[:5]:
+                for error_type, count in sorted(
+                    report["errors_24h"].items(), key=lambda x: x[1], reverse=True
+                )[:5]:
                     lines.append(f"• {error_type}: {count} occurrences")
 
             # Performance
-            if report['performance_1h']:
+            if report["performance_1h"]:
                 lines.append("\n**Performance (1 hour):**")
-                for op, perf in sorted(report['performance_1h'].items(), key=lambda x: x[1]['avg_duration_ms'], reverse=True)[:5]:
-                    lines.append(f"• {op}: avg {perf['avg_duration_ms']:.1f}ms ({perf['sample_count']} samples)")
+                for op, perf in sorted(
+                    report["performance_1h"].items(),
+                    key=lambda x: x[1]["avg_duration_ms"],
+                    reverse=True,
+                )[:5]:
+                    lines.append(
+                        f"• {op}: avg {perf['avg_duration_ms']:.1f}ms ({perf['sample_count']} samples)"
+                    )
 
-            channel_usage = report.get('channel_usage_24h', {})
+            channel_usage = report.get("channel_usage_24h", {})
             if channel_usage:
                 lines.append("\n**Channel Usage (24 hours):**")
-                for channel_id, stats in sorted(channel_usage.items(), key=lambda x: x[1]['usage_count'], reverse=True)[:5]:
+                for channel_id, stats in sorted(
+                    channel_usage.items(),
+                    key=lambda x: x[1]["usage_count"],
+                    reverse=True,
+                )[:5]:
                     if channel_id.isdigit() and interaction.guild:
                         channel_obj = interaction.guild.get_channel(int(channel_id))
                         if channel_obj:
@@ -1960,133 +2147,135 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                     lines.append(
                         "• {channel}: {count} cmds, {players} players, {cmds} unique commands".format(
                             channel=channel_label,
-                            count=stats['usage_count'],
-                            players=stats['unique_players'],
-                            cmds=stats['unique_commands'],
+                            count=stats["usage_count"],
+                            players=stats["unique_players"],
+                            cmds=stats["unique_commands"],
                         )
                     )
 
-            llm_stats = report.get('llm_activity_24h', {})
+            llm_stats = report.get("llm_activity_24h", {})
             if llm_stats:
                 lines.append("\n**LLM Activity (24 hours):**")
-                for press_type, stats in sorted(llm_stats.items(), key=lambda x: x[1]['total_calls'], reverse=True)[:5]:
-                    success_rate = stats['success_rate'] * 100
+                for press_type, stats in sorted(
+                    llm_stats.items(), key=lambda x: x[1]["total_calls"], reverse=True
+                )[:5]:
+                    success_rate = stats["success_rate"] * 100
                     lines.append(
                         "• {press}: {succ}/{total} success ({rate:.0f}%), avg {avg:.0f}ms, max {max:.0f}ms".format(
-                            press=press_type.replace('_', ' '),
-                            succ=stats['successes'],
-                            total=stats['total_calls'],
+                            press=press_type.replace("_", " "),
+                            succ=stats["successes"],
+                            total=stats["total_calls"],
                             rate=success_rate,
-                            avg=stats['avg_duration_ms'],
-                            max=stats['max_duration_ms'],
+                            avg=stats["avg_duration_ms"],
+                            max=stats["max_duration_ms"],
                         )
                     )
 
-            press_layers = report.get('press_cadence_24h', [])
+            press_layers = report.get("press_cadence_24h", [])
             if press_layers:
                 lines.append("\n**Press Cadence (24 hours):**")
                 for entry in press_layers:
                     lines.append(
                         "• {event}/{layer}: {count} layers, avg {avg:.0f}m delay (max {max:.0f}m)".format(
-                            event=entry.get('event_type', 'event'),
-                            layer=entry.get('layer_type', 'layer'),
-                            count=entry.get('layer_count', 0),
-                            avg=entry.get('avg_delay_minutes', 0.0),
-                            max=entry.get('max_delay_minutes', 0.0),
+                            event=entry.get("event_type", "event"),
+                            layer=entry.get("layer_type", "layer"),
+                            count=entry.get("layer_count", 0),
+                            avg=entry.get("avg_delay_minutes", 0.0),
+                            max=entry.get("max_delay_minutes", 0.0),
                         )
                     )
 
-            digest_stats = report.get('digest_health_24h', {})
-            if digest_stats and digest_stats.get('total_digests', 0) > 0:
+            digest_stats = report.get("digest_health_24h", {})
+            if digest_stats and digest_stats.get("total_digests", 0) > 0:
                 lines.append("\n**Digest Health (24 hours):**")
                 lines.append(
                     "• Avg runtime {avg:.0f}ms (max {max:.0f}ms) across {count} digests".format(
-                        avg=digest_stats.get('avg_duration_ms', 0.0),
-                        max=digest_stats.get('max_duration_ms', 0.0),
-                        count=digest_stats.get('total_digests', 0),
+                        avg=digest_stats.get("avg_duration_ms", 0.0),
+                        max=digest_stats.get("max_duration_ms", 0.0),
+                        count=digest_stats.get("total_digests", 0),
                     )
                 )
                 lines.append(
                     "• Avg releases {avg_rel:.1f} (max {max_rel}) — Queue avg {avg_q:.1f} pending (max {max_q})".format(
-                        avg_rel=digest_stats.get('avg_release_count', 0.0),
-                        max_rel=digest_stats.get('max_release_count', 0),
-                        avg_q=digest_stats.get('avg_queue_size', 0.0),
-                        max_q=digest_stats.get('max_queue_size', 0),
+                        avg_rel=digest_stats.get("avg_release_count", 0.0),
+                        max_rel=digest_stats.get("max_release_count", 0),
+                        avg_q=digest_stats.get("avg_queue_size", 0.0),
+                        max_q=digest_stats.get("max_queue_size", 0),
                     )
                 )
 
-            queue_summary = report.get('queue_depth_24h', {})
+            queue_summary = report.get("queue_depth_24h", {})
             if queue_summary:
                 lines.append("\n**Queue Depth (24 hours):**")
-                for horizon, stats in sorted(queue_summary.items(), key=lambda item: int(item[0])):
+                for horizon, stats in sorted(
+                    queue_summary.items(), key=lambda item: int(item[0])
+                ):
                     lines.append(
                         "• ≤{h}h: avg {avg:.1f}, max {max:.0f} (samples {count})".format(
                             h=horizon,
-                            avg=stats.get('avg_queue', 0.0),
-                            max=stats.get('max_queue', 0.0),
-                            count=int(stats.get('samples', 0)),
+                            avg=stats.get("avg_queue", 0.0),
+                            max=stats.get("max_queue", 0.0),
+                            count=int(stats.get("samples", 0)),
                         )
                     )
                 threshold = os.getenv("GREAT_WORK_ALERT_MAX_QUEUE")
                 if threshold:
-                    lines.append(
-                        f"• Alert threshold: {threshold} pending items"
-                    )
+                    lines.append(f"• Alert threshold: {threshold} pending items")
 
-            backlog_summary = report.get('order_backlog_24h', {})
+            backlog_summary = report.get("order_backlog_24h", {})
             if backlog_summary:
                 lines.append("\n**Dispatcher Backlog (24 hours):**")
                 ordered = sorted(
                     backlog_summary.items(),
-                    key=lambda item: item[1].get('latest_pending', 0.0),
+                    key=lambda item: item[1].get("latest_pending", 0.0),
                     reverse=True,
                 )
                 for order_type, stats in ordered[:5]:
-                    latest = stats.get('latest_pending', 0.0)
-                    max_pending = stats.get('max_pending', 0.0)
-                    oldest_hours = stats.get('latest_oldest_seconds', 0.0) / 3600.0
+                    latest = stats.get("latest_pending", 0.0)
+                    max_pending = stats.get("max_pending", 0.0)
+                    oldest_hours = stats.get("latest_oldest_seconds", 0.0) / 3600.0
                     lines.append(
                         "• {otype}: {latest:.0f} pending (max {max_pending:.0f}), oldest {oldest:.1f}h".format(
-                            otype=order_type.replace('_', ' '),
+                            otype=order_type.replace("_", " "),
                             latest=latest,
                             max_pending=max_pending,
                             oldest=oldest_hours,
                         )
                     )
 
-            symposium_metrics = report.get('symposium', {})
-            scoring_metrics = symposium_metrics.get('scoring', {})
-            if scoring_metrics.get('count'):
+            symposium_metrics = report.get("symposium", {})
+            scoring_metrics = symposium_metrics.get("scoring", {})
+            if scoring_metrics.get("count"):
                 lines.append("\n**Symposium Scoring (24 hours):**")
                 lines.append(
                     "• {count} proposals scored | avg {avg:.2f}".format(
-                        count=scoring_metrics.get('count', 0),
-                        avg=scoring_metrics.get('average', 0.0),
+                        count=scoring_metrics.get("count", 0),
+                        avg=scoring_metrics.get("average", 0.0),
                     )
                 )
-                for entry in scoring_metrics.get('top', [])[:5]:
-                    player_name = entry.get('player_id') or 'unknown'
+                for entry in scoring_metrics.get("top", [])[:5]:
+                    player_name = entry.get("player_id") or "unknown"
                     player_obj = service.state.get_player(player_name)
                     display = player_obj.display_name if player_obj else player_name
                     lines.append(
                         "• {player} — {score:.2f} (age {age:.1f}d)".format(
                             player=display,
-                            score=entry.get('score', 0.0),
-                            age=entry.get('age_days', 0.0),
+                            score=entry.get("score", 0.0),
+                            age=entry.get("age_days", 0.0),
                         )
                     )
 
-            debt_metrics = symposium_metrics.get('debts', [])
+            debt_metrics = symposium_metrics.get("debts", [])
             if debt_metrics:
                 lines.append("\n**Symposium Debt Snapshot:**")
                 for entry in debt_metrics[:5]:
-                    player_name = entry.get('player_id') or 'unknown'
+                    player_name = entry.get("player_id") or "unknown"
                     player_obj = service.state.get_player(player_name)
                     display = player_obj.display_name if player_obj else player_name
                     detail_parts = [f"{entry.get('debt', 0.0):.1f} influence"]
-                    faction = entry.get('faction') or 'mixed'
+                    faction = entry.get("faction") or "mixed"
                     detail_parts.append(f"faction {faction}")
-                    if entry.get('recorded_at'):
+                    if entry.get("recorded_at"):
                         detail_parts.append(f"recorded {entry['recorded_at']}")
                     lines.append(
                         "• {player}: {detail}".format(
@@ -2095,90 +2284,94 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                         )
                     )
 
-            reprisal_metrics = symposium_metrics.get('reprisals', [])
+            reprisal_metrics = symposium_metrics.get("reprisals", [])
             if reprisal_metrics:
                 lines.append("\n**Symposium Reprisals (24 hours):**")
                 for entry in reprisal_metrics[:5]:
-                    player_name = entry.get('player_id') or 'unknown'
+                    player_name = entry.get("player_id") or "unknown"
                     player_obj = service.state.get_player(player_name)
                     display = player_obj.display_name if player_obj else player_name
                     lines.append(
                         "• {player}: {count} reprisal(s), total penalty {penalty:.1f}".format(
                             player=display,
-                            count=entry.get('count', 0),
-                            penalty=entry.get('total_penalty', 0.0),
+                            count=entry.get("count", 0),
+                            penalty=entry.get("total_penalty", 0.0),
                         )
                     )
 
-            economy_metrics = report.get('economy', {})
+            economy_metrics = report.get("economy", {})
             if economy_metrics:
-                invest = economy_metrics.get('investments', {})
-                endow = economy_metrics.get('endowments', {})
-                commitments = economy_metrics.get('commitments', {})
+                invest = economy_metrics.get("investments", {})
+                endow = economy_metrics.get("endowments", {})
+                commitments = economy_metrics.get("commitments", {})
                 lines.append("\n**Long-tail Economy (24 hours):**")
                 lines.append(
                     "• Investments: {total:.1f} influence across {players} player(s)".format(
-                        total=invest.get('total_amount', 0.0),
-                        players=invest.get('unique_players', 0),
+                        total=invest.get("total_amount", 0.0),
+                        players=invest.get("unique_players", 0),
                     )
                 )
-                if invest.get('top_players'):
-                    top_investor = invest['top_players'][0]
+                if invest.get("top_players"):
+                    top_investor = invest["top_players"][0]
                     lines.append(
                         "• Top investor {player} — {amount:.1f} influence (share {share:.0%})".format(
-                            player=top_investor.get('player_id', 'unknown'),
-                            amount=top_investor.get('total', 0.0),
-                            share=invest.get('top_share', 0.0),
+                            player=top_investor.get("player_id", "unknown"),
+                            amount=top_investor.get("total", 0.0),
+                            share=invest.get("top_share", 0.0),
                         )
                     )
-                if invest.get('by_faction'):
+                if invest.get("by_faction"):
                     faction_parts = [
                         f"{f}:{amount:.1f}"
-                        for f, amount in sorted(invest['by_faction'].items(), key=lambda item: item[1], reverse=True)[:3]
+                        for f, amount in sorted(
+                            invest["by_faction"].items(),
+                            key=lambda item: item[1],
+                            reverse=True,
+                        )[:3]
                     ]
                     lines.append("• By faction: " + ", ".join(faction_parts))
                 lines.append(
                     "• Archive endowments: {total:.1f} influence (debt paid {debt:.1f}, reputation +{rep:.1f})".format(
-                        total=endow.get('total_amount', 0.0),
-                        debt=endow.get('total_debt_paid', 0.0),
-                        rep=endow.get('total_reputation_gain', 0.0),
+                        total=endow.get("total_amount", 0.0),
+                        debt=endow.get("total_debt_paid", 0.0),
+                        rep=endow.get("total_reputation_gain", 0.0),
                     )
                 )
-                if endow.get('top_players'):
-                    top_endower = endow['top_players'][0]
+                if endow.get("top_players"):
+                    top_endower = endow["top_players"][0]
                     lines.append(
                         "• Largest endowment {player}: {amount:.1f} influence".format(
-                            player=top_endower.get('player_id', 'unknown'),
-                            amount=top_endower.get('total', 0.0),
+                            player=top_endower.get("player_id", "unknown"),
+                            amount=top_endower.get("total", 0.0),
                         )
                     )
                 if commitments:
-                    outstanding = commitments.get('total_outstanding', 0.0)
+                    outstanding = commitments.get("total_outstanding", 0.0)
                     lines.append(
                         "• Seasonal commitments outstanding: {debt:.1f} influence".format(
                             debt=outstanding,
                         )
                     )
                     top_commitments = sorted(
-                        commitments.get('players', {}).values(),
-                        key=lambda item: item.get('latest_debt', 0.0),
+                        commitments.get("players", {}).values(),
+                        key=lambda item: item.get("latest_debt", 0.0),
                         reverse=True,
                     )[:3]
                     for entry in top_commitments:
-                        player_label = entry.get('player_id') or 'unknown'
-                        debt_val = entry.get('latest_debt', 0.0)
-                        faction_label = entry.get('faction') or 'unaligned'
-                        days_remaining = entry.get('days_remaining')
+                        player_label = entry.get("player_id") or "unknown"
+                        debt_val = entry.get("latest_debt", 0.0)
+                        faction_label = entry.get("faction") or "unaligned"
+                        days_remaining = entry.get("days_remaining")
                         descriptor = f"{debt_val:.1f} owed to {faction_label}"
                         if days_remaining is not None:
                             descriptor += f", {int(days_remaining)}d remaining"
                         lines.append(f"   • {player_label}: {descriptor}")
 
-            system_events = report.get('system_events_24h', [])
+            system_events = report.get("system_events_24h", [])
             if system_events:
                 lines.append("\n**System Events (24 hours):**")
                 for event in system_events[:5]:
-                    detail = f" — {event['reason']}" if event.get('reason') else ""
+                    detail = f" — {event['reason']}" if event.get("reason") else ""
                     lines.append(f"• {event['timestamp']}: {event['event']}{detail}")
 
             message = "\n".join(lines)
@@ -2190,9 +2383,13 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             await interaction.followup.send(message, ephemeral=True)
 
         except Exception as e:
-            await interaction.followup.send(f"Error generating report: {e}", ephemeral=True)
+            await interaction.followup.send(
+                f"Error generating report: {e}", ephemeral=True
+            )
 
-    @app_commands.command(name="table_talk", description="Post a message to the table-talk channel")
+    @app_commands.command(
+        name="table_talk", description="Post a message to the table-talk channel"
+    )
     @track_command
     async def table_talk(interaction: discord.Interaction, message: str) -> None:
         display_name = interaction.user.display_name
@@ -2227,11 +2424,13 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
     # Admin command group
     gw_admin = app_commands.Group(
-        name="gw_admin",
-        description="Administrative commands for game management"
+        name="gw_admin", description="Administrative commands for game management"
     )
 
-    @gw_admin.command(name="search_press", description="Search press releases using semantic similarity")
+    @gw_admin.command(
+        name="search_press",
+        description="Search press releases using semantic similarity",
+    )
     @track_command
     @app_commands.describe(
         query="Search phrase to match against recorded press releases",
@@ -2319,7 +2518,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await interaction.response.send_message(embed=embed, ephemeral=True)
         await _flush_admin_notifications()
 
-    @gw_admin.command(name="adjust_reputation", description="Adjust a player's reputation")
+    @gw_admin.command(
+        name="adjust_reputation", description="Adjust a player's reputation"
+    )
     @track_command
     @app_commands.describe(
         player_id="Player identifier",
@@ -2504,7 +2705,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
         await _flush_admin_notifications()
 
-    @gw_admin.command(name="adjust_influence", description="Adjust a player's influence")
+    @gw_admin.command(
+        name="adjust_influence", description="Adjust a player's influence"
+    )
     @track_command
     @app_commands.describe(
         player_id="Player identifier",
@@ -2567,7 +2770,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
         await _flush_admin_notifications()
 
-    @gw_admin.command(name="cancel_expedition", description="Cancel a pending expedition")
+    @gw_admin.command(
+        name="cancel_expedition", description="Cancel a pending expedition"
+    )
     @track_command
     @app_commands.describe(
         expedition_code="Expedition code",
@@ -2625,7 +2830,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             return
 
         limit = max(1, min(limit, 50))
-        status_filter = None if not status or status.lower() == "any" else status.lower()
+        status_filter = (
+            None if not status or status.lower() == "any" else status.lower()
+        )
         orders = service.admin_list_orders(
             order_type=order_type or None,
             status=status_filter,
@@ -2633,9 +2840,15 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         )
 
         if actor_id:
-            orders = [order for order in orders if (order.get("actor_id") or "") == actor_id]
+            orders = [
+                order for order in orders if (order.get("actor_id") or "") == actor_id
+            ]
         if subject_id:
-            orders = [order for order in orders if (order.get("subject_id") or "") == subject_id]
+            orders = [
+                order
+                for order in orders
+                if (order.get("subject_id") or "") == subject_id
+            ]
 
         if older_than_hours is not None and older_than_hours > 0:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
@@ -2657,7 +2870,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             orders = filtered_orders
 
         if not orders:
-            await interaction.response.send_message("No dispatcher orders found.", ephemeral=True)
+            await interaction.response.send_message(
+                "No dispatcher orders found.", ephemeral=True
+            )
             return
 
         now_ts = datetime.now(timezone.utc)
@@ -2665,8 +2880,12 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         for order in orders:
             scheduled = order.get("scheduled_at")
             created = order.get("created_at")
-            scheduled_label = scheduled.isoformat() if isinstance(scheduled, datetime) else "—"
-            created_label = created.isoformat() if isinstance(created, datetime) else "—"
+            scheduled_label = (
+                scheduled.isoformat() if isinstance(scheduled, datetime) else "—"
+            )
+            created_label = (
+                created.isoformat() if isinstance(created, datetime) else "—"
+            )
             reference = scheduled if isinstance(scheduled, datetime) else created
             if isinstance(reference, datetime):
                 age_hours = max(0.0, (now_ts - reference).total_seconds() / 3600.0)
@@ -2685,7 +2904,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         content = "\n".join(lines)
         send_as_file = as_file or len(content) > 1900
-        summary_line = f"Returned {len(orders)} orders" + (f" (filtered by {order_type})" if order_type else "")
+        summary_line = f"Returned {len(orders)} orders" + (
+            f" (filtered by {order_type})" if order_type else ""
+        )
 
         if send_as_file:
             buffer = io.BytesIO(content.encode("utf-8"))
@@ -2726,14 +2947,15 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             await _flush_admin_notifications()
             return
 
-        response = (
-            f"Cancelled order #{summary['id']} ({summary['order_type']})."
-            + (f" Reason: {reason}" if reason else "")
+        response = f"Cancelled order #{summary['id']} ({summary['order_type']})." + (
+            f" Reason: {reason}" if reason else ""
         )
         await interaction.response.send_message(response, ephemeral=True)
         await _flush_admin_notifications()
 
-    @gw_admin.command(name="moderation_overrides", description="List moderation overrides")
+    @gw_admin.command(
+        name="moderation_overrides", description="List moderation overrides"
+    )
     @track_command
     @app_commands.describe(
         include_expired="Include expired overrides",
@@ -2753,7 +2975,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         overrides = service.list_moderation_overrides(include_expired=include_expired)
         if not overrides:
-            await interaction.response.send_message("No moderation overrides configured.", ephemeral=True)
+            await interaction.response.send_message(
+                "No moderation overrides configured.", ephemeral=True
+            )
             return
 
         lines = ["#id | hash | stage | surface | category | expires | notes"]
@@ -2824,7 +3048,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
             ephemeral=True,
         )
 
-    @gw_admin.command(name="remove_moderation_override", description="Remove a moderation override")
+    @gw_admin.command(
+        name="remove_moderation_override", description="Remove a moderation override"
+    )
     @track_command
     async def admin_remove_moderation_override(
         interaction: discord.Interaction,
@@ -2846,7 +3072,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 f"Override #{override_id} not found.", ephemeral=True
             )
 
-    @gw_admin.command(name="moderation_recent", description="Show recent moderation events")
+    @gw_admin.command(
+        name="moderation_recent", description="Show recent moderation events"
+    )
     @track_command
     @app_commands.describe(limit="Number of events to display (1-20)")
     async def admin_recent_moderation(
@@ -2863,10 +3091,14 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         limit = max(1, min(limit, 20))
         events = service.recent_moderation_events(limit=limit)
         if not events:
-            await interaction.response.send_message("No moderation events recorded yet.", ephemeral=True)
+            await interaction.response.send_message(
+                "No moderation events recorded yet.", ephemeral=True
+            )
             return
 
-        lines = ["timestamp | stage | surface | severity | category | hash | actor | reason"]
+        lines = [
+            "timestamp | stage | surface | severity | category | hash | actor | reason"
+        ]
         for event in events:
             lines.append(
                 f"{event.get('timestamp')} | {event.get('stage')} | {event.get('surface')} | "
@@ -2903,7 +3135,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
 
         include_details_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS", "")
         include_details = include_details_env.lower() not in {"0", "false", "off"}
-        snapshot_dir_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DIR", "calibration_snapshots")
+        snapshot_dir_env = os.getenv(
+            "GREAT_WORK_CALIBRATION_SNAPSHOT_DIR", "calibration_snapshots"
+        )
         snapshot_dir = Path(snapshot_dir_env).expanduser().resolve()
         keep_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP", "12") or "12"
         try:
@@ -2939,7 +3173,9 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
                 f"Seasonal commitments: {seasonal_totals.get('active', 0)} active / debt {seasonal_totals.get('outstanding_debt', 0)}",
                 f"Stored at `{output_path}` (keep_last={keep_last}).",
             ]
-            await interaction.followup.send("\n".join(message_lines), file=upload, ephemeral=True)
+            await interaction.followup.send(
+                "\n".join(message_lines), file=upload, ephemeral=True
+            )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.exception("Failed to generate calibration snapshot")
             await interaction.followup.send(
@@ -2982,6 +3218,7 @@ def build_bot(db_path: Path, intents: typing.Optional[discord.Intents] = None) -
         await interaction.response.send_message(message, ephemeral=True)
         await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         await _flush_admin_notifications()
+
     bot.tree.add_command(submit_theory)
     bot.tree.add_command(launch_expedition)
     bot.tree.add_command(resolve_expeditions)

@@ -1,4 +1,5 @@
 """Tone pack support for narrative prompts."""
+
 from __future__ import annotations
 
 import os
@@ -55,7 +56,9 @@ class ToneLibrary:
         return str(value)
 
     @property
-    def available_settings(self) -> Dict[str, Dict[str, Dict[str, Union[str, List[str]]]]]:
+    def available_settings(
+        self,
+    ) -> Dict[str, Dict[str, Dict[str, Union[str, List[str]]]]]:
         return self._packs
 
     def get_seed(
@@ -96,7 +99,9 @@ class ToneLibrary:
 _TONE_LIBRARY: Optional[ToneLibrary] = None
 
 
-def get_tone_seed(event_type: str, setting: Optional[str] = None) -> Optional[Dict[str, str]]:
+def get_tone_seed(
+    event_type: str, setting: Optional[str] = None
+) -> Optional[Dict[str, str]]:
     """Lookup helper for tone seeds."""
 
     global _TONE_LIBRARY

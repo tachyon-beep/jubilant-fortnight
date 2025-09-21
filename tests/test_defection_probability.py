@@ -34,9 +34,9 @@ def test_high_loyalty_lowers_probability() -> None:
     mistreatment = 0.2
     alignment = 0.1
     plateau = 0.2
-    assert defection_probability(loyal, offer, mistreatment, alignment, plateau) < defection_probability(
-        disloyal, offer, mistreatment, alignment, plateau
-    )
+    assert defection_probability(
+        loyal, offer, mistreatment, alignment, plateau
+    ) < defection_probability(disloyal, offer, mistreatment, alignment, plateau)
 
 
 def test_probability_bounds() -> None:

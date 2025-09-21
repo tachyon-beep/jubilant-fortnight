@@ -1,4 +1,5 @@
 """Moderation utilities for player-facing and generated content."""
+
 from __future__ import annotations
 
 import hashlib
@@ -60,7 +61,10 @@ class GuardianModerator:
     ]
 
     def __init__(self) -> None:
-        self._mode = os.getenv("GREAT_WORK_GUARDIAN_MODE", "sidecar").strip().lower() or "sidecar"
+        self._mode = (
+            os.getenv("GREAT_WORK_GUARDIAN_MODE", "sidecar").strip().lower()
+            or "sidecar"
+        )
         self._enabled = os.getenv("GREAT_WORK_GUARDIAN_ENABLED", "false").lower() in {
             "true",
             "1",
@@ -75,20 +79,26 @@ class GuardianModerator:
         self._api_key = os.getenv("GREAT_WORK_GUARDIAN_API_KEY")
         categories_env = os.getenv("GREAT_WORK_GUARDIAN_CATEGORIES")
         if categories_env:
-            categories = [item.strip() for item in categories_env.split(",") if item.strip()]
+            categories = [
+                item.strip() for item in categories_env.split(",") if item.strip()
+            ]
             self._categories = categories or self._DEFAULT_CATEGORIES
         else:
             self._categories = self._DEFAULT_CATEGORIES
-        self._always_call_guardian = (
-            os.getenv("GREAT_WORK_GUARDIAN_ALWAYS", "false").lower() in {"true", "1", "on"}
-        )
+        self._always_call_guardian = os.getenv(
+            "GREAT_WORK_GUARDIAN_ALWAYS", "false"
+        ).lower() in {"true", "1", "on"}
         self._blocklist = {term.lower() for term in self._DEFAULT_BLOCKLIST}
-        self._suspect_patterns = {term.lower() for term in self._DEFAULT_SUSPECT_PATTERNS}
+        self._suspect_patterns = {
+            term.lower() for term in self._DEFAULT_SUSPECT_PATTERNS
+        }
         self._allowlist: Dict[str, Dict[str, Any]] = {}
 
         self._local_model_path: Optional[Path] = None
         self._local_pipeline = None
-        self._local_max_tokens = int(os.getenv("GREAT_WORK_GUARDIAN_LOCAL_TOKENS", "2") or 2)
+        self._local_max_tokens = int(
+            os.getenv("GREAT_WORK_GUARDIAN_LOCAL_TOKENS", "2") or 2
+        )
         if self._mode == "local":
             local_path = os.getenv("GREAT_WORK_GUARDIAN_LOCAL_PATH")
             if local_path:
@@ -173,7 +183,9 @@ class GuardianModerator:
 
         cleaned = text.strip()
         if not cleaned:
-            return ModerationDecision(True, metadata={"suspect": False}, text_hash=self.compute_hash(""))
+            return ModerationDecision(
+                True, metadata={"suspect": False}, text_hash=self.compute_hash("")
+            )
 
         text_hash = self.compute_hash(cleaned)
         now = datetime.now(timezone.utc)
@@ -191,7 +203,9 @@ class GuardianModerator:
                 "source": "allowlist",
                 "text_hash": text_hash,
             }
-            return ModerationDecision(True, severity="allow", metadata=metadata, text_hash=text_hash)
+            return ModerationDecision(
+                True, severity="allow", metadata=metadata, text_hash=text_hash
+            )
 
         prefilter_decision = self._prefilter(cleaned)
         if not prefilter_decision.allowed:
@@ -208,24 +222,46 @@ class GuardianModerator:
             prefilter_decision.text_hash = text_hash
             return prefilter_decision
 
-        should_call_guardian = self._always_call_guardian or prefilter_decision.metadata.get(
-            "suspect", False
+        should_call_guardian = (
+            self._always_call_guardian
+            or prefilter_decision.metadata.get("suspect", False)
         )
 
         if not self.enabled:
-            return ModerationDecision(True, metadata={"suspect": prefilter_decision.metadata.get("suspect", False), "text_hash": text_hash}, text_hash=text_hash)
+            return ModerationDecision(
+                True,
+                metadata={
+                    "suspect": prefilter_decision.metadata.get("suspect", False),
+                    "text_hash": text_hash,
+                },
+                text_hash=text_hash,
+            )
 
         if not should_call_guardian:
-            return ModerationDecision(True, metadata={"suspect": False, "text_hash": text_hash}, text_hash=text_hash)
+            return ModerationDecision(
+                True,
+                metadata={"suspect": False, "text_hash": text_hash},
+                text_hash=text_hash,
+            )
 
         if self._mode == "local":
             response = self._score_local(cleaned)
         else:
-            response = self._call_guardian(cleaned, surface=surface, actor=actor, stage=stage)
+            response = self._call_guardian(
+                cleaned, surface=surface, actor=actor, stage=stage
+            )
         if response is None:
-            return ModerationDecision(True, metadata={"suspect": True, "text_hash": text_hash}, text_hash=text_hash)
+            return ModerationDecision(
+                True,
+                metadata={"suspect": True, "text_hash": text_hash},
+                text_hash=text_hash,
+            )
 
-        violations = [entry for entry in response if entry.get("label", "").lower().startswith("y")]
+        violations = [
+            entry
+            for entry in response
+            if entry.get("label", "").lower().startswith("y")
+        ]
         if not violations:
             metadata = {
                 "surface": surface,
@@ -235,7 +271,13 @@ class GuardianModerator:
                 "violations": violations,
                 "text_hash": text_hash,
             }
-            return ModerationDecision(True, severity="allow", metadata=metadata, raw=response, text_hash=text_hash)
+            return ModerationDecision(
+                True,
+                severity="allow",
+                metadata=metadata,
+                raw=response,
+                text_hash=text_hash,
+            )
 
         top = violations[0]
         reason = top.get("category", "guardian_flagged")
@@ -254,7 +296,13 @@ class GuardianModerator:
                 "text_hash": text_hash,
                 "overridden_category": reason,
             }
-            return ModerationDecision(True, severity="allow", metadata=metadata, raw=response, text_hash=text_hash)
+            return ModerationDecision(
+                True,
+                severity="allow",
+                metadata=metadata,
+                raw=response,
+                text_hash=text_hash,
+            )
 
         metadata = {
             "surface": surface,
@@ -322,7 +370,9 @@ class GuardianModerator:
         request = urllib.request.Request(self._endpoint, data=data, headers=headers)
         parsed_endpoint = urllib.parse.urlparse(self._endpoint)
         if parsed_endpoint.scheme not in {"http", "https"}:
-            logger.error("Unsupported Guardian endpoint scheme: %s", parsed_endpoint.scheme)
+            logger.error(
+                "Unsupported Guardian endpoint scheme: %s", parsed_endpoint.scheme
+            )
             return None
 
         try:
@@ -336,21 +386,33 @@ class GuardianModerator:
             logger.exception("Guardian sidecar returned invalid JSON")
             return None
 
-        results = document.get("results") or document.get("scores") or document.get("categories")
+        results = (
+            document.get("results")
+            or document.get("scores")
+            or document.get("categories")
+        )
         if isinstance(results, list):
             return results
         if isinstance(results, dict):
             return [{"category": key, "label": value} for key, value in results.items()]
-        logger.debug("Guardian response did not include recognised structure: %s", document)
+        logger.debug(
+            "Guardian response did not include recognised structure: %s", document
+        )
         return None
 
     def _ensure_local_pipeline(self):  # pragma: no cover - heavy dependency
         if self._local_pipeline is not None:
             return self._local_pipeline
         if self._local_model_path is None:
-            raise RuntimeError("Local Guardian mode requested without GREAT_WORK_GUARDIAN_LOCAL_PATH")
+            raise RuntimeError(
+                "Local Guardian mode requested without GREAT_WORK_GUARDIAN_LOCAL_PATH"
+            )
         try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer, TextGenerationPipeline
+            from transformers import (
+                AutoModelForCausalLM,
+                AutoTokenizer,
+                TextGenerationPipeline,
+            )
         except ImportError as exc:  # pragma: no cover - instructions only
             raise RuntimeError(
                 "transformers must be installed to run Guardian locally. Install with 'pip install transformers accelerate'."
@@ -358,7 +420,9 @@ class GuardianModerator:
         logger.info("Loading Guardian model from %s", self._local_model_path)
         tokenizer = AutoTokenizer.from_pretrained(self._local_model_path)
         model = AutoModelForCausalLM.from_pretrained(self._local_model_path)
-        pipeline = TextGenerationPipeline(model=model, tokenizer=tokenizer, device_map="auto")
+        pipeline = TextGenerationPipeline(
+            model=model, tokenizer=tokenizer, device_map="auto"
+        )
         self._local_pipeline = pipeline
         return pipeline
 
@@ -368,11 +432,11 @@ class GuardianModerator:
             "{category} policy or guidelines. Reply strictly with 'Yes' if it violates the policy or 'No' "
             "if it is acceptable."
         ).format(category=category)
-        return (
-            f"<s>[INST] <<SYS>>\n{system}\n<</SYS>>\nUser text:\n{text}\n[/INST]"
-        )
+        return f"<s>[INST] <<SYS>>\n{system}\n<</SYS>>\nUser text:\n{text}\n[/INST]"
 
-    def _score_local(self, text: str) -> Optional[List[Dict[str, Any]]]:  # pragma: no cover - heavy path
+    def _score_local(
+        self, text: str
+    ) -> Optional[List[Dict[str, Any]]]:  # pragma: no cover - heavy path
         try:
             pipeline = self._ensure_local_pipeline()
         except Exception:

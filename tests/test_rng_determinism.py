@@ -1,4 +1,5 @@
 """Tests for deterministic random number generation."""
+
 from __future__ import annotations
 
 import pytest

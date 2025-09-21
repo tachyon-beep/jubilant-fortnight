@@ -49,7 +49,9 @@ class QdrantManager:
             self.vector_size = int(self.model.get_sentence_embedding_dimension())
         except Exception:
             # Fallback if attribute missing (older versions)
-            self.vector_size = len(self.model.encode(["test"], normalize_embeddings=True)[0])
+            self.vector_size = len(
+                self.model.encode(["test"], normalize_embeddings=True)[0]
+            )
 
     def setup_collection(self) -> bool:
         """Create or verify the knowledge collection exists."""
@@ -63,8 +65,7 @@ class QdrantManager:
                 self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
-                        size=self.vector_size,
-                        distance=Distance.COSINE
+                        size=self.vector_size, distance=Distance.COSINE
                     ),
                 )
                 logger.info(f"Created collection: {self.collection_name}")
@@ -174,11 +175,13 @@ class QdrantManager:
             )
             out: List[Dict] = []
             for r in results:
-                out.append({
-                    "id": getattr(r, "id", None),
-                    "score": getattr(r, "score", None),
-                    "payload": getattr(r, "payload", None),
-                })
+                out.append(
+                    {
+                        "id": getattr(r, "id", None),
+                        "score": getattr(r, "score", None),
+                        "payload": getattr(r, "payload", None),
+                    }
+                )
             return out
         except Exception as e:
             logger.error(f"Search failed: {e}")
@@ -232,8 +235,12 @@ def main():
 
     parser = argparse.ArgumentParser(description="Manage Qdrant for The Great Work")
     parser.add_argument("--setup", action="store_true", help="Setup collection")
-    parser.add_argument("--index", action="store_true", help="Index game knowledge with embeddings")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="SentenceTransformer model name")
+    parser.add_argument(
+        "--index", action="store_true", help="Index game knowledge with embeddings"
+    )
+    parser.add_argument(
+        "--model", default=DEFAULT_MODEL, help="SentenceTransformer model name"
+    )
     parser.add_argument("--stats", action="store_true", help="Show collection stats")
     parser.add_argument("--url", default=QDRANT_URL, help="Qdrant URL")
     parser.add_argument("--collection", default=COLLECTION_NAME, help="Collection name")
@@ -241,7 +248,9 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-    manager = QdrantManager(url=args.url, collection=args.collection, model_name=args.model)
+    manager = QdrantManager(
+        url=args.url, collection=args.collection, model_name=args.model
+    )
 
     if args.setup:
         manager.setup_collection()

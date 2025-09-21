@@ -1,4 +1,5 @@
 """Tests covering the high level game service orchestration."""
+
 from __future__ import annotations
 
 import os
@@ -155,6 +156,7 @@ def test_llm_output_moderation_fallback(tmp_path, monkeypatch):
     assert moderation_meta is not None
     assert moderation_meta.get("blocked") is True
 
+
 def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
     os.environ.setdefault("LLM_MODE", "mock")
 
@@ -163,7 +165,9 @@ def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
             self.llm_calls = []
             self.system_events = []
 
-        def track_llm_activity(self, press_type, success, duration_ms, persona=None, error=None):
+        def track_llm_activity(
+            self, press_type, success, duration_ms, persona=None, error=None
+        ):
             self.llm_calls.append(
                 {
                     "press_type": press_type,
@@ -198,7 +202,9 @@ def test_llm_activity_records_telemetry(monkeypatch, tmp_path):
         confidence=ConfidenceLevel.CERTAIN,
     )
 
-    assert stub.llm_calls, "Expected LLM telemetry to capture expedition manifesto enhancement"
+    assert (
+        stub.llm_calls
+    ), "Expected LLM telemetry to capture expedition manifesto enhancement"
     call = stub.llm_calls[0]
     assert call["press_type"] == "research_manifesto"
     assert call["success"] is True
@@ -230,12 +236,16 @@ def test_qdrant_related_press_context(monkeypatch, tmp_path):
 
     captured_context: Dict[str, Any] = {}
 
-    def fake_enhance_press_release_sync(press_type, base_body, context, persona_name, persona_traits):
+    def fake_enhance_press_release_sync(
+        press_type, base_body, context, persona_name, persona_traits
+    ):
         captured_context.update(context)
         return "Enhanced body"
 
     monkeypatch.setattr("great_work.service.get_telemetry", lambda: StubTelemetry())
-    monkeypatch.setattr("great_work.service.enhance_press_release_sync", fake_enhance_press_release_sync)
+    monkeypatch.setattr(
+        "great_work.service.enhance_press_release_sync", fake_enhance_press_release_sync
+    )
     monkeypatch.setattr(GameService, "_get_qdrant_manager", lambda self: StubManager())
 
     db_path = tmp_path / "state.sqlite"
@@ -297,16 +307,12 @@ def test_recruitment_and_cooldown_flow(tmp_path):
     recruitment_layers = [
         payload
         for _, _, payload in queued_press
-        if payload.get("metadata", {})
-        .get("scheduled", {})
-        .get("event_type")
+        if payload.get("metadata", {}).get("scheduled", {}).get("event_type")
         == "recruitment"
     ]
     assert recruitment_layers, "expected layered recruitment follow-ups to be queued"
     assert any(
-        payload.get("metadata", {})
-        .get("scheduled", {})
-        .get("layer_type")
+        payload.get("metadata", {}).get("scheduled", {}).get("layer_type")
         in {"academic_gossip", "recruitment_followup"}
         for payload in recruitment_layers
     )
@@ -375,7 +381,9 @@ def test_defection_offer_and_digest(tmp_path):
 
     queued = service.state.list_queued_press()
     assert queued, "Expected defection follow-ups to be scheduled"
-    scheduled_followups = service.release_scheduled_press(datetime.now(timezone.utc) + timedelta(hours=4))
+    scheduled_followups = service.release_scheduled_press(
+        datetime.now(timezone.utc) + timedelta(hours=4)
+    )
     assert scheduled_followups, "Scheduled defection follow-ups should release"
     assert any(rel.type == "faction_statement" for rel in scheduled_followups)
     assert any(rel.type == "academic_gossip" for rel in scheduled_followups)
@@ -554,15 +562,21 @@ def test_wager_reference_exposes_thresholds_and_bounds(tmp_path):
     assert "wagers" in reference
     assert (
         reference["wagers"][ConfidenceLevel.STAKE_CAREER.value]["penalty"]
-        == service.settings.confidence_wagers[ConfidenceLevel.STAKE_CAREER.value]["penalty"]
+        == service.settings.confidence_wagers[ConfidenceLevel.STAKE_CAREER.value][
+            "penalty"
+        ]
     )
     assert (
-        reference["wagers"][ConfidenceLevel.STAKE_CAREER.value]["triggers_recruitment_cooldown"]
+        reference["wagers"][ConfidenceLevel.STAKE_CAREER.value][
+            "triggers_recruitment_cooldown"
+        ]
         is True
     )
 
     thresholds = reference["action_thresholds"]
-    assert thresholds["recruitment"] == service.settings.action_thresholds["recruitment"]
+    assert (
+        thresholds["recruitment"] == service.settings.action_thresholds["recruitment"]
+    )
 
     bounds = reference["reputation_bounds"]
     assert bounds["min"] == service.settings.reputation_bounds["min"]
@@ -602,7 +616,9 @@ def test_create_offer_includes_relationship_snapshot(tmp_path):
 
     stored_offer = service.state.get_offer(offer_id)
     assert stored_offer is not None
-    assert stored_offer.relationship_snapshot.get("rival", {}).get("feeling") is not None
+    assert (
+        stored_offer.relationship_snapshot.get("rival", {}).get("feeling") is not None
+    )
 
 
 def test_counter_offer_carries_relationship_snapshot(tmp_path):

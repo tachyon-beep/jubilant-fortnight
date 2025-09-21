@@ -1,4 +1,5 @@
 """Tests for web archive generation."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +9,14 @@ from pathlib import Path
 
 import pytest
 
-from great_work.models import Memory, MemoryFact, PressRecord, PressRelease, Scholar, ScholarStats
+from great_work.models import (
+    Memory,
+    MemoryFact,
+    PressRecord,
+    PressRelease,
+    Scholar,
+    ScholarStats,
+)
 from great_work.state import GameState
 from great_work.web_archive import ArchivePage, WebArchive
 
@@ -32,37 +40,43 @@ def sample_press():
     releases = []
 
     # Academic bulletin
-    releases.append(PressRecord(
-        timestamp=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
-        release=PressRelease(
-            type="academic_bulletin",
-            headline="Academic Bulletin No. 1",
-            body="Dr. Smith submits 'Theory of Everything' with high confidence. Counter-claims invited.",
-            metadata={"bulletin_number": 1}
+    releases.append(
+        PressRecord(
+            timestamp=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+            release=PressRelease(
+                type="academic_bulletin",
+                headline="Academic Bulletin No. 1",
+                body="Dr. Smith submits 'Theory of Everything' with high confidence. Counter-claims invited.",
+                metadata={"bulletin_number": 1},
+            ),
         )
-    ))
+    )
 
     # Discovery report
-    releases.append(PressRecord(
-        timestamp=datetime(2024, 1, 2, 14, 30, tzinfo=timezone.utc),
-        release=PressRelease(
-            type="discovery_report",
-            headline="Discovery Report: Expedition ALPHA (Field Work)",
-            body="Outcome: triumph. Roll 90 + 15 = 105. Reputation change: +10. Major breakthrough achieved!",
-            metadata={"outcome": "triumph", "expedition_code": "ALPHA"}
+    releases.append(
+        PressRecord(
+            timestamp=datetime(2024, 1, 2, 14, 30, tzinfo=timezone.utc),
+            release=PressRelease(
+                type="discovery_report",
+                headline="Discovery Report: Expedition ALPHA (Field Work)",
+                body="Outcome: triumph. Roll 90 + 15 = 105. Reputation change: +10. Major breakthrough achieved!",
+                metadata={"outcome": "triumph", "expedition_code": "ALPHA"},
+            ),
         )
-    ))
+    )
 
     # Retraction notice
-    releases.append(PressRecord(
-        timestamp=datetime(2024, 1, 3, 9, 15, tzinfo=timezone.utc),
-        release=PressRelease(
-            type="retraction_notice",
-            headline="Retraction Notice: Expedition BETA",
-            body="Outcome: disaster. Roll 5 + 0 = 5. Reputation change: -5. Complete failure of methodology.",
-            metadata={"outcome": "disaster"}
+    releases.append(
+        PressRecord(
+            timestamp=datetime(2024, 1, 3, 9, 15, tzinfo=timezone.utc),
+            release=PressRelease(
+                type="retraction_notice",
+                headline="Retraction Notice: Expedition BETA",
+                body="Outcome: disaster. Roll 5 + 0 = 5. Reputation change: -5. Complete failure of methodology.",
+                metadata={"outcome": "disaster"},
+            ),
         )
-    ))
+    )
 
     return releases
 
@@ -81,18 +95,13 @@ def sample_scholar():
         virtues=["Brilliant", "Methodical"],
         vices=["Arrogant", "Reclusive"],
         stats=ScholarStats(
-            talent=9,
-            reliability=8,
-            integrity=7,
-            theatrics=4,
-            loyalty=8,
-            risk=5
+            talent=9, reliability=8, integrity=7, theatrics=4, loyalty=8, risk=5
         ),
         politics={"academic": 1, "government": 0, "industry": -1},
         catchphrase="Hypotheses non fingo",
         taboos=["Alchemy"],
         memory=Memory(),
-        career={"location": "Cambridge", "patron": "Royal Society"}
+        career={"location": "Cambridge", "patron": "Royal Society"},
     )
 
 
@@ -146,7 +155,9 @@ class TestWebArchive:
             assert permalink.endswith(".html")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            archive = WebArchive(state, Path(tmpdir), base_url="https://example.com/great-work")
+            archive = WebArchive(
+                state, Path(tmpdir), base_url="https://example.com/great-work"
+            )
             permalink = archive.generate_permalink(sample_press[0])
             assert permalink.startswith("https://example.com/great-work/press/")
 
@@ -159,10 +170,8 @@ class TestWebArchive:
             press = PressRecord(
                 timestamp=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
                 release=PressRelease(
-                    type="test",
-                    headline="Test Headline",
-                    body="Test body content."
-                )
+                    type="test", headline="Test Headline", body="Test body content."
+                ),
             )
 
             # Generate expected hash
@@ -197,15 +206,19 @@ class TestWebArchive:
                 release=PressRelease(
                     type="test",
                     headline="Dangerous <img src=x onerror=alert(1)> Content",
-                    body="Body with <b>HTML</b> tags"
-                )
+                    body="Body with <b>HTML</b> tags",
+                ),
             )
             html_escaped = archive.generate_press_html(press_with_html, press_id=2)
             # Check that dangerous HTML is escaped
             assert "&lt;img" in html_escaped  # Image tag should be escaped
-            assert "<img src=x" not in html_escaped  # Unescaped image tag should not be present
+            assert (
+                "<img src=x" not in html_escaped
+            )  # Unescaped image tag should not be present
             assert "<b>HTML</b>" not in html_escaped  # Unescaped bold tag
-            assert "&lt;b&gt;HTML&lt;/b&gt;" in html_escaped  # Properly escaped bold tag
+            assert (
+                "&lt;b&gt;HTML&lt;/b&gt;" in html_escaped
+            )  # Properly escaped bold tag
 
     def test_generate_index(self, state, sample_press):
         """Test index page generation."""
@@ -248,14 +261,18 @@ class TestWebArchive:
                 # Use a valid date range (spread across months if needed)
                 month = (i // 30) + 1
                 day = (i % 30) + 1
-                many_press.append(PressRecord(
-                    timestamp=datetime(2024, month, day, 12, 0, tzinfo=timezone.utc),
-                    release=PressRelease(
-                        type="test",
-                        headline=f"Press Release {i+1}",
-                        body=f"Content for release {i+1}"
+                many_press.append(
+                    PressRecord(
+                        timestamp=datetime(
+                            2024, month, day, 12, 0, tzinfo=timezone.utc
+                        ),
+                        release=PressRelease(
+                            type="test",
+                            headline=f"Press Release {i+1}",
+                            body=f"Content for release {i+1}",
+                        ),
                     )
-                ))
+                )
 
             # Generate index with pagination
             html_page1 = archive.generate_index(many_press, page=1, per_page=20)
@@ -304,7 +321,7 @@ class TestWebArchive:
                 timestamp=datetime.now(timezone.utc),
                 type="discovery",
                 subject="gravity",
-                details={"description": "Discovered gravity", "year": "1687"}
+                details={"description": "Discovered gravity", "year": "1687"},
             )
             sample_scholar.memory.record_fact(fact)
             sample_scholar.memory.adjust_feeling("pride", 0.9)
@@ -346,13 +363,17 @@ class TestWebArchive:
                     virtues=["Brilliant"],
                     vices=["Arrogant"],
                     stats=ScholarStats(
-                        talent=7, reliability=7, integrity=7,
-                        theatrics=5, loyalty=6, risk=5
+                        talent=7,
+                        reliability=7,
+                        integrity=7,
+                        theatrics=5,
+                        loyalty=6,
+                        risk=5,
                     ),
                     politics={},
                     catchphrase=f"Phrase {i}",
                     taboos=[],
-                    memory=Memory()
+                    memory=Memory(),
                 )
                 for i in range(5)
             ]
@@ -399,7 +420,7 @@ class TestWebArchive:
             assert (output_dir / "scholars" / f"{sample_scholar.id}.html").exists()
 
             # Verify index content
-            with open(output_dir / "index.html", 'r') as f:
+            with open(output_dir / "index.html", "r") as f:
                 index_html = f.read()
                 for press in sample_press:
                     assert press.release.headline in index_html
@@ -440,15 +461,15 @@ class TestWebArchive:
 
             # Check viewport meta tag
             assert 'name="viewport"' in template
-            assert 'width=device-width' in template
+            assert "width=device-width" in template
 
             # Check media queries
-            assert '@media' in template
-            assert 'max-width: 768px' in template
+            assert "@media" in template
+            assert "max-width: 768px" in template
 
             # Check mobile-friendly classes
-            assert 'container' in template
-            assert 'flex-wrap' in template
+            assert "container" in template
+            assert "flex-wrap" in template
 
     def test_search_functionality(self, state, sample_press):
         """Test client-side search implementation."""
@@ -462,13 +483,13 @@ class TestWebArchive:
             assert 'onkeyup="filterPress()"' in html
 
             # Check search JavaScript
-            assert 'function filterPress()' in html
-            assert 'toLowerCase()' in html
-            assert 'dataset.search' in html
+            assert "function filterPress()" in html
+            assert "toLowerCase()" in html
+            assert "dataset.search" in html
 
             # Check filter buttons JavaScript
-            assert 'function filterByType' in html
-            assert 'dataset.type' in html
+            assert "function filterByType" in html
+            assert "dataset.type" in html
 
     def test_permalink_in_discord_integration(self, state, sample_press):
         """Test that permalinks work with Discord integration."""
@@ -481,7 +502,9 @@ class TestWebArchive:
             # Verify permalink format is Discord-friendly
             assert permalink.startswith("/archive/")
             assert " " not in permalink  # No spaces
-            assert all(c.isalnum() or c in "-/.:" for c in permalink)  # URL-safe characters
+            assert all(
+                c.isalnum() or c in "-/.:" for c in permalink
+            )  # URL-safe characters
 
 
 class TestArchivePage:
@@ -494,7 +517,7 @@ class TestArchivePage:
             title="Test Page",
             content="<p>Content</p>",
             permalink="/archive/test.html",
-            metadata={"type": "test", "date": "2024-01-01"}
+            metadata={"type": "test", "date": "2024-01-01"},
         )
 
         assert page.path == Path("/test/page.html")

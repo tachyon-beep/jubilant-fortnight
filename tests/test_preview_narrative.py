@@ -1,4 +1,5 @@
 """Tests for the narrative preview tooling."""
+
 from __future__ import annotations
 
 from great_work.tools import preview_narrative

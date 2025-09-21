@@ -1,4 +1,5 @@
 """Tests for sideways discovery mechanical effects."""
+
 import os
 from datetime import datetime, timezone
 from typing import List
@@ -59,7 +60,10 @@ class TestSidewaysEffectGeneration:
             result = resolver.resolve(test_rng, prep, "shallow", "think_tank")
 
         # Now check results if we got partial or landmark with sideways
-        if result.sideways_discovery and "coffeehouse gossip" in result.sideways_discovery.lower():
+        if (
+            result.sideways_discovery
+            and "coffeehouse gossip" in result.sideways_discovery.lower()
+        ):
             assert result.sideways_effects is not None
 
             # Check for theory spawn effect
@@ -68,8 +72,11 @@ class TestSidewaysEffectGeneration:
             assert SidewaysEffectType.REPUTATION_CHANGE in effect_types
 
             # Verify theory effect details
-            theory_effect = next(e for e in result.sideways_effects
-                               if e.effect_type == SidewaysEffectType.SPAWN_THEORY)
+            theory_effect = next(
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.SPAWN_THEORY
+            )
             assert theory_effect.payload["confidence"] == "suspect"
             assert "forgotten thesis" in theory_effect.payload["theory"].lower()
 
@@ -96,8 +103,11 @@ class TestSidewaysEffectGeneration:
                 assert SidewaysEffectType.QUEUE_ORDER in effect_types
 
                 # Check conference queue
-                conf_effect = next(e for e in result.sideways_effects
-                                 if e.effect_type == SidewaysEffectType.QUEUE_ORDER)
+                conf_effect = next(
+                    e
+                    for e in result.sideways_effects
+                    if e.effect_type == SidewaysEffectType.QUEUE_ORDER
+                )
                 assert conf_effect.payload["order_type"] == "conference"
 
     def test_field_shallow_generates_opportunity(self):
@@ -123,8 +133,11 @@ class TestSidewaysEffectGeneration:
                 assert SidewaysEffectType.UNLOCK_OPPORTUNITY in effect_types
 
                 # Check opportunity details
-                opp_effect = next(e for e in result.sideways_effects
-                                if e.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY)
+                opp_effect = next(
+                    e
+                    for e in result.sideways_effects
+                    if e.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY
+                )
                 assert opp_effect.payload["type"] == "dignitary_contract"
                 assert "expires_in_days" in opp_effect.payload["details"]
 
@@ -153,14 +166,20 @@ class TestSidewaysEffectGeneration:
             assert "landmark" in result.sideways_discovery.lower()
 
             # Check for major faction shift
-            faction_effects = [e for e in result.sideways_effects
-                             if e.effect_type == SidewaysEffectType.FACTION_SHIFT]
+            faction_effects = [
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.FACTION_SHIFT
+            ]
             if faction_effects:
                 assert faction_effects[0].payload["amount"] >= 3
 
             # Check for reputation boost
-            rep_effects = [e for e in result.sideways_effects
-                         if e.effect_type == SidewaysEffectType.REPUTATION_CHANGE]
+            rep_effects = [
+                e
+                for e in result.sideways_effects
+                if e.effect_type == SidewaysEffectType.REPUTATION_CHANGE
+            ]
             if rep_effects:
                 assert rep_effects[0].payload["amount"] >= 2
 
@@ -376,7 +395,11 @@ class TestIntegrationWithExpeditions:
         # Launch a few expeditions of different types
         for exp_type in ["think_tank", "field"]:
             team = [s.id for s in scholars[:3]]
-            funding = {"Academic": 1} if exp_type == "think_tank" else {"Academic": 1, "Government": 1}
+            funding = (
+                {"Academic": 1}
+                if exp_type == "think_tank"
+                else {"Academic": 1, "Government": 1}
+            )
 
             test_service.launch_expedition(
                 player_id="frank",
@@ -399,6 +422,7 @@ class TestIntegrationWithExpeditions:
         assert player is not None
         assert player.reputation >= -50
         assert player.reputation <= 50
+
 
 def test_schedule_sideways_followups_enqueue_press_and_order(test_service):
     """Scheduling sideways followups should queue press and dispatcher orders."""

@@ -1,4 +1,5 @@
 """Tests for contract upkeep influence sinks."""
+
 import os
 import tempfile
 from pathlib import Path

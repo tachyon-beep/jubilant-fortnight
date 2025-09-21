@@ -1,4 +1,5 @@
 """Tests for multi-layer press generation."""
+
 import os
 import random
 from unittest.mock import Mock
@@ -7,7 +8,12 @@ import pytest
 
 from great_work.models import ExpeditionOutcome, ExpeditionResult, PressRelease, Scholar
 from great_work.multi_press import MultiPressGenerator, PressDepth, PressLayer
-from great_work.press import BulletinContext, DefectionContext, ExpeditionContext, OutcomeContext
+from great_work.press import (
+    BulletinContext,
+    DefectionContext,
+    ExpeditionContext,
+    OutcomeContext,
+)
 
 
 def test_press_depth_determination():
@@ -50,7 +56,7 @@ def test_generate_expedition_layers():
         expedition_type="field",
         objective="Test the limits",
         team=["Scholar1", "Scholar2"],
-        funding=["Academic"]
+        funding=["Academic"],
     )
 
     result = ExpeditionResult(
@@ -59,7 +65,7 @@ def test_generate_expedition_layers():
         final_score=95,
         outcome=ExpeditionOutcome.SUCCESS,
         sideways_discovery="Unexpected finding",
-        failure_detail=None
+        failure_detail=None,
     )
 
     outcome_ctx = OutcomeContext(
@@ -68,7 +74,7 @@ def test_generate_expedition_layers():
         expedition_type="field",
         result=result,
         reputation_change=5,
-        reactions=["Amazing!", "Incredible!"]
+        reactions=["Amazing!", "Incredible!"],
     )
 
     # Create mock scholars
@@ -112,7 +118,7 @@ def test_generate_defection_layers():
         scholar="Dr. Smith",
         outcome="accepted",
         new_faction="Industry",
-        probability=0.75
+        probability=0.75,
     )
 
     scholar = Mock(spec=Scholar)
@@ -126,11 +132,7 @@ def test_generate_defection_layers():
 
     # Generate layers
     layers = generator.generate_defection_layers(
-        defection_ctx,
-        scholar,
-        "Academic",
-        other_scholars,
-        PressDepth.EXTENSIVE
+        defection_ctx, scholar, "Academic", other_scholars, PressDepth.EXTENSIVE
     )
 
     # Should have main notice plus reactions and statements
@@ -206,7 +208,7 @@ def test_generate_conference_layers():
         outcome="validated",
         participants=["Alice", "Bob", "Charlie"],
         reputation_changes={"Alice": 5, "Bob": -3},
-        depth=PressDepth.EXTENSIVE
+        depth=PressDepth.EXTENSIVE,
     )
 
     # Should have opening bulletin
@@ -227,10 +229,7 @@ def test_reaction_quote_generation():
     generator = MultiPressGenerator()
 
     quote = generator._generate_reaction_quote(
-        "Dr. Jones",
-        "dark matter",
-        "success",
-        "enthusiasm"
+        "Dr. Jones", "dark matter", "success", "enthusiasm"
     )
     assert isinstance(quote, str)
     assert len(quote) > 0
@@ -238,10 +237,7 @@ def test_reaction_quote_generation():
     # Test different emotions
     for emotion in ["skepticism", "concern", "admiration", "curiosity"]:
         quote = generator._generate_reaction_quote(
-            "Dr. Smith",
-            "test objective",
-            "failure",
-            emotion
+            "Dr. Smith", "test objective", "failure", emotion
         )
         assert isinstance(quote, str)
 
@@ -255,22 +251,18 @@ def test_apply_layers():
         delay_minutes=0,
         type="test",
         generator=lambda ctx: PressRelease(
-            type="test",
-            headline="Immediate",
-            body="Immediate release"
+            type="test", headline="Immediate", body="Immediate release"
         ),
-        context={}
+        context={},
     )
 
     delayed_layer = PressLayer(
         delay_minutes=30,
         type="test",
         generator=lambda ctx: PressRelease(
-            type="test",
-            headline="Delayed",
-            body="Delayed release"
+            type="test", headline="Delayed", body="Delayed release"
         ),
-        context={}
+        context={},
     )
 
     layers = [immediate_layer, delayed_layer]
@@ -300,7 +292,9 @@ def test_find_colleagues():
         mock_scholar.name = f"Scholar{i}"
         all_scholars.append(mock_scholar)
 
-    colleagues = generator._find_colleagues(main_scholar, all_scholars, max_colleagues=2)
+    colleagues = generator._find_colleagues(
+        main_scholar, all_scholars, max_colleagues=2
+    )
 
     # Should not include the main scholar
     assert main_scholar not in colleagues
@@ -365,7 +359,7 @@ def test_generate_analysis_layer():
         expedition_type="great_project",
         objective="unified theory",
         team=["Team"],
-        funding=["Funding"]
+        funding=["Funding"],
     )
 
     result = ExpeditionResult(
@@ -374,7 +368,7 @@ def test_generate_analysis_layer():
         final_score=100,
         outcome=ExpeditionOutcome.SUCCESS,
         sideways_discovery=None,
-        failure_detail=None
+        failure_detail=None,
     )
 
     outcome_ctx = OutcomeContext(
@@ -383,7 +377,7 @@ def test_generate_analysis_layer():
         expedition_type="great_project",
         result=result,
         reputation_change=15,
-        reactions=[]
+        reactions=[],
     )
 
     layer = generator._generate_analysis_layer(exp_ctx, outcome_ctx, 120)
@@ -403,10 +397,7 @@ def test_faction_statement_generation():
 
     # Test regret statement
     regret_layer = generator._generate_faction_statement(
-        "Academic",
-        "Dr. Smith",
-        "regret",
-        120
+        "Academic", "Dr. Smith", "regret", 120
     )
 
     assert regret_layer.type == "faction_statement"
@@ -417,10 +408,7 @@ def test_faction_statement_generation():
 
     # Test welcome statement
     welcome_layer = generator._generate_faction_statement(
-        "Industry",
-        "Dr. Smith",
-        "welcome",
-        150
+        "Industry", "Dr. Smith", "welcome", 150
     )
 
     release = welcome_layer.generator(welcome_layer.context)
@@ -443,9 +431,14 @@ def test_multi_press_includes_tone_seed(monkeypatch):
         phase="completion",
     )
 
-    tone_seeds = [layer.tone_seed for layer in layers if layer.type in {"mentorship_update", "academic_gossip"}]
+    tone_seeds = [
+        layer.tone_seed
+        for layer in layers
+        if layer.type in {"mentorship_update", "academic_gossip"}
+    ]
     assert tone_seeds
     assert all(seed is not None for seed in tone_seeds)
+
 
 def test_generate_recruitment_layers_uses_yaml_templates():
     """Recruitment coverage should pick headlines and callouts from YAML templates."""
@@ -473,16 +466,26 @@ def test_generate_recruitment_layers_uses_yaml_templates():
         observers=observers,
     )
 
-    digest_layer = next(layer for layer in layers if layer.type == "recruitment_followup")
-    briefing_layer = next(layer for layer in layers if layer.type == "recruitment_brief")
+    digest_layer = next(
+        layer for layer in layers if layer.type == "recruitment_followup"
+    )
+    briefing_layer = next(
+        layer for layer in layers if layer.type == "recruitment_brief"
+    )
 
-    success_headlines = generator._recruitment_templates["recruitment"]["digest"]["success"]["headlines"]
+    success_headlines = generator._recruitment_templates["recruitment"]["digest"][
+        "success"
+    ]["headlines"]
     assert digest_layer.context["headline"] in success_headlines
     assert digest_layer.context["metadata"]["callouts"]
-    assert all(isinstance(item, str) for item in digest_layer.context["metadata"]["callouts"])
+    assert all(
+        isinstance(item, str) for item in digest_layer.context["metadata"]["callouts"]
+    )
 
     assert briefing_layer.context["metadata"]["callouts"]
-    assert all(isinstance(item, str) for item in briefing_layer.context["metadata"]["callouts"])
+    assert all(
+        isinstance(item, str) for item in briefing_layer.context["metadata"]["callouts"]
+    )
 
 
 def test_generate_table_talk_layers_produces_roundup_callouts():
@@ -506,9 +509,13 @@ def test_generate_table_talk_layers_produces_roundup_callouts():
     )
 
     digest_layer = next(layer for layer in layers if layer.type == "table_talk_digest")
-    roundup_layer = next(layer for layer in layers if layer.type == "table_talk_roundup")
+    roundup_layer = next(
+        layer for layer in layers if layer.type == "table_talk_roundup"
+    )
 
-    digest_headlines = generator._table_talk_templates["table_talk"]["digest"]["headlines"]
+    digest_headlines = generator._table_talk_templates["table_talk"]["digest"][
+        "headlines"
+    ]
     assert digest_layer.context["headline"] in digest_headlines
 
     roundup_metadata = roundup_layer.context["metadata"]

@@ -1,4 +1,5 @@
 """Recommend KPI alert thresholds based on recorded telemetry data."""
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,11 @@ def recommend_thresholds(
                 FROM metrics
                 WHERE metric_type = ? AND name = ? AND timestamp >= ?
                 """,
-                (MetricType.GAME_PROGRESSION.value, "manifesto_generated", start_manifesto),
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "manifesto_generated",
+                    start_manifesto,
+                ),
             )
         )
 
@@ -97,7 +102,11 @@ def recommend_thresholds(
                 FROM metrics
                 WHERE metric_type = ? AND name = ? AND timestamp >= ?
                 """,
-                (MetricType.GAME_PROGRESSION.value, "nickname_adopted", start_manifesto),
+                (
+                    MetricType.GAME_PROGRESSION.value,
+                    "nickname_adopted",
+                    start_manifesto,
+                ),
             )
         )
         press_share_rows = list(
@@ -122,7 +131,9 @@ def recommend_thresholds(
         active_recommendation = max(1.0, _percent_floor(average_players, 0.7))
         active_recommendation = min(active_recommendation, float(floor_players))
 
-    active_player_total = len({player for players in daily_players.values() for player in players})
+    active_player_total = len(
+        {player for players in daily_players.values() for player in players}
+    )
     manifesto_players = {row[0] for row in manifesto_rows if row and row[0]}
 
     manifesto_recommendation = 0.0
@@ -130,18 +141,24 @@ def recommend_thresholds(
     if active_player_total:
         adoption_ratio = len(manifesto_players) / active_player_total
         manifesto_recommendation = round(_percent_floor(adoption_ratio, 0.8), 2)
-        nickname_ratio = len({row for row in nickname_rows if row and row[0]}) / active_player_total
+        nickname_ratio = (
+            len({row for row in nickname_rows if row and row[0]}) / active_player_total
+        )
         nickname_recommendation = round(_percent_floor(nickname_ratio, 0.8), 2)
 
     archive_events = len(archive_rows)
     if archive_events:
-        archive_recommendation = max(1.0, _percent_floor(archive_events / archive_days, 0.5))
+        archive_recommendation = max(
+            1.0, _percent_floor(archive_events / archive_days, 0.5)
+        )
     else:
         archive_recommendation = 0.0
 
     press_share_events = len(press_share_rows)
     if press_share_events:
-        press_share_recommendation = max(1.0, round(_percent_floor(press_share_events / archive_days, 0.6), 2))
+        press_share_recommendation = max(
+            1.0, round(_percent_floor(press_share_events / archive_days, 0.6), 2)
+        )
     else:
         press_share_recommendation = 0.0
 

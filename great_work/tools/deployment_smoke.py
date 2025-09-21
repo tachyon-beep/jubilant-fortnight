@@ -1,4 +1,5 @@
 """Deployment smoke checks for The Great Work."""
+
 from __future__ import annotations
 
 import argparse
@@ -37,7 +38,9 @@ def run_checks(env: Mapping[str, str]) -> List[CheckResult]:
             results.append(_status("error", key, "missing"))
 
     if any(env.get(var) for var in CHANNEL_VARS):
-        results.append(_status("ok", "discord_channels", "at least one channel configured"))
+        results.append(
+            _status("ok", "discord_channels", "at least one channel configured")
+        )
     else:
         results.append(
             _status(
@@ -52,22 +55,47 @@ def run_checks(env: Mapping[str, str]) -> List[CheckResult]:
         if env.get("GREAT_WORK_GUARDIAN_URL"):
             results.append(_status("ok", "guardian_url", "sidecar endpoint configured"))
         else:
-            severity = "warning" if env.get("GREAT_WORK_MODERATION_STRICT", "true").lower() in {"false", "0", "off"} else "error"
-            detail = "Guardian sidecar URL missing; prefiler-only mode" if severity == "warning" else "Guardian sidecar URL missing while strict mode enabled"
+            severity = (
+                "warning"
+                if env.get("GREAT_WORK_MODERATION_STRICT", "true").lower()
+                in {"false", "0", "off"}
+                else "error"
+            )
+            detail = (
+                "Guardian sidecar URL missing; prefiler-only mode"
+                if severity == "warning"
+                else "Guardian sidecar URL missing while strict mode enabled"
+            )
             results.append(_status(severity, "guardian_url", detail))
     elif guardian_mode == "local":
         if env.get("GREAT_WORK_GUARDIAN_LOCAL_PATH"):
-            results.append(_status("ok", "guardian_local_path", "local weights configured"))
+            results.append(
+                _status("ok", "guardian_local_path", "local weights configured")
+            )
         else:
-            results.append(_status("warning", "guardian_local_path", "local mode without path; default weights assumed"))
+            results.append(
+                _status(
+                    "warning",
+                    "guardian_local_path",
+                    "local mode without path; default weights assumed",
+                )
+            )
 
     webhook_urls = env.get("GREAT_WORK_ALERT_WEBHOOK_URLS", "").strip()
     webhook_url = env.get("GREAT_WORK_ALERT_WEBHOOK_URL", "").strip()
     email_to = env.get("GREAT_WORK_ALERT_EMAIL_TO", "").strip()
     if webhook_urls or webhook_url or email_to:
-        results.append(_status("ok", "alert_routing", "alerts fan out to at least one destination"))
+        results.append(
+            _status("ok", "alert_routing", "alerts fan out to at least one destination")
+        )
     else:
-        results.append(_status("warning", "alert_routing", "no webhook/email configured; alerts will log locally only"))
+        results.append(
+            _status(
+                "warning",
+                "alert_routing",
+                "no webhook/email configured; alerts will log locally only",
+            )
+        )
 
     return results
 
@@ -80,8 +108,12 @@ def _print_table(results: Iterable[CheckResult]) -> None:
         print(f"{result.name:<32} {result.status:<8} {result.detail}")
 
 
-def main(argv: Iterable[str] | None = None) -> int:  # pragma: no cover - CLI entry point
-    parser = argparse.ArgumentParser(description="Run deployment smoke checks for The Great Work.")
+def main(
+    argv: Iterable[str] | None = None,
+) -> int:  # pragma: no cover - CLI entry point
+    parser = argparse.ArgumentParser(
+        description="Run deployment smoke checks for The Great Work."
+    )
     parser.parse_args(argv)
     results = run_checks(os.environ)
     _print_table(results)
@@ -92,4 +124,3 @@ def main(argv: Iterable[str] | None = None) -> int:  # pragma: no cover - CLI en
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

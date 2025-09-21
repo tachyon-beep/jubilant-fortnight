@@ -1,4 +1,5 @@
 """Seed the database with base scholars."""
+
 from __future__ import annotations
 
 import argparse

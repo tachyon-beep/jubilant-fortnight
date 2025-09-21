@@ -1,4 +1,5 @@
 """Press release generation templates."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,13 +22,13 @@ class BulletinContext:
 async def academic_bulletin_async(
     ctx: BulletinContext,
     scholar_name: Optional[str] = None,
-    scholar_traits: Optional[Dict[str, Any]] = None
+    scholar_traits: Optional[Dict[str, Any]] = None,
 ) -> PressRelease:
     """Generate academic bulletin with optional LLM enhancement."""
     headline = f"Academic Bulletin No. {ctx.bulletin_number}"
     support = ", ".join(ctx.supporters) if ctx.supporters else "None"
     base_body = (
-        f"{ctx.player} submits \"{ctx.theory}\" with {ctx.confidence} confidence. "
+        f'{ctx.player} submits "{ctx.theory}" with {ctx.confidence} confidence. '
         f"Supporting scholars: {support}. Counter-claims invited before {ctx.deadline}."
     )
 
@@ -36,7 +37,7 @@ async def academic_bulletin_async(
         "type": "academic_bulletin",
         "player": ctx.player,
         "theory": ctx.theory,
-        "confidence": ctx.confidence
+        "confidence": ctx.confidence,
     }
 
     try:
@@ -53,7 +54,7 @@ def academic_bulletin(ctx: BulletinContext) -> PressRelease:
     headline = f"Academic Bulletin No. {ctx.bulletin_number}"
     support = ", ".join(ctx.supporters) if ctx.supporters else "None"
     body = (
-        f"{ctx.player} submits \"{ctx.theory}\" with {ctx.confidence} confidence. "
+        f'{ctx.player} submits "{ctx.theory}" with {ctx.confidence} confidence. '
         f"Supporting scholars: {support}. Counter-claims invited before {ctx.deadline}."
     )
     return PressRelease(type="academic_bulletin", headline=headline, body=body)
@@ -75,7 +76,7 @@ class ExpeditionContext:
 async def research_manifesto_async(
     ctx: ExpeditionContext,
     scholar_name: Optional[str] = None,
-    scholar_traits: Optional[Dict[str, Any]] = None
+    scholar_traits: Optional[Dict[str, Any]] = None,
 ) -> PressRelease:
     """Generate research manifesto with optional LLM enhancement."""
     team = ", ".join(ctx.team)
@@ -92,7 +93,7 @@ async def research_manifesto_async(
         "player": ctx.player,
         "code": ctx.code,
         "objective": ctx.objective,
-        "team": team
+        "team": team,
     }
 
     try:
@@ -136,10 +137,12 @@ class OutcomeContext:
 async def discovery_report_async(
     ctx: OutcomeContext,
     scholar_name: Optional[str] = None,
-    scholar_traits: Optional[Dict[str, Any]] = None
+    scholar_traits: Optional[Dict[str, Any]] = None,
 ) -> PressRelease:
     """Generate discovery report with optional LLM enhancement."""
-    headline = f"Discovery Report: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    headline = (
+        f"Discovery Report: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    )
     reaction_text = " | ".join(ctx.reactions)
     base_body = (
         f"Outcome: {ctx.result.outcome.value}. "
@@ -159,7 +162,7 @@ async def discovery_report_async(
         "player": ctx.player,
         "code": ctx.code,
         "outcome": ctx.result.outcome.value,
-        "reputation_change": ctx.reputation_change
+        "reputation_change": ctx.reputation_change,
     }
 
     try:
@@ -178,7 +181,9 @@ async def discovery_report_async(
 
 
 def discovery_report(ctx: OutcomeContext) -> PressRelease:
-    headline = f"Discovery Report: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    headline = (
+        f"Discovery Report: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    )
     reaction_text = " | ".join(ctx.reactions)
     body = (
         f"Outcome: {ctx.result.outcome.value}. "
@@ -200,7 +205,9 @@ def discovery_report(ctx: OutcomeContext) -> PressRelease:
 
 
 def retraction_notice(ctx: OutcomeContext) -> PressRelease:
-    headline = f"Retraction Notice: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    headline = (
+        f"Retraction Notice: Expedition {ctx.code} ({ctx.expedition_type.title()})"
+    )
     reaction_text = " | ".join(ctx.reactions)
     body = (
         f"Outcome: {ctx.result.outcome.value}. Roll {ctx.result.roll} + {ctx.result.modifier} = {ctx.result.final_score}. "
@@ -225,7 +232,7 @@ class GossipContext:
 
 def academic_gossip(ctx: GossipContext) -> PressRelease:
     headline = f"Academic Gossip — {ctx.scholar}"
-    body = f"{ctx.scholar}: \"{ctx.quote}\" (Context: {ctx.trigger})."
+    body = f'{ctx.scholar}: "{ctx.quote}" (Context: {ctx.trigger}).'
     return PressRelease(type="academic_gossip", headline=headline, body=body)
 
 
@@ -302,7 +309,9 @@ def seasonal_commitment_complete(ctx: SeasonalCommitmentContext) -> PressRelease
     )
     if ctx.debt:
         body += f" Remaining debt {ctx.debt} will carry forward."
-    return PressRelease(type="seasonal_commitment_complete", headline=headline, body=body)
+    return PressRelease(
+        type="seasonal_commitment_complete", headline=headline, body=body
+    )
 
 
 @dataclass
@@ -322,7 +331,9 @@ def faction_project_update(ctx: FactionProjectUpdateContext) -> PressRelease:
         f"Progress: {ctx.progress:.2f}/{ctx.target:.2f} ({progress_pct:.1f}%).",
     ]
     if ctx.contributions:
-        top = sorted(ctx.contributions, key=lambda entry: entry["contribution"], reverse=True)[:3]
+        top = sorted(
+            ctx.contributions, key=lambda entry: entry["contribution"], reverse=True
+        )[:3]
         contrib_lines = [
             f"{entry['player']}: {entry['contribution']:.2f} ({entry['relationship_modifier']:+.0%})"
             for entry in top
@@ -355,12 +366,14 @@ def faction_investment(ctx: FactionInvestmentContext) -> PressRelease:
     headline = f"Faction Investment — {ctx.player}"
     body_parts = [
         f"{ctx.player} invests {ctx.amount} influence with {ctx.faction}.",
-        f"Lifetime contributions now total {ctx.total} influence."
+        f"Lifetime contributions now total {ctx.total} influence.",
     ]
     if ctx.program:
         body_parts.append(f"Program focus: {ctx.program}.")
     if ctx.relationship_bonus:
-        body_parts.append(f"Scholarly goodwill improves by {ctx.relationship_bonus:+.1f}.")
+        body_parts.append(
+            f"Scholarly goodwill improves by {ctx.relationship_bonus:+.1f}."
+        )
     body = " ".join(body_parts)
     return PressRelease(type="faction_investment", headline=headline, body=body)
 
@@ -385,7 +398,9 @@ def archive_endowment(ctx: ArchiveEndowmentContext) -> PressRelease:
     if ctx.paid_debt:
         body_parts.append(f"Symposium debts reduced by {ctx.paid_debt} influence.")
     if ctx.reputation_delta:
-        body_parts.append(f"Reputation shifts by {ctx.reputation_delta:+d} in recognition.")
+        body_parts.append(
+            f"Reputation shifts by {ctx.reputation_delta:+d} in recognition."
+        )
     body = " ".join(body_parts)
     return PressRelease(type="archive_endowment", headline=headline, body=body)
 

@@ -1,4 +1,5 @@
 """Test conference system implementation."""
+
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,10 +48,15 @@ def test_conference_flow():
             opposition=opposition,
         )
         assert conf_press is not None
-        assert "conference" in conf_press.body.lower() or "debate" in conf_press.body.lower()
+        assert (
+            "conference" in conf_press.body.lower()
+            or "debate" in conf_press.body.lower()
+        )
 
         # Check pending conferences
-        orders = service.state.list_orders(order_type="conference_resolution", status="pending")
+        orders = service.state.list_orders(
+            order_type="conference_resolution", status="pending"
+        )
         assert len(orders) == 1
         order = orders[0]
         assert order["actor_id"] == player_id

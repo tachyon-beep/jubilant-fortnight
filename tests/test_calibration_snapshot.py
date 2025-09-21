@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from great_work.analytics import collect_calibration_snapshot, write_calibration_snapshot
+from great_work.analytics import (
+    collect_calibration_snapshot,
+    write_calibration_snapshot,
+)
 from great_work.config import get_settings
 from great_work.models import Player
 from great_work.service import GameService

@@ -1,4 +1,5 @@
 """Tests for recruitment odds preview and calculations."""
+
 import os
 import tempfile
 from pathlib import Path
@@ -105,7 +106,9 @@ def test_recruitment_relationship_bonus_applies_to_odds() -> None:
         assert abs(academia["chance"] - expected) < 1e-9
 
 
-def test_recruitment_attempt_uses_relationship_bonus(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_recruitment_attempt_uses_relationship_bonus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     os.environ["LLM_MODE"] = "mock"
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"

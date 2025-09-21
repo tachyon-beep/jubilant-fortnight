@@ -1,4 +1,5 @@
 """Tests for telemetry and metrics tracking."""
+
 import json
 import tempfile
 import time
@@ -28,7 +29,7 @@ def test_metric_event_creation():
         name="test_command",
         value=1.0,
         tags={"player": "test"},
-        metadata={"duration": 100}
+        metadata={"duration": 100},
     )
 
     assert event.metric_type == MetricType.COMMAND_USAGE
@@ -81,7 +82,7 @@ def test_track_feature_usage():
         collector.track_feature_usage(
             feature_name="conference",
             player_id="player2",
-            details={"confidence": "certain"}
+            details={"confidence": "certain"},
         )
 
         assert len(collector._metrics_buffer) == 1
@@ -100,7 +101,7 @@ def test_track_game_progression():
             event_name="expedition_success",
             value=3.0,
             player_id="player3",
-            details={"type": "great_project"}
+            details={"type": "great_project"},
         )
 
         event = collector._metrics_buffer[0]
@@ -118,7 +119,7 @@ def test_track_error():
             error_type="ValidationError",
             command="expedition",
             player_id="player4",
-            error_details="Invalid expedition type"
+            error_details="Invalid expedition type",
         )
 
         event = collector._metrics_buffer[0]
@@ -135,7 +136,7 @@ def test_track_performance():
         collector.track_performance(
             operation="database_query",
             duration_ms=45.2,
-            tags={"query": "select_scholars"}
+            tags={"query": "select_scholars"},
         )
 
         event = collector._metrics_buffer[0]
@@ -153,7 +154,7 @@ def test_track_press_layer_and_summary():
             layer_type="academic_gossip",
             event_type="expedition",
             delay_minutes=45.0,
-            persona="Scholar"
+            persona="Scholar",
         )
         collector.track_press_layer(
             layer_type="academic_gossip",
@@ -199,7 +200,9 @@ def test_track_order_snapshot_and_summary():
             pending_count=3,
             oldest_pending_seconds=3600.0,
         )
-        assert alerts["pending_alert"] is None  # enqueue alone does not trigger admin notifier logic
+        assert (
+            alerts["pending_alert"] is None
+        )  # enqueue alone does not trigger admin notifier logic
         collector.track_order_snapshot(
             order_type="mentorship_activation",
             event="update:completed",
@@ -252,9 +255,13 @@ def test_get_order_backlog_events_filters_and_limits():
         )
         collector.flush()
 
-        records = collector.get_order_backlog_events(order_type="mentorship_activation", hours=1, limit=5)
+        records = collector.get_order_backlog_events(
+            order_type="mentorship_activation", hours=1, limit=5
+        )
         assert records
-        assert all(record["order_type"] == "mentorship_activation" for record in records)
+        assert all(
+            record["order_type"] == "mentorship_activation" for record in records
+        )
         assert records[0]["event"] == "update:completed"
 
         limited = collector.get_order_backlog_events(hours=1, limit=2)
@@ -264,14 +271,18 @@ def test_get_order_backlog_events_filters_and_limits():
         assert all(record["pending"] >= 3 for record in high_pending)
 
         aged = collector.get_order_backlog_events(hours=1, min_age_seconds=3500)
-        assert aged and all((record["oldest_pending_seconds"] or 0) >= 3500 for record in aged)
+        assert aged and all(
+            (record["oldest_pending_seconds"] or 0) >= 3500 for record in aged
+        )
 
         completed = collector.get_order_backlog_events(
             hours=1,
             event="update:completed",
             order_type="mentorship_activation",
         )
-        assert completed and all(record["event"] == "update:completed" for record in completed)
+        assert completed and all(
+            record["event"] == "update:completed" for record in completed
+        )
 
 
 def test_track_moderation_event_summary(tmp_path):
@@ -304,7 +315,9 @@ def test_track_moderation_event_summary(tmp_path):
 
 def test_track_press_mix(tmp_path):
     collector = TelemetryCollector(Path(tmp_path) / "press.db")
-    collector.track_press_mix(press_types=["mentorship", "mentorship", "symposium"], source="digest")
+    collector.track_press_mix(
+        press_types=["mentorship", "mentorship", "symposium"], source="digest"
+    )
     collector.flush()
     summary = collector.get_press_cadence_summary(hours=1)
     entries = [entry for entry in summary if entry.get("event_type") == "press_mix"]
@@ -491,10 +504,7 @@ def test_flush_metrics():
         # Add some metrics
         for i in range(5):
             collector.track_command(
-                f"command_{i}",
-                f"player_{i}",
-                "guild1",
-                success=True
+                f"command_{i}", f"player_{i}", "guild1", success=True
             )
 
         assert len(collector._metrics_buffer) == 5
@@ -647,7 +657,7 @@ def test_product_kpi_history():
                         1.0,
                         json.dumps({"player_id": f"player_{day_offset}"}),
                         json.dumps({}),
-                        ),
+                    ),
                 )
                 conn.execute(
                     """
@@ -759,7 +769,9 @@ def test_recommend_kpi_thresholds(tmp_path):
         archive_days=14,
     )
 
-    assert recommendations["GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS"] == pytest.approx(1.87, rel=0.01)
+    assert recommendations["GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS"] == pytest.approx(
+        1.87, rel=0.01
+    )
     assert recommendations["GREAT_WORK_ALERT_MIN_MANIFESTO_RATE"] == 0.32
     assert recommendations["GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS"] == 1.0
     assert "GREAT_WORK_ALERT_MIN_NICKNAME_RATE" in recommendations
@@ -814,11 +826,7 @@ def test_auto_flush():
 
         # Add enough metrics to trigger auto-flush (100+)
         for i in range(101):
-            collector.record(
-                MetricType.COMMAND_USAGE,
-                f"cmd_{i}",
-                1.0
-            )
+            collector.record(MetricType.COMMAND_USAGE, f"cmd_{i}", 1.0)
 
         # Should have auto-flushed
         assert len(collector._metrics_buffer) < 100
@@ -865,6 +873,7 @@ def test_channel_usage_handles_missing_channel():
 
         usage = collector.get_channel_usage()
         assert usage["unknown"]["usage_count"] == 1
+
 
 def test_get_feature_engagement():
     """Test retrieving feature engagement stats."""
@@ -928,6 +937,7 @@ def test_track_duration_context():
     """Test track_duration context manager."""
     with tempfile.TemporaryDirectory() as tmpdir:
         import great_work.telemetry
+
         # Set up a test collector
         great_work.telemetry._telemetry = TelemetryCollector(Path(tmpdir) / "test.db")
 
@@ -989,7 +999,12 @@ def test_economy_metrics_summary():
             "archive_endowment",
             4.0,
             player_id="p1",
-            details={"faction": "academia", "program": "archive", "paid_debt": 2.0, "reputation_gain": 1.0},
+            details={
+                "faction": "academia",
+                "program": "archive",
+                "paid_debt": 2.0,
+                "reputation_gain": 1.0,
+            },
         )
         collector.flush()
 
@@ -1137,7 +1152,11 @@ def test_health_evaluation_thresholds(monkeypatch):
         assert reprisal_alert["status"] == "alert"
 
         investment_alert = next(
-            (check for check in checks if check["metric"] == "investment_concentration"),
+            (
+                check
+                for check in checks
+                if check["metric"] == "investment_concentration"
+            ),
             None,
         )
         assert investment_alert is not None
@@ -1173,6 +1192,7 @@ def test_cleanup_old_data():
 def test_singleton_pattern():
     """Test singleton pattern for telemetry collector."""
     import great_work.telemetry
+
     # Reset singleton
     great_work.telemetry._telemetry = None
 

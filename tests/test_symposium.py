@@ -1,4 +1,5 @@
 """Test symposium voting system implementation."""
+
 import os
 import tempfile
 from dataclasses import replace
@@ -32,14 +33,15 @@ def build_service(
         symposium_escalation_hours=escalation,
         symposium_max_backlog=max_backlog or settings.symposium_max_backlog,
         symposium_max_per_player=max_per_player or settings.symposium_max_per_player,
-        symposium_proposal_expiry_days=expiry_days or settings.symposium_proposal_expiry_days,
+        symposium_proposal_expiry_days=expiry_days
+        or settings.symposium_proposal_expiry_days,
         symposium_pledge_base=pledge_base or settings.symposium_pledge_base,
-        symposium_debt_reprisal_threshold=
-        debt_threshold or settings.symposium_debt_reprisal_threshold,
-        symposium_debt_reprisal_penalty=
-        debt_penalty or settings.symposium_debt_reprisal_penalty,
-        symposium_debt_reprisal_cooldown_days=
-        debt_cooldown_days or settings.symposium_debt_reprisal_cooldown_days,
+        symposium_debt_reprisal_threshold=debt_threshold
+        or settings.symposium_debt_reprisal_threshold,
+        symposium_debt_reprisal_penalty=debt_penalty
+        or settings.symposium_debt_reprisal_penalty,
+        symposium_debt_reprisal_cooldown_days=debt_cooldown_days
+        or settings.symposium_debt_reprisal_cooldown_days,
     )
     return GameService(db_path=tmp_path, settings=custom_settings)
 
@@ -61,13 +63,15 @@ def test_symposium_flow():
 
         # Start a symposium
         press = service.start_symposium(
-            topic="Test Topic",
-            description="Should we test our code before deploying?"
+            topic="Test Topic", description="Should we test our code before deploying?"
         )
         assert press is not None
         assert "symposium" in press.headline.lower()
         assert "[MOCK]" in press.body
-        assert "llm" in press.metadata and press.metadata["llm"]["persona"] == "The Academy"
+        assert (
+            "llm" in press.metadata
+            and press.metadata["llm"]["persona"] == "The Academy"
+        )
         pledge_meta = press.metadata.get("pledge")
         assert pledge_meta is not None
         assert pledge_meta["base"] == service.settings.symposium_pledge_base
@@ -168,7 +172,9 @@ def test_symposium_reminders_for_non_voters():
 
         releases = service.advance_digest()
         reminder = next(rel for rel in releases if rel.type == "symposium_reminder")
-        assert reminder.metadata["pledge_amount"] == service.settings.symposium_pledge_base
+        assert (
+            reminder.metadata["pledge_amount"] == service.settings.symposium_pledge_base
+        )
 
         # After voting, reminders should be cleared
         service.vote_symposium("p1", 1)
@@ -226,11 +232,15 @@ def test_symposium_reprimand_followup():
         result = service._settle_symposium_debts(player, now)
         assert result["reprisals"], "Expected reprisal events"
 
-        orders = service.admin_list_orders(order_type="followup:symposium_reprimand", limit=5)
+        orders = service.admin_list_orders(
+            order_type="followup:symposium_reprimand", limit=5
+        )
         assert orders, "Expected symposium reprimand follow-up order"
 
         releases = service._resolve_followups()
-        reprimand_press = next((press for press in releases if press.type == "symposium_reprimand"), None)
+        reprimand_press = next(
+            (press for press in releases if press.type == "symposium_reprimand"), None
+        )
         assert reprimand_press is not None
         assert "reprisal" in reprimand_press.body.lower()
 
@@ -276,7 +286,9 @@ def test_symposium_penalty_and_grace():
         assert first_penalty["status"] == "waived"
         assert first_penalty["deducted"] == 0
 
-        pledge_record = service.state.get_symposium_pledge(topic_id=topic_id, player_id="p1")
+        pledge_record = service.state.get_symposium_pledge(
+            topic_id=topic_id, player_id="p1"
+        )
         assert pledge_record["status"] == "waived"
 
         # Reduce influence to force debt on next miss
@@ -297,7 +309,9 @@ def test_symposium_penalty_and_grace():
 
         updated_player = service.state.get_player("p1")
         assert updated_player.influence["academia"] == 0
-        pledge_record_two = service.state.get_symposium_pledge(topic_id=topic_id_two, player_id="p1")
+        pledge_record_two = service.state.get_symposium_pledge(
+            topic_id=topic_id_two, player_id="p1"
+        )
         assert pledge_record_two["status"] == "debt"
 
         # Pay off debt before Week Three
@@ -329,7 +343,9 @@ def test_symposium_pledge_status_summary():
         service.resolve_symposium()
 
         status_after_first = service.symposium_pledge_status("p1")
-        assert any(entry["status"] == "waived" for entry in status_after_first["history"])
+        assert any(
+            entry["status"] == "waived" for entry in status_after_first["history"]
+        )
 
         # Second symposium to trigger debt
         player_one = service.state.get_player("p1")
@@ -396,12 +412,16 @@ def test_symposium_proposal_scoring_prefers_fresh_player():
         service.resolve_symposium()
 
         # New proposals from both players
-        service.submit_symposium_proposal("p1", "Repeat Topic", "Should be deprioritised")
+        service.submit_symposium_proposal(
+            "p1", "Repeat Topic", "Should be deprioritised"
+        )
         service.submit_symposium_proposal("p2", "Fresh Topic", "New voice")
 
         next_announcement = service.start_symposium()
         assert next_announcement.metadata["proposal_id"] is not None
-        selected = service.state.get_symposium_proposal(next_announcement.metadata["proposal_id"])
+        selected = service.state.get_symposium_proposal(
+            next_announcement.metadata["proposal_id"]
+        )
     assert selected["player_id"] == "p2"
 
 
@@ -535,15 +555,22 @@ def test_symposium_status_reports_debt_details():
         # Third symposium triggers reprisal (no influence to pay)
         service.start_symposium(topic="Week Three", description="Reprisal")
         status = service.symposium_pledge_status("p1")
-        assert status["outstanding_debt"] >= service.settings.symposium_debt_reprisal_threshold
+        assert (
+            status["outstanding_debt"]
+            >= service.settings.symposium_debt_reprisal_threshold
+        )
         updated_player = service.state.get_player("p1")
         assert updated_player.reputation == initial_reputation - 1
-        debt_record = service.state.get_symposium_debt_record(player_id="p1", faction="academia")
+        debt_record = service.state.get_symposium_debt_record(
+            player_id="p1", faction="academia"
+        )
         if debt_record:
             assert debt_record["reprisal_level"] >= 1
 
 
-def self_state_orders_for_topic(service: GameService, order_type: str) -> List[Dict[str, object]]:
+def self_state_orders_for_topic(
+    service: GameService, order_type: str
+) -> List[Dict[str, object]]:
     now = datetime.now(timezone.utc) + timedelta(days=1)
     # Borrow GameState helper to pull pending orders
     orders = service.state.fetch_due_orders(order_type, now)

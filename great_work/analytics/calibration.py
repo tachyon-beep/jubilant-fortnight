@@ -1,4 +1,5 @@
 """Calibration snapshot helpers for telemetry tuning and economy balance."""
+
 from __future__ import annotations
 
 import json
@@ -103,10 +104,14 @@ def write_calibration_snapshot(
 
     timestamp = current_time.strftime("%Y%m%dT%H%M%SZ")
     output_path = output_dir / f"calibration_snapshot_{timestamp}.json"
-    output_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(snapshot, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
     latest_path = output_dir / "latest.json"
-    latest_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True), encoding="utf-8")
+    latest_path.write_text(
+        json.dumps(snapshot, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
     if keep_last > 0:
         _prune_snapshots(output_dir, keep_last)
@@ -176,9 +181,9 @@ def _seasonal_commitment_summary(
                     "last_processed_at": _iso(commitment.get("last_processed_at")),
                     "updated_at": _iso(commitment.get("updated_at")),
                     "outstanding_debt": outstanding,
-                    "reprisal_level": int(debt_record.get("reprisal_level", 0))
-                    if debt_record
-                    else 0,
+                    "reprisal_level": (
+                        int(debt_record.get("reprisal_level", 0)) if debt_record else 0
+                    ),
                     "last_reprisal_at": _iso(
                         debt_record.get("last_reprisal_at") if debt_record else None
                     ),
@@ -367,11 +372,15 @@ def _orders_summary(
 
 def _prune_snapshots(target_dir: Path, keep_last: int) -> None:
     snapshots = sorted(
-        [path for path in target_dir.glob("calibration_snapshot_*.json") if path.is_file()]
+        [
+            path
+            for path in target_dir.glob("calibration_snapshot_*.json")
+            if path.is_file()
+        ]
     )
     if len(snapshots) <= keep_last:
         return
-    for path in snapshots[: -keep_last]:
+    for path in snapshots[:-keep_last]:
         try:
             path.unlink()
         except OSError:
@@ -386,5 +395,7 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return None
 
 
-def _as_serialisable_dict(mapping: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _as_serialisable_dict(
+    mapping: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
     return {key: dict(value) for key, value in mapping.items()}

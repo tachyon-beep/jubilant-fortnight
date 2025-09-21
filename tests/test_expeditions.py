@@ -1,4 +1,5 @@
 """Tests for expedition resolver sideways integration."""
+
 from __future__ import annotations
 
 from great_work.expeditions import ExpeditionResolver
@@ -37,16 +38,23 @@ def _resolve_with_roll(resolver: ExpeditionResolver, roll_value: int):
 def test_archives_tag_spawns_theory():
     resolver = _build_resolver_with_vignette(["archives"])
     effects = _resolve_with_roll(resolver, 55)
-    assert any(effect.effect_type == SidewaysEffectType.SPAWN_THEORY for effect in effects)
+    assert any(
+        effect.effect_type == SidewaysEffectType.SPAWN_THEORY for effect in effects
+    )
 
 
 def test_diplomacy_tag_shifts_faction():
     resolver = _build_resolver_with_vignette(["diplomacy"])
     effects = _resolve_with_roll(resolver, 55)
-    assert any(effect.effect_type == SidewaysEffectType.FACTION_SHIFT for effect in effects)
+    assert any(
+        effect.effect_type == SidewaysEffectType.FACTION_SHIFT for effect in effects
+    )
 
 
 def test_industry_tag_unlocks_opportunity():
     resolver = _build_resolver_with_vignette(["industry"])
     effects = _resolve_with_roll(resolver, 55)
-    assert any(effect.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY for effect in effects)
+    assert any(
+        effect.effect_type == SidewaysEffectType.UNLOCK_OPPORTUNITY
+        for effect in effects
+    )

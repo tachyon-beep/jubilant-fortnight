@@ -1,4 +1,5 @@
 """Tests for deployment smoke checks."""
+
 from __future__ import annotations
 
 from great_work.tools import deployment_smoke
@@ -22,5 +23,9 @@ def test_smoke_checks_all_good():
         "GREAT_WORK_ALERT_WEBHOOK_URLS": "https://ops/webhook",
     }
     results = deployment_smoke.run_checks(env)
-    assert all(result.status == "ok" for result in results if result.name != "alert_routing")
-    assert any(result.name == "alert_routing" and result.status == "ok" for result in results)
+    assert all(
+        result.status == "ok" for result in results if result.name != "alert_routing"
+    )
+    assert any(
+        result.name == "alert_routing" and result.status == "ok" for result in results
+    )

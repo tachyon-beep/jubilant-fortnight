@@ -1,4 +1,5 @@
 """Alert routing helpers for telemetry guardrails."""
+
 from __future__ import annotations
 
 import json
@@ -136,8 +137,12 @@ class AlertRouter:
                         payload.event,
                     )
             return True
-        except Exception:  # pragma: no cover - network errors are logged for ops visibility.
-            logger.exception("Failed to deliver alert webhook for event %s", payload.event)
+        except (
+            Exception
+        ):  # pragma: no cover - network errors are logged for ops visibility.
+            logger.exception(
+                "Failed to deliver alert webhook for event %s", payload.event
+            )
             return False
 
     def _send_email(self, payload: AlertPayload) -> bool:
@@ -160,12 +165,18 @@ class AlertRouter:
         if payload.source:
             body_lines.append(f"Source: {payload.source}")
         if payload.metadata:
-            body_lines.append(f"Metadata: {json.dumps(payload.metadata, ensure_ascii=False)}")
-        body_lines.append(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(payload.timestamp))}")
+            body_lines.append(
+                f"Metadata: {json.dumps(payload.metadata, ensure_ascii=False)}"
+            )
+        body_lines.append(
+            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(payload.timestamp))}"
+        )
         msg.set_content("\n".join(body_lines))
 
         try:
-            with smtplib.SMTP(self._email_host, self._email_port, timeout=self._timeout) as smtp:
+            with smtplib.SMTP(
+                self._email_host, self._email_port, timeout=self._timeout
+            ) as smtp:
                 if self._email_use_tls:
                     smtp.starttls()
                 if self._email_username and self._email_password:
@@ -173,7 +184,9 @@ class AlertRouter:
                 smtp.send_message(msg)
             return True
         except Exception:  # pragma: no cover - log and continue
-            logger.exception("Failed to deliver alert email for event %s", payload.event)
+            logger.exception(
+                "Failed to deliver alert email for event %s", payload.event
+            )
             return False
 
 
@@ -186,7 +199,9 @@ def get_alert_router() -> AlertRouter:
     global _alert_router
     if _alert_router is None:
         webhook_urls_env = os.getenv("GREAT_WORK_ALERT_WEBHOOK_URLS", "")
-        webhook_urls = [value.strip() for value in webhook_urls_env.split(",") if value.strip()]
+        webhook_urls = [
+            value.strip() for value in webhook_urls_env.split(",") if value.strip()
+        ]
         fallback_webhook = os.getenv("GREAT_WORK_ALERT_WEBHOOK_URL")
         timeout = float(os.getenv("GREAT_WORK_ALERT_TIMEOUT", "5") or 5)
         muted = {
@@ -200,8 +215,12 @@ def get_alert_router() -> AlertRouter:
         email_password = os.getenv("GREAT_WORK_ALERT_EMAIL_PASSWORD")
         email_from = os.getenv("GREAT_WORK_ALERT_EMAIL_FROM")
         recipients_raw = os.getenv("GREAT_WORK_ALERT_EMAIL_TO", "")
-        email_recipients = [value.strip() for value in recipients_raw.split(",") if value.strip()]
-        email_use_tls = os.getenv("GREAT_WORK_ALERT_EMAIL_STARTTLS", "true").lower() not in {"false", "0", "off"}
+        email_recipients = [
+            value.strip() for value in recipients_raw.split(",") if value.strip()
+        ]
+        email_use_tls = os.getenv(
+            "GREAT_WORK_ALERT_EMAIL_STARTTLS", "true"
+        ).lower() not in {"false", "0", "off"}
         _alert_router = AlertRouter(
             webhook_urls=webhook_urls,
             webhook_url=fallback_webhook,

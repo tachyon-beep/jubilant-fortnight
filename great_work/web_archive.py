@@ -1,4 +1,5 @@
 """Web archive generation for game history with permalinks and static HTML."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,6 +17,7 @@ from .state import GameState
 @dataclass
 class ArchivePage:
     """Represents a single page in the web archive."""
+
     path: Path
     title: str
     content: str
@@ -26,10 +28,16 @@ class ArchivePage:
 class WebArchive:
     """Generate static HTML archive of game history."""
 
-    def __init__(self, state: GameState, output_dir: Path, *, base_url: str | None = None):
+    def __init__(
+        self, state: GameState, output_dir: Path, *, base_url: str | None = None
+    ):
         self.state = state
         self.output_dir = output_dir
-        configured_base = base_url if base_url is not None else os.getenv("GREAT_WORK_ARCHIVE_BASE_URL", "/archive")
+        configured_base = (
+            base_url
+            if base_url is not None
+            else os.getenv("GREAT_WORK_ARCHIVE_BASE_URL", "/archive")
+        )
         if configured_base not in {"", "/"}:
             configured_base = configured_base.rstrip("/")
         self.base_url = configured_base or "/archive"
@@ -362,12 +370,16 @@ class WebArchive:
 
         # Format metadata
         metadata_items = []
-        metadata_items.append(f'<span>📅 {press.timestamp.strftime("%Y-%m-%d %H:%M UTC")}</span>')
-        metadata_items.append(f'<span>📰 {press.release.type.replace("_", " ").title()}</span>')
+        metadata_items.append(
+            f'<span>📅 {press.timestamp.strftime("%Y-%m-%d %H:%M UTC")}</span>'
+        )
+        metadata_items.append(
+            f'<span>📰 {press.release.type.replace("_", " ").title()}</span>'
+        )
 
         if press.release.metadata:
             for key, value in press.release.metadata.items():
-                metadata_items.append(f'<span>{key}: {value}</span>')
+                metadata_items.append(f"<span>{key}: {value}</span>")
 
         content = f"""
         <article class="press-card">
@@ -395,28 +407,32 @@ class WebArchive:
 
         return self.get_base_template().format(
             title=escape(press.release.headline),
-            description=escape(f"Press release from The Great Work: {press.release.headline}"),
+            description=escape(
+                f"Press release from The Great Work: {press.release.headline}"
+            ),
             base_url=self.base_url,
             content=content,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
             extra_head="",
-            extra_scripts=""
+            extra_scripts="",
         )
 
     def _format_body_paragraphs(self, body: str) -> str:
         """Format body text with proper paragraphs."""
         # Split on double newlines or sentence boundaries for better formatting
-        paragraphs = body.split('\n\n') if '\n\n' in body else [body]
+        paragraphs = body.split("\n\n") if "\n\n" in body else [body]
         formatted = []
 
         for para in paragraphs:
             # Escape HTML and preserve line breaks within paragraphs
-            para = escape(para).replace('\n', '<br>')
-            formatted.append(f'<p>{para}</p>')
+            para = escape(para).replace("\n", "<br>")
+            formatted.append(f"<p>{para}</p>")
 
-        return '\n'.join(formatted)
+        return "\n".join(formatted)
 
-    def generate_index(self, press_records: List[PressRecord], page: int = 1, per_page: int = 20) -> str:
+    def generate_index(
+        self, press_records: List[PressRecord], page: int = 1, per_page: int = 20
+    ) -> str:
         """Create index page with navigation and search."""
         total_pages = (len(press_records) + per_page - 1) // per_page
         start_idx = (page - 1) * per_page
@@ -444,7 +460,7 @@ class WebArchive:
         cards_html = []
         for i, record in enumerate(page_records, start=start_idx + 1):
             permalink = self.generate_permalink(record)
-            filename = permalink.split('/')[-1]
+            filename = permalink.split("/")[-1]
 
             card = f"""
             <article class="press-card" data-type="{record.release.type}"
@@ -533,7 +549,7 @@ class WebArchive:
             content=content,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
             extra_head="",
-            extra_scripts=search_script
+            extra_scripts=search_script,
         )
 
     def _generate_pagination(self, current_page: int, total_pages: int) -> str:
@@ -545,7 +561,9 @@ class WebArchive:
 
         # Previous link
         if current_page > 1:
-            links.append(f'<a href="{self.base_url}/index.html?page={current_page-1}">← Previous</a>')
+            links.append(
+                f'<a href="{self.base_url}/index.html?page={current_page-1}">← Previous</a>'
+            )
 
         # Page numbers (show max 5 pages)
         start_page = max(1, current_page - 2)
@@ -555,15 +573,21 @@ class WebArchive:
             if page == current_page:
                 links.append(f'<span class="current">{page}</span>')
             else:
-                links.append(f'<a href="{self.base_url}/index.html?page={page}">{page}</a>')
+                links.append(
+                    f'<a href="{self.base_url}/index.html?page={page}">{page}</a>'
+                )
 
         # Next link
         if current_page < total_pages:
-            links.append(f'<a href="{self.base_url}/index.html?page={current_page+1}">Next →</a>')
+            links.append(
+                f'<a href="{self.base_url}/index.html?page={current_page+1}">Next →</a>'
+            )
 
         return f'<div class="pagination">{"".join(links)}</div>'
 
-    def generate_timeline(self, events: List[Event], press_records: List[PressRecord]) -> str:
+    def generate_timeline(
+        self, events: List[Event], press_records: List[PressRecord]
+    ) -> str:
         """Create timeline view of all game events."""
         # Combine events and press into timeline items
         timeline_items = []
@@ -571,19 +595,19 @@ class WebArchive:
         # Add press releases to timeline
         for record in press_records[:50]:  # Limit to recent 50 for performance
             permalink = self.generate_permalink(record)
-            filename = permalink.split('/')[-1]
+            filename = permalink.split("/")[-1]
 
             item = {
-                'timestamp': record.timestamp,
-                'type': 'press',
-                'title': record.release.headline,
-                'content': record.release.body[:200] + "...",
-                'link': f"{self.base_url}/press/{filename}"
+                "timestamp": record.timestamp,
+                "type": "press",
+                "title": record.release.headline,
+                "content": record.release.body[:200] + "...",
+                "link": f"{self.base_url}/press/{filename}",
             }
             timeline_items.append(item)
 
         # Sort by timestamp
-        timeline_items.sort(key=lambda x: x['timestamp'], reverse=True)
+        timeline_items.sort(key=lambda x: x["timestamp"], reverse=True)
 
         # Generate HTML
         items_html = []
@@ -622,7 +646,7 @@ class WebArchive:
             content=content,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
             extra_head="",
-            extra_scripts=""
+            extra_scripts="",
         )
 
     def generate_scholar_page(self, scholar: Scholar) -> str:
@@ -632,7 +656,9 @@ class WebArchive:
         for fact in scholar.memory.facts[-10:]:  # Show last 10 facts
             fact_text = f"{fact.type}: {fact.subject}"
             if fact.details:
-                fact_text += f" - {', '.join(f'{k}: {v}' for k, v in fact.details.items())}"
+                fact_text += (
+                    f" - {', '.join(f'{k}: {v}' for k, v in fact.details.items())}"
+                )
             memories_html.append(f"<li>{escape(fact_text)}</li>")
 
         # Format feelings
@@ -708,7 +734,7 @@ class WebArchive:
             content=content,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
             extra_head="",
-            extra_scripts=""
+            extra_scripts="",
         )
 
     def generate_scholars_index(self, scholars: List[Scholar]) -> str:
@@ -754,7 +780,7 @@ class WebArchive:
             content=content,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
             extra_head="",
-            extra_scripts=""
+            extra_scripts="",
         )
 
     def export_full_archive(self) -> Path:
@@ -768,51 +794,53 @@ class WebArchive:
 
         # Generate index pages
         index_path = self.output_dir / "index.html"
-        with open(index_path, 'w', encoding='utf-8') as f:
+        with open(index_path, "w", encoding="utf-8") as f:
             f.write(self.generate_index(press_records))
 
         # Generate individual press releases
         for i, record in enumerate(press_records, start=1):
             permalink = self.generate_permalink(record)
-            filename = permalink.split('/')[-1]
+            filename = permalink.split("/")[-1]
             press_path = self.press_dir / filename
 
-            with open(press_path, 'w', encoding='utf-8') as f:
+            with open(press_path, "w", encoding="utf-8") as f:
                 f.write(self.generate_press_html(record, i))
 
         # Generate timeline
         timeline_path = self.output_dir / "timeline.html"
-        with open(timeline_path, 'w', encoding='utf-8') as f:
+        with open(timeline_path, "w", encoding="utf-8") as f:
             f.write(self.generate_timeline(events, press_records))
 
         # Generate scholars index
         scholars_index_path = self.output_dir / "scholars.html"
-        with open(scholars_index_path, 'w', encoding='utf-8') as f:
+        with open(scholars_index_path, "w", encoding="utf-8") as f:
             f.write(self.generate_scholars_index(scholars))
 
         # Generate individual scholar pages
         for scholar in scholars:
             scholar_path = self.scholars_dir / f"{scholar.id}.html"
-            with open(scholar_path, 'w', encoding='utf-8') as f:
+            with open(scholar_path, "w", encoding="utf-8") as f:
                 f.write(self.generate_scholar_page(scholar))
 
         # Create placeholder pages for theories and expeditions
         for page_name in ["theories", "expeditions"]:
             page_path = self.output_dir / f"{page_name}.html"
-            with open(page_path, 'w', encoding='utf-8') as f:
+            with open(page_path, "w", encoding="utf-8") as f:
                 content = f"""
                 <h1>{page_name.title()}</h1>
                 <p style="color: #7f8c8d;">This section is coming soon.</p>
                 """
-                f.write(self.get_base_template().format(
-                    title=page_name.title(),
-                    description=f"{page_name.title()} in The Great Work",
-                    base_url=self.base_url,
-                    content=content,
-                    timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
-                    extra_head="",
-                    extra_scripts=""
-                ))
+                f.write(
+                    self.get_base_template().format(
+                        title=page_name.title(),
+                        description=f"{page_name.title()} in The Great Work",
+                        base_url=self.base_url,
+                        content=content,
+                        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M UTC"),
+                        extra_head="",
+                        extra_scripts="",
+                    )
+                )
 
         print(f"Archive exported successfully to {self.output_dir}")
         print(f"  - {len(press_records)} press releases")

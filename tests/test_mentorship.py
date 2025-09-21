@@ -1,4 +1,5 @@
 """Test mentorship system implementation."""
+
 import os
 import random
 import tempfile
@@ -34,15 +35,22 @@ def test_mentorship_flow():
         assert "llm" in press.metadata
 
         queued_press = service.state.list_queued_press()
-        mentorship_updates = [payload for _, _, payload in queued_press if payload.get("type") == "mentorship_update"]
+        mentorship_updates = [
+            payload
+            for _, _, payload in queued_press
+            if payload.get("type") == "mentorship_update"
+        ]
         assert mentorship_updates, "Expected mentorship follow-up layers to be queued"
         assert any(
-            item.get("metadata", {}).get("track") == "Academia" and item.get("metadata", {}).get("phase") == "queued"
+            item.get("metadata", {}).get("track") == "Academia"
+            and item.get("metadata", {}).get("phase") == "queued"
             for item in mentorship_updates
         )
 
         # Check pending mentorships
-        orders = service.state.list_orders(order_type="mentorship_activation", status="pending")
+        orders = service.state.list_orders(
+            order_type="mentorship_activation", status="pending"
+        )
         assert len(orders) == 1
         order = orders[0]
         assert order["actor_id"] == player_id

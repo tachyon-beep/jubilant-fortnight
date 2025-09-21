@@ -1,4 +1,5 @@
 """Tests for press release template generation."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -32,7 +33,7 @@ def test_academic_bulletin_template():
         theory="Quantum entanglement affects tea brewing",
         confidence="certain",
         supporters=["Dr. Jones", "Prof. Williams"],
-        deadline="2024-12-31"
+        deadline="2024-12-31",
     )
 
     press = academic_bulletin(ctx)
@@ -54,7 +55,7 @@ def test_academic_bulletin_no_supporters():
         theory="Independent discovery",
         confidence="suspect",
         supporters=[],
-        deadline="2025-01-01"
+        deadline="2025-01-01",
     )
 
     press = academic_bulletin(ctx)
@@ -70,7 +71,7 @@ def test_research_manifesto_template():
         expedition_type="field",
         objective="Map the ancient ruins",
         team=["Scholar A", "Scholar B", "Scholar C"],
-        funding=["academia", "government"]
+        funding=["academia", "government"],
     )
 
     press = research_manifesto(ctx)
@@ -91,7 +92,7 @@ def test_research_manifesto_self_funded():
         expedition_type="theoretical",
         objective="Prove hypothesis",
         team=["Solo Scholar"],
-        funding=[]
+        funding=[],
     )
 
     press = research_manifesto(ctx)
@@ -107,7 +108,7 @@ def test_discovery_report_success():
         roll=85,
         modifier=10,
         final_score=95,
-        failure_detail=None
+        failure_detail=None,
     )
 
     ctx = OutcomeContext(
@@ -116,7 +117,7 @@ def test_discovery_report_success():
         expedition_type="field",
         result=result,
         reputation_change=5,
-        reactions=["Dr. Smith: 'Excellent work!'", "Prof. Jones: 'Groundbreaking!'"]
+        reactions=["Dr. Smith: 'Excellent work!'", "Prof. Jones: 'Groundbreaking!'"],
     )
 
     press = discovery_report(ctx)
@@ -137,7 +138,7 @@ def test_retraction_notice_failure():
         roll=25,
         modifier=-5,
         final_score=20,
-        failure_detail="Equipment malfunction caused data loss"
+        failure_detail="Equipment malfunction caused data loss",
     )
 
     ctx = OutcomeContext(
@@ -146,7 +147,7 @@ def test_retraction_notice_failure():
         expedition_type="theoretical",
         result=result,
         reputation_change=-7,
-        reactions=["Scholar A: 'Disappointing'", "Scholar B: 'Poor preparation'"]
+        reactions=["Scholar A: 'Disappointing'", "Scholar B: 'Poor preparation'"],
     )
 
     press = retraction_notice(ctx)
@@ -169,7 +170,7 @@ def test_retraction_notice_no_reactions():
         roll=50,
         modifier=0,
         final_score=50,
-        failure_detail="Partial data recovery"
+        failure_detail="Partial data recovery",
     )
 
     ctx = OutcomeContext(
@@ -178,7 +179,7 @@ def test_retraction_notice_no_reactions():
         expedition_type="field",
         result=result,
         reputation_change=1,
-        reactions=[]
+        reactions=[],
     )
 
     press = retraction_notice(ctx)
@@ -194,7 +195,7 @@ def test_recruitment_report_success():
         scholar="Dr. Elena Vasquez",
         outcome="SUCCESS",
         chance=0.85,
-        faction="academia"
+        faction="academia",
     )
 
     press = recruitment_report(ctx)
@@ -214,7 +215,7 @@ def test_recruitment_report_failure():
         scholar="Prof. Stubborn",
         outcome="FAILED",
         chance=0.25,
-        faction="government"
+        faction="government",
     )
 
     press = recruitment_report(ctx)
@@ -230,7 +231,7 @@ def test_defection_notice_template():
         scholar="Dr. Turncoat",
         outcome="accepted",
         new_faction="industry",
-        probability=0.75
+        probability=0.75,
     )
 
     press = defection_notice(ctx)
@@ -248,7 +249,7 @@ def test_defection_notice_rejected():
         scholar="Prof. Loyal",
         outcome="rejected",
         new_faction="Foreign Academy",
-        probability=0.10
+        probability=0.10,
     )
 
     press = defection_notice(ctx)
@@ -262,7 +263,7 @@ def test_academic_gossip_template():
     ctx = GossipContext(
         scholar="Prof. Smith",
         quote="The Dean's priorities are misaligned with true scholarship",
-        trigger="funding dispute"
+        trigger="funding dispute",
     )
 
     press = academic_gossip(ctx)
@@ -277,14 +278,10 @@ def test_academic_gossip_template():
 def test_academic_gossip_short_quote():
     """Academic gossip should handle short quotes."""
     ctx = GossipContext(
-        scholar="Dr. Brief",
-        quote="Nonsense!",
-        trigger="theory presentation"
+        scholar="Dr. Brief", quote="Nonsense!", trigger="theory presentation"
     )
 
     press = academic_gossip(ctx)
 
     assert "Nonsense!" in press.body
     assert "theory presentation" in press.body
-
-

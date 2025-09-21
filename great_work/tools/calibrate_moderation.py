@@ -1,4 +1,5 @@
 """Summarise moderation telemetry for threshold calibration."""
+
 from __future__ import annotations
 
 import argparse
@@ -45,7 +46,9 @@ def _load_events(collector: TelemetryCollector, hours: int) -> list[dict]:
                 "actor": row[4],
                 "text_hash": row[5],
                 "source": row[6],
-                "timestamp": datetime.fromtimestamp(row[7], tz=timezone.utc).isoformat(),
+                "timestamp": datetime.fromtimestamp(
+                    row[7], tz=timezone.utc
+                ).isoformat(),
             }
         )
     return records
@@ -71,10 +74,14 @@ def calibrate(collector: TelemetryCollector, *, hours: int) -> Dict[str, object]
         "by_category": dict(sorted(by_category.items(), key=lambda item: -item[1])),
         "by_stage": dict(sorted(by_stage.items(), key=lambda item: -item[1])),
         "by_severity": dict(sorted(by_severity.items(), key=lambda item: -item[1])),
-        "top_surfaces": dict(sorted(per_surface.items(), key=lambda item: -item[1])[:10]),
+        "top_surfaces": dict(
+            sorted(per_surface.items(), key=lambda item: -item[1])[:10]
+        ),
         "recommendations": {
             "consider_lowering_thresholds": [
-                category for category, count in by_category.items() if count / max(total, 1) > 0.3
+                category
+                for category, count in by_category.items()
+                if count / max(total, 1) > 0.3
             ],
             "stages_triggering_most": by_stage,
         },
@@ -84,7 +91,9 @@ def calibrate(collector: TelemetryCollector, *, hours: int) -> Dict[str, object]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarise moderation telemetry for Guardian tuning.")
+    parser = argparse.ArgumentParser(
+        description="Summarise moderation telemetry for Guardian tuning."
+    )
     parser.add_argument(
         "--telemetry-db",
         type=Path,
@@ -106,7 +115,9 @@ def main() -> None:
         print(json.dumps(summary, indent=2))
         return
 
-    print(f"Moderation events analysed: {summary['total_events']} in the last {summary['hours']}h")
+    print(
+        f"Moderation events analysed: {summary['total_events']} in the last {summary['hours']}h"
+    )
     print("By severity:")
     for severity, count in summary["by_severity"].items():
         print(f"  - {severity}: {count}")

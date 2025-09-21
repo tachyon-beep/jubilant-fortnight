@@ -1,4 +1,5 @@
 """Seasonal economy/mentorship tuning simulator."""
+
 from __future__ import annotations
 
 import argparse
@@ -52,7 +53,9 @@ class SimulationConfig:
             players.append(
                 PlayerScenario(
                     player_id=entry["player_id"],
-                    influence={k: int(v) for k, v in entry.get("influence", {}).items()},
+                    influence={
+                        k: int(v) for k, v in entry.get("influence", {}).items()
+                    },
                     commitments=commitments,
                 )
             )
@@ -63,8 +66,12 @@ class SimulationConfig:
         )
 
 
-def _apply_settings_overrides(settings: Settings, overrides: Dict[str, Any]) -> Settings:
-    valid_overrides = {key: value for key, value in overrides.items() if hasattr(settings, key)}
+def _apply_settings_overrides(
+    settings: Settings, overrides: Dict[str, Any]
+) -> Settings:
+    valid_overrides = {
+        key: value for key, value in overrides.items() if hasattr(settings, key)
+    }
     if not valid_overrides:
         return settings
     return replace(settings, **valid_overrides)
@@ -191,15 +198,21 @@ def run_simulation(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a seasonal economy tuning simulation.")
+    parser = argparse.ArgumentParser(
+        description="Run a seasonal economy tuning simulation."
+    )
     parser.add_argument(
         "--db",
         type=Path,
         default=DEFAULT_STATE_DB,
         help=f"Base database path for simulation state (default: {DEFAULT_STATE_DB}).",
     )
-    parser.add_argument("--config", type=Path, help="JSON file describing simulation scenario.")
-    parser.add_argument("--days", type=int, help="Simulation horizon in days (overrides config).")
+    parser.add_argument(
+        "--config", type=Path, help="JSON file describing simulation scenario."
+    )
+    parser.add_argument(
+        "--days", type=int, help="Simulation horizon in days (overrides config)."
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("simulation_runs"))
     return parser.parse_args()
 

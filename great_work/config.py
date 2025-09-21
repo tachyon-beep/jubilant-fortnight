@@ -1,4 +1,5 @@
 """Configuration loading utilities for The Great Work."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -121,29 +122,62 @@ class Settings:
             symposium_debt_reprisal_penalty=reprisal_penalty,
             symposium_debt_reprisal_cooldown_days=reprisal_cooldown,
             contract_upkeep_per_scholar=int(contract_cfg.get("upkeep_per_scholar", 1)),
-            contract_debt_reprisal_threshold=int(contract_debt_cfg.get("reprisal_threshold", 0)),
-            contract_debt_reprisal_penalty=int(contract_debt_cfg.get("reprisal_penalty", 0)),
-            contract_debt_reprisal_cooldown_days=int(contract_debt_cfg.get("reprisal_cooldown_days", 7)),
+            contract_debt_reprisal_threshold=int(
+                contract_debt_cfg.get("reprisal_threshold", 0)
+            ),
+            contract_debt_reprisal_penalty=int(
+                contract_debt_cfg.get("reprisal_penalty", 0)
+            ),
+            contract_debt_reprisal_cooldown_days=int(
+                contract_debt_cfg.get("reprisal_cooldown_days", 7)
+            ),
             confidence_wagers=data["confidence_wagers"],
             reputation_bounds=reputation,
             action_thresholds={k: int(v) for k, v in thresholds.items()},
-            influence_caps={"base": float(influence_caps.get("base", 5)), "per_reputation": float(influence_caps.get("per_reputation", 0.0))},
+            influence_caps={
+                "base": float(influence_caps.get("base", 5)),
+                "per_reputation": float(influence_caps.get("per_reputation", 0.0)),
+            },
             seasonal_commitment_base_cost=int(seasonal_cfg.get("base_cost", 3)),
-            seasonal_commitment_duration_days=int(seasonal_cfg.get("duration_days", 28)),
-            seasonal_commitment_relationship_weight=float(seasonal_cfg.get("relationship_weight", 0.05)),
-            seasonal_commitment_min_relationship=float(seasonal_cfg.get("min_relationship", 0.0)),
-            seasonal_commitment_reprisal_threshold=int(seasonal_cfg.get("reprisal_threshold", 4)),
-            seasonal_commitment_reprisal_penalty=int(seasonal_cfg.get("reprisal_penalty", 2)),
-            seasonal_commitment_reprisal_cooldown_days=int(seasonal_cfg.get("reprisal_cooldown_days", 7)),
-            faction_project_base_progress_weight=float(projects_cfg.get("base_progress_weight", 0.08)),
-            faction_project_relationship_weight=float(projects_cfg.get("relationship_weight", 5.0)),
-            faction_project_completion_reward=int(projects_cfg.get("completion_reward", 6)),
+            seasonal_commitment_duration_days=int(
+                seasonal_cfg.get("duration_days", 28)
+            ),
+            seasonal_commitment_relationship_weight=float(
+                seasonal_cfg.get("relationship_weight", 0.05)
+            ),
+            seasonal_commitment_min_relationship=float(
+                seasonal_cfg.get("min_relationship", 0.0)
+            ),
+            seasonal_commitment_reprisal_threshold=int(
+                seasonal_cfg.get("reprisal_threshold", 4)
+            ),
+            seasonal_commitment_reprisal_penalty=int(
+                seasonal_cfg.get("reprisal_penalty", 2)
+            ),
+            seasonal_commitment_reprisal_cooldown_days=int(
+                seasonal_cfg.get("reprisal_cooldown_days", 7)
+            ),
+            faction_project_base_progress_weight=float(
+                projects_cfg.get("base_progress_weight", 0.08)
+            ),
+            faction_project_relationship_weight=float(
+                projects_cfg.get("relationship_weight", 5.0)
+            ),
+            faction_project_completion_reward=int(
+                projects_cfg.get("completion_reward", 6)
+            ),
             faction_investment_min_amount=int(investments_cfg.get("min_amount", 3)),
             faction_investment_feeling_step=int(investments_cfg.get("feeling_step", 3)),
-            faction_investment_feeling_bonus=float(investments_cfg.get("feeling_bonus", 0.2)),
+            faction_investment_feeling_bonus=float(
+                investments_cfg.get("feeling_bonus", 0.2)
+            ),
             archive_endowment_min_amount=int(archive_cfg.get("min_amount", 3)),
-            archive_endowment_reputation_threshold=int(archive_cfg.get("reputation_threshold", 12)),
-            archive_endowment_reputation_bonus=int(archive_cfg.get("reputation_bonus", 1)),
+            archive_endowment_reputation_threshold=int(
+                archive_cfg.get("reputation_threshold", 12)
+            ),
+            archive_endowment_reputation_bonus=int(
+                archive_cfg.get("reputation_bonus", 1)
+            ),
             archive_pages_enabled=bool(pages_cfg.get("enabled", False)),
             archive_pages_directory=str(pages_cfg.get("directory", "")),
             archive_pages_subdir=str(pages_cfg.get("subdir", "archive")),

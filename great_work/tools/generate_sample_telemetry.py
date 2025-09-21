@@ -1,4 +1,5 @@
 """Generate synthetic telemetry records for calibration dry runs."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,7 +8,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-from ..telemetry import DEFAULT_TELEMETRY_DB, MetricEvent, MetricType, TelemetryCollector
+from ..telemetry import (
+    DEFAULT_TELEMETRY_DB,
+    MetricEvent,
+    MetricType,
+    TelemetryCollector,
+)
 
 
 def _append_event(
@@ -53,7 +59,12 @@ def _generate_day(
                 metric_type=MetricType.COMMAND_USAGE,
                 name="slash_command",
                 value=1.0,
-                tags={"player_id": player_id, "command": rng.choice(["wager", "recruit", "status", "symposium_vote"])},
+                tags={
+                    "player_id": player_id,
+                    "command": rng.choice(
+                        ["wager", "recruit", "status", "symposium_vote"]
+                    ),
+                },
             )
 
         if rng.random() < 0.4:
@@ -100,11 +111,18 @@ def _generate_day(
         economy_total = rng.randint(5, 25)
         _append_event(
             telemetry,
-            timestamp=day_start.replace(hour=20, minute=0, second=0, microsecond=0).timestamp(),
+            timestamp=day_start.replace(
+                hour=20, minute=0, second=0, microsecond=0
+            ).timestamp(),
             metric_type=MetricType.ECONOMY_BALANCE,
-            name=rng.choice(["faction_academia", "faction_government", "faction_industry"]),
+            name=rng.choice(
+                ["faction_academia", "faction_government", "faction_industry"]
+            ),
             value=float(economy_total),
-            metadata={"player_count": players, "avg_per_player": economy_total / max(players, 1)},
+            metadata={
+                "player_count": players,
+                "avg_per_player": economy_total / max(players, 1),
+            },
         )
 
 
@@ -122,7 +140,9 @@ def generate(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate synthetic telemetry data for calibration tests.")
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic telemetry data for calibration tests."
+    )
     parser.add_argument(
         "--telemetry-db",
         type=Path,

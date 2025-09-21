@@ -1,4 +1,5 @@
 """Tests for GazetteScheduler archive publishing and retention."""
+
 from __future__ import annotations
 
 import os
@@ -23,10 +24,14 @@ class DummyService:
     def pending_press_count(self) -> int:  # pragma: no cover - simple stub
         return 0
 
-    def upcoming_press(self, *, limit: int = 5, within_hours: int = 48) -> list[dict]:  # pragma: no cover - stub
+    def upcoming_press(
+        self, *, limit: int = 5, within_hours: int = 48
+    ) -> list[dict]:  # pragma: no cover - stub
         return []
 
-    def create_digest_highlights(self, *, now=None, limit: int = 5, within_hours: int = 24):  # pragma: no cover - stub
+    def create_digest_highlights(
+        self, *, now=None, limit: int = 5, within_hours: int = 24
+    ):  # pragma: no cover - stub
         return None
 
 
@@ -95,10 +100,14 @@ def test_queue_depth_tracked_in_upcoming_highlights(monkeypatch):
             calls.append((queue_size, horizon_hours))
 
     monkeypatch.setenv("GREAT_WORK_CHANNEL_UPCOMING", "123")
-    monkeypatch.setattr("great_work.scheduler.get_telemetry", lambda: TrackingTelemetry())
+    monkeypatch.setattr(
+        "great_work.scheduler.get_telemetry", lambda: TrackingTelemetry()
+    )
 
     class UpcomingService(DummyService):
-        def upcoming_press(self, *, limit: int = 5, within_hours: int = 48) -> list[dict]:
+        def upcoming_press(
+            self, *, limit: int = 5, within_hours: int = 48
+        ) -> list[dict]:
             return [
                 {
                     "headline": "Scheduled Layer",
@@ -107,7 +116,9 @@ def test_queue_depth_tracked_in_upcoming_highlights(monkeypatch):
                 }
             ]
 
-        def create_digest_highlights(self, *, now=None, limit: int = 5, within_hours: int = 24):
+        def create_digest_highlights(
+            self, *, now=None, limit: int = 5, within_hours: int = 24
+        ):
             return None
 
     messages: list[str] = []
@@ -150,10 +161,14 @@ def test_package_archive_emits_storage_alert(tmp_path, monkeypatch):
     events: list[tuple[str, str | None, str | None]] = []
 
     class TrackingTelemetry:
-        def track_system_event(self, event: str, *, source: str | None = None, reason: str | None = None) -> None:
+        def track_system_event(
+            self, event: str, *, source: str | None = None, reason: str | None = None
+        ) -> None:
             events.append((event, source, reason))
 
-    monkeypatch.setattr("great_work.scheduler.get_telemetry", lambda: TrackingTelemetry())
+    monkeypatch.setattr(
+        "great_work.scheduler.get_telemetry", lambda: TrackingTelemetry()
+    )
 
     messages: list[str] = []
 

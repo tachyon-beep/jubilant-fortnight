@@ -1,4 +1,5 @@
 """Tests for the seasonal economy tuning simulator."""
+
 from __future__ import annotations
 
 import json
@@ -47,18 +48,24 @@ def test_run_simulation_generates_summary(tmp_path: Path) -> None:
 def test_cli_output(tmp_path: Path, monkeypatch) -> None:
     config = build_config()
     config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps({
-        "days": config.days,
-        "settings": config.settings,
-        "players": [
+    config_path.write_text(
+        json.dumps(
             {
-                "player_id": player.player_id,
-                "influence": player.influence,
-                "commitments": [commit.__dict__ for commit in player.commitments],
+                "days": config.days,
+                "settings": config.settings,
+                "players": [
+                    {
+                        "player_id": player.player_id,
+                        "influence": player.influence,
+                        "commitments": [
+                            commit.__dict__ for commit in player.commitments
+                        ],
+                    }
+                    for player in config.players
+                ],
             }
-            for player in config.players
-        ],
-    }))
+        )
+    )
 
     def fake_parse_args():
         return type(

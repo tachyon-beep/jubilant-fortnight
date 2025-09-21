@@ -1,4 +1,5 @@
 """Tests for long-tail influence sinks (investments and endowments)."""
+
 from __future__ import annotations
 
 import os

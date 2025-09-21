@@ -1,4 +1,5 @@
 """Tests for telemetry dashboard API endpoints."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -56,11 +57,15 @@ def test_orders_api_returns_filtered_records(dashboard_module):
     collector.flush()
 
     client = TestClient(dashboard_module.app)
-    response = client.get("/api/orders", params={"order_type": "mentorship_activation", "hours": 24})
+    response = client.get(
+        "/api/orders", params={"order_type": "mentorship_activation", "hours": 24}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["records"]
-    assert all(record["order_type"] == "mentorship_activation" for record in payload["records"])
+    assert all(
+        record["order_type"] == "mentorship_activation" for record in payload["records"]
+    )
 
     csv_response = client.get("/api/orders.csv", params={"hours": 24, "limit": 10})
     assert csv_response.status_code == 200

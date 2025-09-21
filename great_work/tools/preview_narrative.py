@@ -1,4 +1,5 @@
 """Generate sample previews for narrative YAML assets."""
+
 from __future__ import annotations
 
 import argparse
@@ -232,14 +233,23 @@ def preview_landmark_preparations(data: Any) -> List[str]:
 
 
 PREVIEWERS = {
-    "tone-packs": (Path("great_work/data/press_tone_packs.yaml"), preview_press_tone_packs),
-    "recruitment": (Path("great_work/data/recruitment_press.yaml"), preview_recruitment),
+    "tone-packs": (
+        Path("great_work/data/press_tone_packs.yaml"),
+        preview_press_tone_packs,
+    ),
+    "recruitment": (
+        Path("great_work/data/recruitment_press.yaml"),
+        preview_recruitment,
+    ),
     "table-talk": (Path("great_work/data/table_talk_press.yaml"), preview_table_talk),
     "mentorship": (Path("great_work/data/mentorship_press.yaml"), preview_mentorship),
     "sidecasts": (Path("great_work/data/sidecast_arcs.yaml"), preview_sidecast),
     "epilogues": (Path("great_work/data/defection_epilogues.yaml"), preview_epilogues),
     "vignettes": (Path("great_work/data/sideways_vignettes.yaml"), preview_vignettes),
-    "landmark-prep": (Path("great_work/data/landmark_preparations.yaml"), preview_landmark_preparations),
+    "landmark-prep": (
+        Path("great_work/data/landmark_preparations.yaml"),
+        preview_landmark_preparations,
+    ),
 }
 
 
@@ -271,7 +281,9 @@ def _related_snippets_from_lines(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render sample previews for narrative YAML")
+    parser = argparse.ArgumentParser(
+        description="Render sample previews for narrative YAML"
+    )
     parser.add_argument(
         "surface",
         nargs="*",

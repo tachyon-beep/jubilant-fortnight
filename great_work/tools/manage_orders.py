@@ -1,4 +1,5 @@
 """Management utilities for dispatcher orders and follow-up migration."""
+
 from __future__ import annotations
 
 import argparse
@@ -15,7 +16,9 @@ def _load_state(state_db: Path) -> GameState:
     return GameState(state_db, start_year=settings.timeline_start_year)
 
 
-def _orders_summary(state: GameState, order_type: Optional[str], status: Optional[str]) -> Dict[str, Any]:
+def _orders_summary(
+    state: GameState, order_type: Optional[str], status: Optional[str]
+) -> Dict[str, Any]:
     orders = state.list_orders()
     if order_type:
         orders = [order for order in orders if order.get("order_type") == order_type]
@@ -99,7 +102,9 @@ def cmd_followups(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Manage dispatcher orders and follow-up migration.")
+    parser = argparse.ArgumentParser(
+        description="Manage dispatcher orders and follow-up migration."
+    )
     parser.add_argument(
         "--state-db",
         type=Path,
@@ -109,10 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    summary = subparsers.add_parser("summary", help="Summarise current dispatcher orders.")
+    summary = subparsers.add_parser(
+        "summary", help="Summarise current dispatcher orders."
+    )
     summary.add_argument("--order-type", type=str, help="Filter by order type.")
     summary.add_argument("--status", type=str, help="Filter by order status.")
-    summary.add_argument("--json", action="store_true", help="Output JSON for automation.")
+    summary.add_argument(
+        "--json", action="store_true", help="Output JSON for automation."
+    )
     summary.set_defaults(func=cmd_summary)
 
     followups = subparsers.add_parser(

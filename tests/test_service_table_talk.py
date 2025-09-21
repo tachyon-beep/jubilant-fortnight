@@ -1,4 +1,5 @@
 """Tests for LLM-enhanced table-talk messages."""
+
 from __future__ import annotations
 
 import os
@@ -41,10 +42,7 @@ def test_post_table_talk_archives_and_tracks(tmp_path):
     queued = service.state.list_queued_press()
     assert queued, "expected layered table-talk follow-ups to be scheduled"
     assert any(
-        item[2]
-        .get("metadata", {})
-        .get("scheduled", {})
-        .get("layer_type")
+        item[2].get("metadata", {}).get("scheduled", {}).get("layer_type")
         in {"academic_gossip", "table_talk_digest"}
         for item in queued
     )

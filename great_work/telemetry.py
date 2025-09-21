@@ -1,4 +1,5 @@
 """Telemetry and success metrics tracking for The Great Work."""
+
 from __future__ import annotations
 
 import json
@@ -55,6 +56,7 @@ def _status_lower(value: Optional[float], threshold: float) -> Optional[str]:
 
 class MetricType(Enum):
     """Types of metrics tracked."""
+
     COMMAND_USAGE = "command_usage"
     FEATURE_ENGAGEMENT = "feature_engagement"
     GAME_PROGRESSION = "game_progression"
@@ -78,6 +80,7 @@ DEFAULT_TELEMETRY_DB = Path("var") / "telemetry" / "telemetry.db"
 @dataclass
 class MetricEvent:
     """Individual metric event."""
+
     timestamp: float
     metric_type: MetricType
     name: str
@@ -240,14 +243,14 @@ class TelemetryCollector:
             command_name,
             1.0,
             tags=tags,
-            metadata={"duration_ms": duration_ms} if duration_ms else {}
+            metadata={"duration_ms": duration_ms} if duration_ms else {},
         )
 
     def track_feature_usage(
         self,
         feature_name: str,
         player_id: str,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[Dict[str, Any]] = None,
     ):
         """Track feature engagement."""
         self.record(
@@ -255,7 +258,7 @@ class TelemetryCollector:
             feature_name,
             1.0,
             tags={"player_id": player_id},
-            metadata=details or {}
+            metadata=details or {},
         )
 
     def track_game_progression(
@@ -263,7 +266,7 @@ class TelemetryCollector:
         event_name: str,
         value: float,
         player_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[Dict[str, Any]] = None,
     ):
         """Track game progression events."""
         tags = {}
@@ -275,7 +278,7 @@ class TelemetryCollector:
             event_name,
             value,
             tags=tags,
-            metadata=details or {}
+            metadata=details or {},
         )
 
     def track_error(
@@ -283,7 +286,7 @@ class TelemetryCollector:
         error_type: str,
         command: Optional[str] = None,
         player_id: Optional[str] = None,
-        error_details: Optional[str] = None
+        error_details: Optional[str] = None,
     ):
         """Track errors and failures."""
         tags = {}
@@ -297,14 +300,11 @@ class TelemetryCollector:
             error_type,
             1.0,
             tags=tags,
-            metadata={"error_details": error_details} if error_details else {}
+            metadata={"error_details": error_details} if error_details else {},
         )
 
     def track_performance(
-        self,
-        operation: str,
-        duration_ms: float,
-        tags: Optional[Dict[str, str]] = None
+        self, operation: str, duration_ms: float, tags: Optional[Dict[str, str]] = None
     ):
         """Track performance metrics."""
         self.record(
@@ -312,7 +312,7 @@ class TelemetryCollector:
             operation,
             duration_ms,
             tags=tags or {},
-            metadata={"unit": "milliseconds"}
+            metadata={"unit": "milliseconds"},
         )
 
     def track_player_activity(
@@ -320,7 +320,7 @@ class TelemetryCollector:
         player_id: str,
         activity_type: str,
         reputation: float,
-        influence_totals: Dict[str, float]
+        influence_totals: Dict[str, float],
     ):
         """Track player activity and state."""
         self.record(
@@ -328,10 +328,7 @@ class TelemetryCollector:
             activity_type,
             1.0,
             tags={"player_id": player_id},
-            metadata={
-                "reputation": reputation,
-                "influence": influence_totals
-            }
+            metadata={"reputation": reputation, "influence": influence_totals},
         )
 
     def track_llm_activity(
@@ -489,7 +486,11 @@ class TelemetryCollector:
                 MetricType.PRESS_CADENCE,
                 "press_mix",
                 float(count),
-                tags={"event_type": "press_mix", "layer_type": press_type, "source": source},
+                tags={
+                    "event_type": "press_mix",
+                    "layer_type": press_type,
+                    "source": source,
+                },
             )
 
     def track_order_snapshot(
@@ -517,15 +518,19 @@ class TelemetryCollector:
         )
 
         pending_threshold = _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_PENDING", 6.0)
-        age_threshold_hours = _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0)
+        age_threshold_hours = _get_env_float(
+            "GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0
+        )
 
         pending_message: Optional[str] = None
         stale_message: Optional[str] = None
 
-        if pending_threshold > 0 and pending_count >= pending_threshold and event in {"enqueue", "poll"}:
-            pending_message = (
-                f"Dispatcher backlog for {order_type.replace('_', ' ')} at {pending_count} pending (threshold {pending_threshold})."
-            )
+        if (
+            pending_threshold > 0
+            and pending_count >= pending_threshold
+            and event in {"enqueue", "poll"}
+        ):
+            pending_message = f"Dispatcher backlog for {order_type.replace('_', ' ')} at {pending_count} pending (threshold {pending_threshold})."
             self.track_system_event(
                 "alert_order_backlog_pending",
                 source="dispatcher",
@@ -559,7 +564,7 @@ class TelemetryCollector:
         scholar_count: int,
         defection_count: int,
         mentorship_count: int,
-        avg_confidence: float
+        avg_confidence: float,
     ):
         """Track scholar roster statistics."""
         self.record(
@@ -569,8 +574,8 @@ class TelemetryCollector:
             metadata={
                 "defection_count": defection_count,
                 "mentorship_count": mentorship_count,
-                "avg_confidence": avg_confidence
-            }
+                "avg_confidence": avg_confidence,
+            },
         )
 
     def track_economy_balance(
@@ -578,7 +583,7 @@ class TelemetryCollector:
         faction: str,
         total_influence: float,
         player_count: int,
-        avg_influence_per_player: float
+        avg_influence_per_player: float,
     ):
         """Track economy balance across factions."""
         self.record(
@@ -588,8 +593,8 @@ class TelemetryCollector:
             tags={"faction": faction},
             metadata={
                 "player_count": player_count,
-                "avg_per_player": avg_influence_per_player
-            }
+                "avg_per_player": avg_influence_per_player,
+            },
         )
 
     def record(
@@ -598,7 +603,7 @@ class TelemetryCollector:
         name: str,
         value: float,
         tags: Optional[Dict[str, str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Record a metric event."""
         event = MetricEvent(
@@ -607,14 +612,16 @@ class TelemetryCollector:
             name=name,
             value=value,
             tags=tags or {},
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         self._metrics_buffer.append(event)
 
         # Auto-flush if buffer is getting large or enough time has passed
-        if len(self._metrics_buffer) >= 100 or \
-           time.time() - self._last_flush > self._flush_interval:
+        if (
+            len(self._metrics_buffer) >= 100
+            or time.time() - self._last_flush > self._flush_interval
+        ):
             self.flush()
 
     def flush(self):
@@ -625,18 +632,21 @@ class TelemetryCollector:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 for event in self._metrics_buffer:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT INTO metrics
                         (timestamp, metric_type, name, value, tags, metadata)
                         VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        event.timestamp,
-                        event.metric_type.value,
-                        event.name,
-                        event.value,
-                        json.dumps(event.tags),
-                        json.dumps(event.metadata)
-                    ))
+                    """,
+                        (
+                            event.timestamp,
+                            event.metric_type.value,
+                            event.name,
+                            event.value,
+                            json.dumps(event.tags),
+                            json.dumps(event.metadata),
+                        ),
+                    )
                 conn.commit()
 
             logger.info(f"Flushed {len(self._metrics_buffer)} metrics to database")
@@ -647,9 +657,7 @@ class TelemetryCollector:
             logger.error(f"Failed to flush metrics: {e}")
 
     def get_command_stats(
-        self,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None
+        self, start_time: Optional[float] = None, end_time: Optional[float] = None
     ) -> Dict[str, Dict[str, Any]]:
         """Get command usage statistics."""
         query = """
@@ -680,14 +688,11 @@ class TelemetryCollector:
                 results[row[0]] = {
                     "usage_count": row[1],
                     "success_rate": row[2],
-                    "unique_players": row[3]
+                    "unique_players": row[3],
                 }
             return results
 
-    def get_feature_engagement(
-        self,
-        days: int = 7
-    ) -> Dict[str, Dict[str, Any]]:
+    def get_feature_engagement(self, days: int = 7) -> Dict[str, Dict[str, Any]]:
         """Get feature engagement statistics for the last N days."""
         start_time = time.time() - (days * 86400)
 
@@ -704,23 +709,19 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.FEATURE_ENGAGEMENT.value,
-                start_time
-            ])
+            cursor = conn.execute(
+                query, [MetricType.FEATURE_ENGAGEMENT.value, start_time]
+            )
             results = {}
             for row in cursor.fetchall():
                 results[row[0]] = {
                     "total_uses": row[1],
                     "unique_users": row[2],
-                    "last_used": datetime.fromtimestamp(row[3]).isoformat()
+                    "last_used": datetime.fromtimestamp(row[3]).isoformat(),
                 }
             return results
 
-    def get_error_summary(
-        self,
-        hours: int = 24
-    ) -> Dict[str, int]:
+    def get_error_summary(self, hours: int = 24) -> Dict[str, int]:
         """Get error counts for the last N hours."""
         start_time = time.time() - (hours * 3600)
 
@@ -733,16 +734,11 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.ERROR_RATE.value,
-                start_time
-            ])
+            cursor = conn.execute(query, [MetricType.ERROR_RATE.value, start_time])
             return {row[0]: row[1] for row in cursor.fetchall()}
 
     def get_performance_summary(
-        self,
-        operation: Optional[str] = None,
-        hours: int = 1
+        self, operation: Optional[str] = None, hours: int = 1
     ) -> Dict[str, Dict[str, float]]:
         """Get performance statistics for operations."""
         start_time = time.time() - (hours * 3600)
@@ -773,14 +769,11 @@ class TelemetryCollector:
                     "avg_duration_ms": row[1],
                     "min_duration_ms": row[2],
                     "max_duration_ms": row[3],
-                    "sample_count": row[4]
+                    "sample_count": row[4],
                 }
             return results
 
-    def get_channel_usage(
-        self,
-        hours: int = 24
-    ) -> Dict[str, Dict[str, Any]]:
+    def get_channel_usage(self, hours: int = 24) -> Dict[str, Dict[str, Any]]:
         """Summarise command usage by channel over the given window."""
 
         start_time = time.time() - (hours * 3600)
@@ -797,14 +790,19 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.COMMAND_USAGE.value,
-                start_time,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.COMMAND_USAGE.value,
+                    start_time,
+                ],
+            )
             usage: Dict[str, Dict[str, Any]] = {}
             for row in cursor.fetchall():
                 channel_value = row[0]
-                channel = str(channel_value) if channel_value not in (None, "") else "unknown"
+                channel = (
+                    str(channel_value) if channel_value not in (None, "") else "unknown"
+                )
                 usage[channel] = {
                     "usage_count": row[1] or 0,
                     "unique_commands": row[2] or 0,
@@ -812,10 +810,7 @@ class TelemetryCollector:
                 }
             return usage
 
-    def get_llm_activity_summary(
-        self,
-        hours: int = 24
-    ) -> Dict[str, Dict[str, Any]]:
+    def get_llm_activity_summary(self, hours: int = 24) -> Dict[str, Dict[str, Any]]:
         """Summarise LLM activity over the given window."""
 
         start_time = time.time() - (hours * 3600)
@@ -834,10 +829,13 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.LLM_ACTIVITY.value,
-                start_time,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.LLM_ACTIVITY.value,
+                    start_time,
+                ],
+            )
             summary: Dict[str, Dict[str, Any]] = {}
             for row in cursor.fetchall():
                 press_type = row[0]
@@ -861,9 +859,7 @@ class TelemetryCollector:
             return summary
 
     def get_system_events(
-        self,
-        hours: int = 24,
-        limit: int = 10
+        self, hours: int = 24, limit: int = 10
     ) -> List[Dict[str, Any]]:
         """Return recent system events such as pause/resume notifications."""
 
@@ -882,11 +878,14 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.SYSTEM_EVENT.value,
-                start_time,
-                limit,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.SYSTEM_EVENT.value,
+                    start_time,
+                    limit,
+                ],
+            )
             events = []
             for row in cursor.fetchall():
                 events.append(
@@ -923,11 +922,14 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.PRESS_CADENCE.value,
-                start_time,
-                limit,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.PRESS_CADENCE.value,
+                    start_time,
+                    limit,
+                ],
+            )
             summary = []
             for row in cursor.fetchall():
                 summary.append(
@@ -966,10 +968,13 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.DIGEST.value,
-                start_time,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.DIGEST.value,
+                    start_time,
+                ],
+            )
             row = cursor.fetchone()
             if row is None or row[0] == 0:
                 return {
@@ -1016,10 +1021,13 @@ class TelemetryCollector:
         """
 
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(query, [
-                MetricType.QUEUE_DEPTH.value,
-                start_time,
-            ])
+            cursor = conn.execute(
+                query,
+                [
+                    MetricType.QUEUE_DEPTH.value,
+                    start_time,
+                ],
+            )
             summary: Dict[str, Dict[str, float]] = {}
             for row in cursor.fetchall():
                 horizon = int(row[0] or 0)
@@ -1235,9 +1243,15 @@ class TelemetryCollector:
         for category, stage, surface, severity, count in rows:
             count = int(count or 0)
             summary["totals"]["count"] += count
-            summary["totals"]["by_category"][category] = summary["totals"]["by_category"].get(category, 0) + count
-            summary["totals"]["by_stage"][stage] = summary["totals"]["by_stage"].get(stage, 0) + count
-            summary["totals"]["by_severity"][severity] = summary["totals"]["by_severity"].get(severity, 0) + count
+            summary["totals"]["by_category"][category] = (
+                summary["totals"]["by_category"].get(category, 0) + count
+            )
+            summary["totals"]["by_stage"][stage] = (
+                summary["totals"]["by_stage"].get(stage, 0) + count
+            )
+            summary["totals"]["by_severity"][severity] = (
+                summary["totals"]["by_severity"].get(severity, 0) + count
+            )
             summary["breakdown"].append(
                 {
                     "category": category,
@@ -1514,7 +1528,9 @@ class TelemetryCollector:
             ).fetchall()
 
         first_seen: Dict[str, float] = {
-            str(row[0]): float(row[1]) for row in first_rows if row[0] is not None and row[1] is not None
+            str(row[0]): float(row[1])
+            for row in first_rows
+            if row[0] is not None and row[1] is not None
         }
 
         cohort_totals: Dict[str, Dict[str, Any]] = {
@@ -1538,15 +1554,23 @@ class TelemetryCollector:
                 {
                     "player_id": player_id,
                     "command_count": float(command_count or 0.0),
-                    "first_seen": datetime.fromtimestamp(first_ts).isoformat() if first_ts else None,
-                    "last_command_at": datetime.fromtimestamp(last_ts).isoformat() if last_ts else None,
+                    "first_seen": (
+                        datetime.fromtimestamp(first_ts).isoformat()
+                        if first_ts
+                        else None
+                    ),
+                    "last_command_at": (
+                        datetime.fromtimestamp(last_ts).isoformat() if last_ts else None
+                    ),
                 }
             )
 
         for cohort in cohort_totals.values():
             players = cohort["players"] or 1
             cohort["average_commands"] = cohort["command_count"] / players
-            cohort["details"].sort(key=lambda item: item.get("command_count", 0.0), reverse=True)
+            cohort["details"].sort(
+                key=lambda item: item.get("command_count", 0.0), reverse=True
+            )
 
         active_players = sum(cohort_totals[key]["players"] for key in cohort_totals)
         for key, cohort in cohort_totals.items():
@@ -1597,7 +1621,11 @@ class TelemetryCollector:
                         FROM metrics
                         WHERE metric_type = ? AND name = ? AND timestamp >= ?
                     """,
-                    (MetricType.GAME_PROGRESSION.value, "manifesto_generated", start_time),
+                    (
+                        MetricType.GAME_PROGRESSION.value,
+                        "manifesto_generated",
+                        start_time,
+                    ),
                 )
             )
             archive_rows = list(
@@ -1679,7 +1707,9 @@ class TelemetryCollector:
                 {
                     "date": day,
                     "active_players": float(len(daily_players.get(day, set()))),
-                    "manifesto_players": float(len(daily_manifesto_players.get(day, set()))),
+                    "manifesto_players": float(
+                        len(daily_manifesto_players.get(day, set()))
+                    ),
                     "manifesto_events": float(daily_manifesto_events.get(day, 0)),
                     "archive_events": float(daily_archive_events.get(day, 0)),
                     "nickname_events": float(daily_nickname_events.get(day, 0)),
@@ -1713,7 +1743,13 @@ class TelemetryCollector:
             if not values:
                 return 0.0
             sorted_vals = sorted(values)
-            rank = max(0, min(len(sorted_vals) - 1, int(round((p / 100.0) * (len(sorted_vals) - 1)))))
+            rank = max(
+                0,
+                min(
+                    len(sorted_vals) - 1,
+                    int(round((p / 100.0) * (len(sorted_vals) - 1))),
+                ),
+            )
             return sorted_vals[rank]
 
         data = {
@@ -1764,27 +1800,35 @@ class TelemetryCollector:
 
         # Add overall statistics
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT
                     COUNT(*) as total_events,
                     COUNT(DISTINCT json_extract(tags, '$.player_id')) as unique_players,
                     MIN(timestamp) as first_event,
                     MAX(timestamp) as last_event
                 FROM metrics
-            """)
+            """
+            )
             row = cursor.fetchone()
             report["overall"] = {
                 "total_events": row[0],
                 "unique_players": row[1],
-                "first_event": datetime.fromtimestamp(row[2]).isoformat() if row[2] else None,
-                "last_event": datetime.fromtimestamp(row[3]).isoformat() if row[3] else None
+                "first_event": (
+                    datetime.fromtimestamp(row[2]).isoformat() if row[2] else None
+                ),
+                "last_event": (
+                    datetime.fromtimestamp(row[3]).isoformat() if row[3] else None
+                ),
             }
 
         report["health"] = self.evaluate_health(report)
 
         return report
 
-    def evaluate_health(self, report_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def evaluate_health(
+        self, report_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Evaluate telemetry signals against alert thresholds."""
 
         data = report_data or {}
@@ -1796,16 +1840,34 @@ class TelemetryCollector:
             "digest_ms": _get_env_float("GREAT_WORK_ALERT_MAX_DIGEST_MS", 5000.0),
             "min_releases": _get_env_float("GREAT_WORK_ALERT_MIN_RELEASES", 1.0),
             "queue_size": _get_env_float("GREAT_WORK_ALERT_MAX_QUEUE", 12.0),
-            "llm_latency_ms": _get_env_float("GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS", 4000.0),
-            "llm_failure_rate": _get_env_float("GREAT_WORK_ALERT_LLM_FAILURE_RATE", 0.2),
+            "llm_latency_ms": _get_env_float(
+                "GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS", 4000.0
+            ),
+            "llm_failure_rate": _get_env_float(
+                "GREAT_WORK_ALERT_LLM_FAILURE_RATE", 0.2
+            ),
             "order_pending": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_PENDING", 6.0),
-            "order_age_hours": _get_env_float("GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0),
-            "symposium_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT", 30.0),
-            "symposium_reprisal": _get_env_float("GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS", 3.0),
-            "investment_share": _get_env_float("GREAT_WORK_ALERT_INVESTMENT_SHARE", 0.6),
-            "active_players": _get_env_float("GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS", 3.0),
-            "manifesto_rate": _get_env_float("GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", 0.5),
-            "archive_lookups": _get_env_float("GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", 1.0),
+            "order_age_hours": _get_env_float(
+                "GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS", 8.0
+            ),
+            "symposium_debt": _get_env_float(
+                "GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT", 30.0
+            ),
+            "symposium_reprisal": _get_env_float(
+                "GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS", 3.0
+            ),
+            "investment_share": _get_env_float(
+                "GREAT_WORK_ALERT_INVESTMENT_SHARE", 0.6
+            ),
+            "active_players": _get_env_float(
+                "GREAT_WORK_ALERT_MIN_ACTIVE_PLAYERS", 3.0
+            ),
+            "manifesto_rate": _get_env_float(
+                "GREAT_WORK_ALERT_MIN_MANIFESTO_RATE", 0.5
+            ),
+            "archive_lookups": _get_env_float(
+                "GREAT_WORK_ALERT_MIN_ARCHIVE_LOOKUPS", 1.0
+            ),
             "seasonal_debt": _get_env_float("GREAT_WORK_ALERT_MAX_SEASONAL_DEBT", 25.0),
             "nickname_rate": _get_env_float("GREAT_WORK_ALERT_MIN_NICKNAME_RATE", 0.3),
             "press_shares": _get_env_float("GREAT_WORK_ALERT_MIN_PRESS_SHARES", 1.0),
@@ -1838,11 +1900,17 @@ class TelemetryCollector:
         checks: List[Dict[str, Any]] = []
         counts = {"ok": 0, "warning": 0, "alert": 0}
 
-        def _register(metric: str, label: str, status: Optional[str], detail: str, *,
-                      observed: Optional[float] = None,
-                      threshold: Optional[float] = None,
-                      window: str = "24h",
-                      target: Optional[float] = None) -> None:
+        def _register(
+            metric: str,
+            label: str,
+            status: Optional[str],
+            detail: str,
+            *,
+            observed: Optional[float] = None,
+            threshold: Optional[float] = None,
+            window: str = "24h",
+            target: Optional[float] = None,
+        ) -> None:
             if status is None:
                 return
             counts[status] += 1
@@ -1917,13 +1985,17 @@ class TelemetryCollector:
             worst_horizon: Optional[str] = None
             worst_stats: Optional[Dict[str, float]] = None
             for horizon, stats in queue_summary.items():
-                if worst_stats is None or stats.get("max_queue", 0.0) > worst_stats.get("max_queue", 0.0):
+                if worst_stats is None or stats.get("max_queue", 0.0) > worst_stats.get(
+                    "max_queue", 0.0
+                ):
                     worst_horizon = horizon
                     worst_stats = stats
             if worst_stats is not None:
                 max_queue = worst_stats.get("max_queue", 0.0)
                 queue_status = _status_upper(max_queue, thresholds["queue_size"])
-                horizon_label = f"≤{worst_horizon}h" if worst_horizon is not None else "queue"
+                horizon_label = (
+                    f"≤{worst_horizon}h" if worst_horizon is not None else "queue"
+                )
                 avg_queue = worst_stats.get("avg_queue", 0.0)
                 _register(
                     "press_queue_depth",
@@ -1948,8 +2020,12 @@ class TelemetryCollector:
             max_latency = max(max_latency, stats.get("max_duration_ms", 0.0))
 
         if total_calls > 0:
-            overall_avg_latency = weighted_latency_sum / total_calls if total_calls else 0.0
-            latency_status = _status_upper(overall_avg_latency, thresholds["llm_latency_ms"])
+            overall_avg_latency = (
+                weighted_latency_sum / total_calls if total_calls else 0.0
+            )
+            latency_status = _status_upper(
+                overall_avg_latency, thresholds["llm_latency_ms"]
+            )
             _register(
                 "llm_latency",
                 "LLM latency",
@@ -1970,7 +2046,9 @@ class TelemetryCollector:
                 threshold=thresholds["llm_failure_rate"],
             )
 
-        order_summary = data.get("order_backlog_24h") or self.get_order_backlog_summary(24)
+        order_summary = data.get("order_backlog_24h") or self.get_order_backlog_summary(
+            24
+        )
         if order_summary:
             # Determine the order type with the highest current pending count
             worst_pending_type, worst_pending_stats = max(
@@ -1993,10 +2071,10 @@ class TelemetryCollector:
                 order_summary.items(),
                 key=lambda item: item[1].get("latest_oldest_seconds", 0.0),
             )
-            oldest_hours = (
-                worst_stale_stats.get("latest_oldest_seconds", 0.0) / 3600.0
+            oldest_hours = worst_stale_stats.get("latest_oldest_seconds", 0.0) / 3600.0
+            staleness_status = _status_upper(
+                oldest_hours, thresholds["order_age_hours"]
             )
-            staleness_status = _status_upper(oldest_hours, thresholds["order_age_hours"])
             pretty_stale = worst_stale_type.replace("_", " ")
             _register(
                 "order_staleness",
@@ -2025,7 +2103,9 @@ class TelemetryCollector:
             reprisals = symposium_summary.get("reprisals", [])
             if reprisals:
                 worst = reprisals[0]
-                reprisal_status = _status_upper(worst.get("count", 0.0), thresholds["symposium_reprisal"])
+                reprisal_status = _status_upper(
+                    worst.get("count", 0.0), thresholds["symposium_reprisal"]
+                )
                 factions = ", ".join(worst.get("factions", [])) or "multiple"
                 _register(
                     "symposium_reprisal",
@@ -2091,7 +2171,9 @@ class TelemetryCollector:
                     thresholds["manifesto_rate"],
                     warning_scale=1.1,
                 )
-                manifesto_target = (kpi_targets.get("manifesto_adoption") or {}).get("target")
+                manifesto_target = (kpi_targets.get("manifesto_adoption") or {}).get(
+                    "target"
+                )
                 _register(
                     "manifesto_adoption",
                     "Manifesto adoption (7d)",
@@ -2128,7 +2210,9 @@ class TelemetryCollector:
 
         commitments = economy_summary.get("commitments", {})
         seasonal_debt_total = float(commitments.get("total_outstanding", 0.0) or 0.0)
-        seasonal_status = _status_upper(seasonal_debt_total, thresholds["seasonal_debt"])
+        seasonal_status = _status_upper(
+            seasonal_debt_total, thresholds["seasonal_debt"]
+        )
         _register(
             "seasonal_debt",
             "Seasonal commitments outstanding",
@@ -2216,7 +2300,14 @@ class TelemetryCollector:
                     start_time,
                 ),
             )
-            for value, player_id, faction, program, total_contribution, ts in cursor.fetchall():
+            for (
+                value,
+                player_id,
+                faction,
+                program,
+                total_contribution,
+                ts,
+            ) in cursor.fetchall():
                 amount = float(value or 0.0)
                 if amount <= 0:
                     continue
@@ -2267,7 +2358,15 @@ class TelemetryCollector:
                     start_time,
                 ),
             )
-            for value, player_id, faction, program, paid_debt, reputation_gain, ts in cursor.fetchall():
+            for (
+                value,
+                player_id,
+                faction,
+                program,
+                paid_debt,
+                reputation_gain,
+                ts,
+            ) in cursor.fetchall():
                 amount = float(value or 0.0)
                 if amount <= 0:
                     continue
@@ -2310,7 +2409,17 @@ class TelemetryCollector:
                     start_time,
                 ),
             )
-            for value, player_id, faction, tier, remaining, days_remaining, threshold, reprisal_level, ts in cursor.fetchall():
+            for (
+                value,
+                player_id,
+                faction,
+                tier,
+                remaining,
+                days_remaining,
+                threshold,
+                reprisal_level,
+                ts,
+            ) in cursor.fetchall():
                 remaining_debt = float(value or 0.0)
                 if remaining_debt < 0:
                     continue
@@ -2557,7 +2666,9 @@ class TelemetryCollector:
         ]
         debt_list.sort(key=lambda item: item["debt"], reverse=True)
 
-        participation_summary = self._summarise_symposium_participation(participation_raw, hours)
+        participation_summary = self._summarise_symposium_participation(
+            participation_raw, hours
+        )
 
         return {
             "scoring": {
@@ -2576,8 +2687,7 @@ class TelemetryCollector:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "DELETE FROM metrics WHERE timestamp < ?",
-                (cutoff_time,)
+                "DELETE FROM metrics WHERE timestamp < ?", (cutoff_time,)
             )
             deleted = cursor.rowcount
             conn.commit()
@@ -2638,7 +2748,11 @@ class TelemetryCollector:
             "window_hours": hours,
             "unique_players": len(participants),
             "total_commands": total_commands,
-            "by_command": dict(sorted(totals_by_command.items(), key=lambda item: item[1], reverse=True)),
+            "by_command": dict(
+                sorted(
+                    totals_by_command.items(), key=lambda item: item[1], reverse=True
+                )
+            ),
             "players": player_rows,
         }
 
@@ -2676,7 +2790,5 @@ class track_duration:
         # Track error if exception occurred
         if exc_type:
             telemetry.track_error(
-                exc_type.__name__,
-                command=self.operation,
-                error_details=str(exc_val)
+                exc_type.__name__, command=self.operation, error_details=str(exc_val)
             )

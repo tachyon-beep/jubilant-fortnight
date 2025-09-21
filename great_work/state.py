@@ -1,4 +1,5 @@
 """Game state management and persistence."""
+
 from __future__ import annotations
 
 import json
@@ -325,10 +326,14 @@ class GameState:
             conn.executescript(_DB_SCHEMA)
             columns = {
                 row[1]
-                for row in conn.execute("PRAGMA table_info('symposium_proposals')").fetchall()
+                for row in conn.execute(
+                    "PRAGMA table_info('symposium_proposals')"
+                ).fetchall()
             }
             if "expire_at" not in columns:
-                conn.execute("ALTER TABLE symposium_proposals ADD COLUMN expire_at TEXT")
+                conn.execute(
+                    "ALTER TABLE symposium_proposals ADD COLUMN expire_at TEXT"
+                )
             if "priority" not in columns:
                 conn.execute(
                     "ALTER TABLE symposium_proposals ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
@@ -458,7 +463,10 @@ class GameState:
     def save_scholar(self, scholar: Scholar) -> None:
         data_json = json.dumps(self._repo.serialize(scholar))
         with closing(sqlite3.connect(self._db_path)) as conn:
-            conn.execute("REPLACE INTO scholars (id, data) VALUES (?, ?)", (scholar.id, data_json))
+            conn.execute(
+                "REPLACE INTO scholars (id, data) VALUES (?, ?)",
+                (scholar.id, data_json),
+            )
             conn.commit()
         self._cached_scholars[scholar.id] = scholar
 
@@ -481,7 +489,9 @@ class GameState:
         if scholar_id in self._cached_scholars:
             return self._cached_scholars[scholar_id]
         with closing(sqlite3.connect(self._db_path)) as conn:
-            row = conn.execute("SELECT data FROM scholars WHERE id = ?", (scholar_id,)).fetchone()
+            row = conn.execute(
+                "SELECT data FROM scholars WHERE id = ?", (scholar_id,)
+            ).fetchone()
         if not row:
             return None
         data = json.loads(row[0])
@@ -499,7 +509,9 @@ class GameState:
             yield scholar
 
     # Relationship management -------------------------------------------
-    def update_relationship(self, scholar_id: str, subject_id: str, feeling: float) -> None:
+    def update_relationship(
+        self, scholar_id: str, subject_id: str, feeling: float
+    ) -> None:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute(
                 "REPLACE INTO relationships (scholar_id, subject_id, feeling) VALUES (?, ?, ?)",
@@ -541,7 +553,10 @@ class GameState:
         for scholar_id, kind, payload_json, resolve_at in rows:
             try:
                 payload = json.loads(payload_json)
-            except (TypeError, json.JSONDecodeError):  # pragma: no cover - defensive guard
+            except (
+                TypeError,
+                json.JSONDecodeError,
+            ):  # pragma: no cover - defensive guard
                 payload = {}
             scheduled_at = datetime.fromisoformat(resolve_at)
             self.enqueue_order(
@@ -669,7 +684,11 @@ class GameState:
         self._followup_checked = True
 
     def schedule_followup(
-        self, scholar_id: str, kind: str, resolve_at: datetime, payload: Dict[str, object]
+        self,
+        scholar_id: str,
+        kind: str,
+        resolve_at: datetime,
+        payload: Dict[str, object],
     ) -> None:
         self._migrate_followups_to_orders()
         self.enqueue_order(
@@ -680,7 +699,9 @@ class GameState:
             scheduled_at=resolve_at,
         )
 
-    def due_followups(self, now: datetime) -> List[Tuple[int, str, str, Dict[str, object]]]:
+    def due_followups(
+        self, now: datetime
+    ) -> List[Tuple[int, str, str, Dict[str, object]]]:
         self._migrate_followups_to_orders()
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
@@ -802,7 +823,11 @@ class GameState:
         current_time = now or datetime.now(timezone.utc)
         for row in rows:
             expires_at = datetime.fromisoformat(row[8]) if row[8] else None
-            if not include_expired and expires_at is not None and expires_at < current_time:
+            if (
+                not include_expired
+                and expires_at is not None
+                and expires_at < current_time
+            ):
                 continue
             overrides.append(
                 {
@@ -819,7 +844,9 @@ class GameState:
             )
         return overrides
 
-    def active_moderation_overrides(self, now: Optional[datetime] = None) -> List[Dict[str, object]]:
+    def active_moderation_overrides(
+        self, now: Optional[datetime] = None
+    ) -> List[Dict[str, object]]:
         return self.list_moderation_overrides(include_expired=False, now=now)
 
     # Scheduled press --------------------------------------------------
@@ -843,7 +870,9 @@ class GameState:
             )
             conn.commit()
 
-    def due_queued_press(self, now: datetime) -> List[Tuple[int, datetime, Dict[str, object]]]:
+    def due_queued_press(
+        self, now: datetime
+    ) -> List[Tuple[int, datetime, Dict[str, object]]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
                 "SELECT id, release_at, payload FROM queued_press WHERE release_at <= ? ORDER BY release_at ASC",
@@ -1076,7 +1105,9 @@ class GameState:
 
         try:
             telemetry = get_telemetry()
-        except Exception:  # pragma: no cover - telemetry failures shouldn't break state updates
+        except (
+            Exception
+        ):  # pragma: no cover - telemetry failures shouldn't break state updates
             telemetry = None
 
         pending_count, oldest_seconds = self._pending_order_stats(order_type)
@@ -1102,8 +1133,12 @@ class GameState:
                 if message:
                     try:
                         self._admin_notifier(f"{prefix}{message}")
-                    except Exception:  # pragma: no cover - admin notifications should not break flow
-                        logger.exception("Failed to deliver admin notification: %s", message)
+                    except (
+                        Exception
+                    ):  # pragma: no cover - admin notifications should not break flow
+                        logger.exception(
+                            "Failed to deliver admin notification: %s", message
+                        )
 
     def export_events(self) -> List[Event]:
         events: List[Event] = []
@@ -1177,7 +1212,9 @@ class GameState:
             return cursor.lastrowid
 
     # Expedition log ----------------------------------------------------
-    def record_expedition(self, record: ExpeditionRecord, result_payload: Dict[str, object] | None = None) -> None:
+    def record_expedition(
+        self, record: ExpeditionRecord, result_payload: Dict[str, object] | None = None
+    ) -> None:
         payload_json = json.dumps(result_payload or {})
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute(
@@ -1209,7 +1246,11 @@ class GameState:
             }
             conn.execute(
                 "INSERT INTO events (timestamp, action, payload) VALUES (?, ?, ?)",
-                (record.timestamp.isoformat(), "expedition_queued", json.dumps(event_payload))
+                (
+                    record.timestamp.isoformat(),
+                    "expedition_queued",
+                    json.dumps(event_payload),
+                ),
             )
             conn.commit()
 
@@ -1237,7 +1278,9 @@ class GameState:
         if not row:
             return None
         timestamp, type_, headline, body, metadata = row
-        release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
+        release = PressRelease(
+            type=type_, headline=headline, body=body, metadata=json.loads(metadata)
+        )
         return PressRecord(timestamp=datetime.fromisoformat(timestamp), release=release)
 
     def list_press_releases_with_ids(
@@ -1252,11 +1295,20 @@ class GameState:
             rows = conn.execute(query, params).fetchall()
         results: List[tuple[int, PressRecord]] = []
         for press_id, ts, type_, headline, body, metadata in rows:
-            release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
-            results.append((press_id, PressRecord(timestamp=datetime.fromisoformat(ts), release=release)))
+            release = PressRelease(
+                type=type_, headline=headline, body=body, metadata=json.loads(metadata)
+            )
+            results.append(
+                (
+                    press_id,
+                    PressRecord(timestamp=datetime.fromisoformat(ts), release=release),
+                )
+            )
         return results
 
-    def list_press_releases(self, limit: int | None = None, offset: int = 0) -> List[PressRecord]:
+    def list_press_releases(
+        self, limit: int | None = None, offset: int = 0
+    ) -> List[PressRecord]:
         records: List[PressRecord] = []
         query = "SELECT timestamp, type, headline, body, metadata FROM press_releases ORDER BY id DESC"
         if limit is not None:
@@ -1267,8 +1319,12 @@ class GameState:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(query, params).fetchall()
         for ts, type_, headline, body, metadata in rows:
-            release = PressRelease(type=type_, headline=headline, body=body, metadata=json.loads(metadata))
-            records.append(PressRecord(timestamp=datetime.fromisoformat(ts), release=release))
+            release = PressRelease(
+                type=type_, headline=headline, body=body, metadata=json.loads(metadata)
+            )
+            records.append(
+                PressRecord(timestamp=datetime.fromisoformat(ts), release=release)
+            )
         return records
 
     def add_scholar_nickname(
@@ -1329,7 +1385,9 @@ class GameState:
                 "terms": offer.terms,
                 "relationship_snapshot": offer.relationship_snapshot,
                 "parent_offer_id": offer.parent_offer_id,
-                "resolved_at": offer.resolved_at.isoformat() if offer.resolved_at else None,
+                "resolved_at": (
+                    offer.resolved_at.isoformat() if offer.resolved_at else None
+                ),
             }
 
             cursor = conn.execute(
@@ -1373,7 +1431,11 @@ class GameState:
                 status=status,
                 parent_offer_id=payload.get("parent_offer_id"),
                 created_at=datetime.fromisoformat(created_at),
-                resolved_at=datetime.fromisoformat(payload["resolved_at"]) if payload.get("resolved_at") else None,
+                resolved_at=(
+                    datetime.fromisoformat(payload["resolved_at"])
+                    if payload.get("resolved_at")
+                    else None
+                ),
             )
 
     def list_active_offers(self, player_id: Optional[str] = None) -> List[OfferRecord]:
@@ -1389,28 +1451,39 @@ class GameState:
             payload = json.loads(payload_json)
 
             # Filter by player if specified
-            if player_id and player_id not in [payload.get("rival_id"), payload.get("patron_id")]:
+            if player_id and player_id not in [
+                payload.get("rival_id"),
+                payload.get("patron_id"),
+            ]:
                 continue
 
-            offers.append(OfferRecord(
-                id=id_,
-                scholar_id=scholar_id,
-                faction=faction,
-                rival_id=payload.get("rival_id", ""),
-                patron_id=payload.get("patron_id", ""),
-                offer_type=payload.get("offer_type", "initial"),
-                influence_offered=payload.get("influence_offered", {}),
-                terms=payload.get("terms", {}),
-                relationship_snapshot=payload.get("relationship_snapshot", {}),
-                status=status,
-                parent_offer_id=payload.get("parent_offer_id"),
-                created_at=datetime.fromisoformat(created_at),
-                resolved_at=datetime.fromisoformat(payload["resolved_at"]) if payload.get("resolved_at") else None,
-            ))
+            offers.append(
+                OfferRecord(
+                    id=id_,
+                    scholar_id=scholar_id,
+                    faction=faction,
+                    rival_id=payload.get("rival_id", ""),
+                    patron_id=payload.get("patron_id", ""),
+                    offer_type=payload.get("offer_type", "initial"),
+                    influence_offered=payload.get("influence_offered", {}),
+                    terms=payload.get("terms", {}),
+                    relationship_snapshot=payload.get("relationship_snapshot", {}),
+                    status=status,
+                    parent_offer_id=payload.get("parent_offer_id"),
+                    created_at=datetime.fromisoformat(created_at),
+                    resolved_at=(
+                        datetime.fromisoformat(payload["resolved_at"])
+                        if payload.get("resolved_at")
+                        else None
+                    ),
+                )
+            )
 
         return offers
 
-    def update_offer_status(self, offer_id: int, new_status: str, resolved_at: Optional[datetime] = None) -> None:
+    def update_offer_status(
+        self, offer_id: int, new_status: str, resolved_at: Optional[datetime] = None
+    ) -> None:
         """Update the status of an offer."""
         with closing(sqlite3.connect(self._db_path)) as conn:
             # First get the current offer to update its payload
@@ -1490,7 +1563,9 @@ class GameState:
             conn.commit()
             return cursor.lastrowid
 
-    def get_active_mentorship(self, scholar_id: str) -> Optional[Tuple[int, str, str, str]]:
+    def get_active_mentorship(
+        self, scholar_id: str
+    ) -> Optional[Tuple[int, str, str, str]]:
         """Get active mentorship for a scholar if it exists."""
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
@@ -1545,7 +1620,9 @@ class GameState:
             )
             conn.commit()
 
-    def complete_mentorship(self, mentorship_id: int, resolved_at: datetime | None = None) -> None:
+    def complete_mentorship(
+        self, mentorship_id: int, resolved_at: datetime | None = None
+    ) -> None:
         """Mark a mentorship as completed."""
         now = resolved_at or datetime.now(timezone.utc)
         with closing(sqlite3.connect(self._db_path)) as conn:
@@ -1585,7 +1662,9 @@ class GameState:
             )
             conn.commit()
 
-    def get_pending_conferences(self) -> List[Tuple[str, str, int, str, List[str], List[str]]]:
+    def get_pending_conferences(
+        self,
+    ) -> List[Tuple[str, str, int, str, List[str], List[str]]]:
         """Get conferences awaiting resolution."""
         orders = self.list_orders(order_type="conference_resolution", status="pending")
         pending: List[Tuple[str, str, int, str, List[str], List[str]]] = []
@@ -1699,7 +1778,7 @@ class GameState:
                 WHERE deadline >= ?
                 ORDER BY deadline ASC
                 """,
-                (current_date,)
+                (current_date,),
             ).fetchall()
 
         return [
@@ -1711,8 +1790,8 @@ class GameState:
                     confidence=row[3],
                     supporters=json.loads(row[4]) if row[4] else [],
                     timestamp=datetime.fromisoformat(row[5]),
-                    deadline=row[6]
-                )
+                    deadline=row[6],
+                ),
             )
             for row in rows
         ]
@@ -1765,7 +1844,9 @@ class GameState:
             conn.commit()
             return cursor.lastrowid
 
-    def get_current_symposium_topic(self) -> Optional[Tuple[int, str, str, int | None, List[int]]]:
+    def get_current_symposium_topic(
+        self,
+    ) -> Optional[Tuple[int, str, str, int | None, List[int]]]:
         """Get the current symposium topic if in voting phase.
 
         Returns: (topic_id, topic, description, proposal_id, list of vote options) or None
@@ -2059,7 +2140,9 @@ class GameState:
             topics.append(
                 {
                     "id": row[0],
-                    "symposium_date": datetime.fromisoformat(row[1]) if row[1] else None,
+                    "symposium_date": (
+                        datetime.fromisoformat(row[1]) if row[1] else None
+                    ),
                     "topic": row[2],
                     "description": row[3],
                     "proposal_id": row[4],
@@ -2191,7 +2274,9 @@ class GameState:
                 {
                     "topic_id": row[0],
                     "topic": row[1],
-                    "symposium_date": datetime.fromisoformat(row[2]) if row[2] else None,
+                    "symposium_date": (
+                        datetime.fromisoformat(row[2]) if row[2] else None
+                    ),
                     "pledge_amount": row[3],
                     "faction": row[4],
                     "status": row[5],
@@ -2224,7 +2309,9 @@ class GameState:
                     "created_at": datetime.fromisoformat(row[2]) if row[2] else None,
                     "updated_at": datetime.fromisoformat(row[3]) if row[3] else None,
                     "reprisal_level": int(row[4]) if row[4] is not None else 0,
-                    "last_reprisal_at": datetime.fromisoformat(row[5]) if row[5] else None,
+                    "last_reprisal_at": (
+                        datetime.fromisoformat(row[5]) if row[5] else None
+                    ),
                 }
             )
         return debts
@@ -2556,7 +2643,9 @@ class GameState:
             conn.commit()
             return int(cursor.lastrowid)
 
-    def list_active_seasonal_commitments(self, now: datetime) -> List[Dict[str, object]]:
+    def list_active_seasonal_commitments(
+        self, now: datetime
+    ) -> List[Dict[str, object]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             rows = conn.execute(
                 """SELECT id, player_id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at
@@ -2576,7 +2665,9 @@ class GameState:
                     "start_at": datetime.fromisoformat(row[5]),
                     "end_at": datetime.fromisoformat(row[6]),
                     "status": row[7],
-                    "last_processed_at": datetime.fromisoformat(row[8]) if row[8] else None,
+                    "last_processed_at": (
+                        datetime.fromisoformat(row[8]) if row[8] else None
+                    ),
                     "updated_at": datetime.fromisoformat(row[9]) if row[9] else None,
                 }
             )
@@ -2601,13 +2692,17 @@ class GameState:
                     "start_at": datetime.fromisoformat(row[4]),
                     "end_at": datetime.fromisoformat(row[5]),
                     "status": row[6],
-                    "last_processed_at": datetime.fromisoformat(row[7]) if row[7] else None,
+                    "last_processed_at": (
+                        datetime.fromisoformat(row[7]) if row[7] else None
+                    ),
                     "updated_at": datetime.fromisoformat(row[8]) if row[8] else None,
                 }
             )
         return commitments
 
-    def get_seasonal_commitment(self, commitment_id: int) -> Optional[Dict[str, object]]:
+    def get_seasonal_commitment(
+        self, commitment_id: int
+    ) -> Optional[Dict[str, object]]:
         with closing(sqlite3.connect(self._db_path)) as conn:
             row = conn.execute(
                 """SELECT id, player_id, faction, tier, base_cost, start_at, end_at, status, last_processed_at, updated_at
@@ -2651,7 +2746,12 @@ class GameState:
         with closing(sqlite3.connect(self._db_path)) as conn:
             conn.execute(
                 "UPDATE seasonal_commitments SET status = ?, last_processed_at = ?, updated_at = ? WHERE id = ?",
-                (status, processed_at.isoformat(), processed_at.isoformat(), commitment_id),
+                (
+                    status,
+                    processed_at.isoformat(),
+                    processed_at.isoformat(),
+                    commitment_id,
+                ),
             )
             conn.commit()
 
@@ -2708,7 +2808,9 @@ class GameState:
             )
         return projects
 
-    def list_faction_projects(self, include_completed: bool = False) -> List[Dict[str, object]]:
+    def list_faction_projects(
+        self, include_completed: bool = False
+    ) -> List[Dict[str, object]]:
         query = "SELECT id, name, faction, target_progress, progress, status, created_at, updated_at, metadata FROM faction_projects"
         if not include_completed:
             query += " WHERE status = 'active'"

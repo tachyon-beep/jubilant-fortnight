@@ -1,4 +1,5 @@
 """Scheduler utilities for Gazette ticks."""
+
 from __future__ import annotations
 
 import logging
@@ -38,13 +39,15 @@ class GazetteScheduler:
         self._admin_publisher = admin_publisher
         self._admin_file_publisher = admin_file_publisher
         self._upcoming_publisher = upcoming_publisher
-        self._alert_digest_ms = float(os.getenv("GREAT_WORK_ALERT_MAX_DIGEST_MS", "5000")) or 0.0
-        self._alert_queue_size = int(os.getenv("GREAT_WORK_ALERT_MAX_QUEUE", "12")) or 0
-        self._alert_release_min = int(os.getenv("GREAT_WORK_ALERT_MIN_RELEASES", "1")) or 0
-        publish_dir = os.getenv("GREAT_WORK_ARCHIVE_PUBLISH_DIR", "web_archive_public")
-        self._archive_publish_dir = (
-            Path(publish_dir).resolve() if publish_dir else None
+        self._alert_digest_ms = (
+            float(os.getenv("GREAT_WORK_ALERT_MAX_DIGEST_MS", "5000")) or 0.0
         )
+        self._alert_queue_size = int(os.getenv("GREAT_WORK_ALERT_MAX_QUEUE", "12")) or 0
+        self._alert_release_min = (
+            int(os.getenv("GREAT_WORK_ALERT_MIN_RELEASES", "1")) or 0
+        )
+        publish_dir = os.getenv("GREAT_WORK_ARCHIVE_PUBLISH_DIR", "web_archive_public")
+        self._archive_publish_dir = Path(publish_dir).resolve() if publish_dir else None
         pages_enabled_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_ENABLED")
         pages_dir_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_DIR")
         pages_subdir_env = os.getenv("GREAT_WORK_ARCHIVE_PAGES_SUBDIR")
@@ -58,32 +61,53 @@ class GazetteScheduler:
 
         self._archive_pages_enabled = pages_enabled
 
-        pages_dir_value = pages_dir_env if pages_dir_env is not None else self.settings.archive_pages_directory
-        pages_dir_value = pages_dir_value.strip() if isinstance(pages_dir_value, str) else ""
-        self._archive_pages_dir = Path(pages_dir_value).resolve() if pages_dir_value else None
+        pages_dir_value = (
+            pages_dir_env
+            if pages_dir_env is not None
+            else self.settings.archive_pages_directory
+        )
+        pages_dir_value = (
+            pages_dir_value.strip() if isinstance(pages_dir_value, str) else ""
+        )
+        self._archive_pages_dir = (
+            Path(pages_dir_value).resolve() if pages_dir_value else None
+        )
 
         self._archive_pages_subdir = (
-            pages_subdir_env if pages_subdir_env is not None else self.settings.archive_pages_subdir
+            pages_subdir_env
+            if pages_subdir_env is not None
+            else self.settings.archive_pages_subdir
         )
         if not isinstance(self._archive_pages_subdir, str):
             self._archive_pages_subdir = str(self._archive_pages_subdir)
 
         if pages_nojekyll_env is not None:
-            self._archive_pages_nojekyll = pages_nojekyll_env.lower() not in {"false", "0", "off"}
+            self._archive_pages_nojekyll = pages_nojekyll_env.lower() not in {
+                "false",
+                "0",
+                "off",
+            }
         else:
             self._archive_pages_nojekyll = self.settings.archive_pages_nojekyll
-        self._archive_snapshot_limit = int(os.getenv("GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS", "30") or 0)
+        self._archive_snapshot_limit = int(
+            os.getenv("GREAT_WORK_ARCHIVE_MAX_SNAPSHOTS", "30") or 0
+        )
         try:
             storage_limit = os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB", "0") or "0"
             self._archive_storage_limit_mb = float(storage_limit)
         except ValueError:
-            logger.warning("Invalid GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=%s; ignoring", os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB"))
+            logger.warning(
+                "Invalid GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=%s; ignoring",
+                os.getenv("GREAT_WORK_ARCHIVE_MAX_STORAGE_MB"),
+            )
             self._archive_storage_limit_mb = 0.0
 
         calibration_flag = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOTS", "")
         calibration_dir_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DIR", "")
         calibration_keep_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_KEEP", "")
-        calibration_details_env = os.getenv("GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS", "")
+        calibration_details_env = os.getenv(
+            "GREAT_WORK_CALIBRATION_SNAPSHOT_DETAILS", ""
+        )
 
         enabled_by_flag = calibration_flag.lower() in {"1", "true", "yes", "on"}
         enabled_by_dir = bool(calibration_dir_env.strip())
@@ -108,17 +132,30 @@ class GazetteScheduler:
             self._calibration_snapshot_keep = 0
 
         if calibration_details_env:
-            self._calibration_include_details = calibration_details_env.lower() not in {"0", "false", "off"}
+            self._calibration_include_details = calibration_details_env.lower() not in {
+                "0",
+                "false",
+                "off",
+            }
         else:
             self._calibration_include_details = True
 
     def start(self) -> None:
         for digest_time in self.settings.gazette_times:
             hour, minute = map(int, digest_time.split(":"))
-            self.scheduler.add_job(self._publish_digest, "cron", hour=hour, minute=minute)
-        self.scheduler.add_job(self._host_symposium, "cron", day_of_week=self.settings.symposium_day.lower(), hour=12)
+            self.scheduler.add_job(
+                self._publish_digest, "cron", hour=hour, minute=minute
+            )
+        self.scheduler.add_job(
+            self._host_symposium,
+            "cron",
+            day_of_week=self.settings.symposium_day.lower(),
+            hour=12,
+        )
         self.scheduler.start()
-        logger.info("GazetteScheduler started with digests at %s", self.settings.gazette_times)
+        logger.info(
+            "GazetteScheduler started with digests at %s", self.settings.gazette_times
+        )
 
     def shutdown(self) -> None:
         self.scheduler.shutdown(wait=False)
@@ -159,10 +196,12 @@ class GazetteScheduler:
             self._maybe_write_calibration_snapshot(current_time)
             self._emit_upcoming_highlights()
             return
-        
+
         # Export web archive after digest
         try:
-            archive_path = self.service.export_web_archive(Path("web_archive"), source="scheduler")
+            archive_path = self.service.export_web_archive(
+                Path("web_archive"), source="scheduler"
+            )
             logger.info(f"Web archive exported to {archive_path}")
             self._publish_to_container(archive_path)
             self._publish_to_pages(archive_path)
@@ -170,7 +209,9 @@ class GazetteScheduler:
                 snapshot_path = self._package_archive(archive_path)
                 caption = f"📚 Web archive snapshot ready ({snapshot_path.name})"
                 self._admin_file_publisher(snapshot_path, caption)
-                logger.info("Web archive snapshot published to admin channel: %s", snapshot_path)
+                logger.info(
+                    "Web archive snapshot published to admin channel: %s", snapshot_path
+                )
         except Exception:
             logger.exception("Failed to export web archive during digest")
         self._emit_admin_notifications()
@@ -232,7 +273,10 @@ class GazetteScheduler:
             self._notify_admin(message)
 
     def _maybe_write_calibration_snapshot(self, current_time: datetime) -> None:
-        if not self._calibration_snapshots_enabled or self._calibration_snapshot_dir is None:
+        if (
+            not self._calibration_snapshots_enabled
+            or self._calibration_snapshot_dir is None
+        ):
             return
 
         telemetry = get_telemetry()
@@ -272,7 +316,9 @@ class GazetteScheduler:
             source = archive_path.resolve()
             target = self._archive_publish_dir
             if source == target:
-                logger.debug("Archive publish target matches export directory; skipping sync")
+                logger.debug(
+                    "Archive publish target matches export directory; skipping sync"
+                )
                 return
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.exists():
@@ -341,7 +387,9 @@ class GazetteScheduler:
                     reason=str(target),
                 )
             except Exception:  # pragma: no cover - defensive logging only
-                logger.debug("Telemetry tracking for GitHub Pages publish failed", exc_info=True)
+                logger.debug(
+                    "Telemetry tracking for GitHub Pages publish failed", exc_info=True
+                )
             logger.info("Archive published to GitHub Pages directory: %s", target)
         except Exception as exc:  # pragma: no cover - defensive path
             logger.exception("Failed to publish archive to GitHub Pages directory")
@@ -355,7 +403,9 @@ class GazetteScheduler:
                     reason=str(exc),
                 )
             except Exception:
-                logger.debug("Telemetry recording for GitHub Pages failure failed", exc_info=True)
+                logger.debug(
+                    "Telemetry recording for GitHub Pages failure failed", exc_info=True
+                )
 
     def _check_snapshot_storage(self, snapshots_dir: Path) -> None:
         """Emit telemetry and alerts when snapshot storage crosses thresholds."""
@@ -411,7 +461,9 @@ class GazetteScheduler:
         telemetry = get_telemetry()
         try:
             telemetry.track_queue_depth(len(upcoming), horizon_hours=horizon_hours)
-        except Exception:  # pragma: no cover - telemetry failures shouldn't block highlights
+        except (
+            Exception
+        ):  # pragma: no cover - telemetry failures shouldn't block highlights
             logger.exception("Failed to record queue depth telemetry")
         if not upcoming:
             return
@@ -429,9 +481,7 @@ class GazetteScheduler:
             timestamp = release_at.strftime("%Y-%m-%d %H:%M UTC")
             badges = item.get("badges") or []
             label = f"[{" | ".join(badges)}] " if badges else ""
-            lines.append(
-                f"• {label}{item['headline']} — {timestamp} (in {relative})"
-            )
+            lines.append(f"• {label}{item['headline']} — {timestamp} (in {relative})")
         message = "\n".join(lines)
         try:
             self._upcoming_publisher(message)
@@ -455,9 +505,7 @@ class GazetteScheduler:
             )
         queue_size = self.service.pending_press_count()
         if self._alert_queue_size and queue_size > self._alert_queue_size:
-            message = (
-                f"⚠️ Scheduled press backlog at {queue_size} items (threshold {self._alert_queue_size})."
-            )
+            message = f"⚠️ Scheduled press backlog at {queue_size} items (threshold {self._alert_queue_size})."
             self._notify_admin(message)
             telemetry.track_system_event(
                 "alert_press_backlog",
@@ -465,9 +513,7 @@ class GazetteScheduler:
                 reason=message,
             )
         if self._alert_release_min and release_count < self._alert_release_min:
-            message = (
-                f"⚠️ Digest published only {release_count} item(s); expected at least {self._alert_release_min}."
-            )
+            message = f"⚠️ Digest published only {release_count} item(s); expected at least {self._alert_release_min}."
             self._notify_admin(message)
             telemetry.track_system_event(
                 "alert_low_digest_output",

@@ -1,4 +1,5 @@
 """Expedition resolution rules and failure tables."""
+
 from __future__ import annotations
 
 import copy
@@ -152,15 +153,16 @@ class FailureTables:
         self._sideways: Dict[str, Dict[str, List[str]]] = {}
         for expedition_type, depths in data.get("sideways", {}).items():
             self._sideways[expedition_type] = {
-                depth: list(entries)
-                for depth, entries in depths.items()
+                depth: list(entries) for depth, entries in depths.items()
             }
 
     def _load_yaml(self, name: str) -> Dict:
         with (self._path / name).open("r", encoding="utf-8") as fh:
             return yaml.safe_load(fh)
 
-    def roll(self, rng: DeterministicRNG, expedition_type: str, depth: str) -> FailureResult:
+    def roll(
+        self, rng: DeterministicRNG, expedition_type: str, depth: str
+    ) -> FailureResult:
         table = self._tables[expedition_type][depth]
         total = sum(item.weight for item in table)
         roll = rng.randint(1, total)
@@ -203,7 +205,9 @@ class ExpeditionResolver:
             )
         if 40 <= final <= 64:
             discovery = self._sideways_discovery(rng, expedition_type, prep_depth)
-            effects = self._generate_sideways_effects(rng, discovery, expedition_type, prep_depth, False)
+            effects = self._generate_sideways_effects(
+                rng, discovery, expedition_type, prep_depth, False
+            )
             return ExpeditionResult(
                 roll=roll,
                 modifier=modifier,
@@ -219,8 +223,12 @@ class ExpeditionResolver:
                 final_score=final,
                 outcome=ExpeditionOutcome.SUCCESS,
             )
-        discovery = self._sideways_discovery(rng, expedition_type, prep_depth, landmark=True)
-        effects = self._generate_sideways_effects(rng, discovery, expedition_type, prep_depth, True)
+        discovery = self._sideways_discovery(
+            rng, expedition_type, prep_depth, landmark=True
+        )
+        effects = self._generate_sideways_effects(
+            rng, discovery, expedition_type, prep_depth, True
+        )
         return ExpeditionResult(
             roll=roll,
             modifier=modifier,
@@ -241,7 +249,9 @@ class ExpeditionResolver:
         if not options and not landmark:
             return None
         if landmark:
-            landmark_text = self._pick_landmark_discovery(rng, expedition_type, prep_depth)
+            landmark_text = self._pick_landmark_discovery(
+                rng, expedition_type, prep_depth
+            )
             if landmark_text:
                 return landmark_text
             if options:
@@ -262,9 +272,13 @@ class ExpeditionResolver:
         if not entry:
             return None
 
-        depth_entry = entry.get(prep_depth) or entry.get("standard") or next(
-            (value for key, value in entry.items() if isinstance(value, dict)),
-            None,
+        depth_entry = (
+            entry.get(prep_depth)
+            or entry.get("standard")
+            or next(
+                (value for key, value in entry.items() if isinstance(value, dict)),
+                None,
+            )
         )
         if not isinstance(depth_entry, dict):
             return None
@@ -280,7 +294,7 @@ class ExpeditionResolver:
         discovery_text: Optional[str],
         expedition_type: str,
         prep_depth: str,
-        is_landmark: bool
+        is_landmark: bool,
     ) -> Optional[List[SidewaysEffect]]:
         """Generate mechanical effects based on the sideways discovery text."""
         if not discovery_text:
@@ -343,7 +357,9 @@ class ExpeditionResolver:
         rng: DeterministicRNG,
         expedition_type: str,
     ) -> None:
-        primary_faction = rng.choice(["Academic", "Government", "Industry", "Religious", "Foreign"])
+        primary_faction = rng.choice(
+            ["Academic", "Government", "Industry", "Religious", "Foreign"]
+        )
         effects.append(
             SidewaysEffect.faction_shift(
                 faction=primary_faction,
@@ -446,7 +462,9 @@ class ExpeditionResolver:
                 amount = int(spec.get("amount", 0))
                 description = description_template.format(**effect_context)
                 effects.append(
-                    SidewaysEffect.faction_shift(faction=faction, amount=amount, description=description)
+                    SidewaysEffect.faction_shift(
+                        faction=faction, amount=amount, description=description
+                    )
                 )
 
             elif effect_enum == SidewaysEffectType.SPAWN_THEORY:
@@ -457,7 +475,11 @@ class ExpeditionResolver:
                 description = description_template.format(**effect_context)
                 theory_text = theory_template.format(**effect_context)
                 effects.append(
-                    SidewaysEffect.spawn_theory(theory_text=theory_text, confidence=confidence, description=description)
+                    SidewaysEffect.spawn_theory(
+                        theory_text=theory_text,
+                        confidence=confidence,
+                        description=description,
+                    )
                 )
 
             elif effect_enum == SidewaysEffectType.CREATE_GRUDGE:
@@ -465,7 +487,11 @@ class ExpeditionResolver:
                 intensity = float(spec.get("intensity", 0.5))
                 description = description_template.format(**effect_context)
                 effects.append(
-                    SidewaysEffect.create_grudge(target_scholar_id=target, intensity=intensity, description=description)
+                    SidewaysEffect.create_grudge(
+                        target_scholar_id=target,
+                        intensity=intensity,
+                        description=description,
+                    )
                 )
 
             elif effect_enum == SidewaysEffectType.QUEUE_ORDER:
@@ -475,14 +501,20 @@ class ExpeditionResolver:
                 order_data = copy.deepcopy(spec.get("order_data", {}))
                 description = description_template.format(**effect_context)
                 effects.append(
-                    SidewaysEffect.queue_order(order_type=order_type, order_data=order_data, description=description)
+                    SidewaysEffect.queue_order(
+                        order_type=order_type,
+                        order_data=order_data,
+                        description=description,
+                    )
                 )
 
             elif effect_enum == SidewaysEffectType.REPUTATION_CHANGE:
                 amount = int(spec.get("amount", 0))
                 description = description_template.format(**effect_context)
                 effects.append(
-                    SidewaysEffect.reputation_change(amount=amount, description=description)
+                    SidewaysEffect.reputation_change(
+                        amount=amount, description=description
+                    )
                 )
 
             elif effect_enum == SidewaysEffectType.UNLOCK_OPPORTUNITY:
@@ -550,9 +582,14 @@ class ExpeditionResolver:
             if not spec:
                 continue
             effect_type = spec["type"]
-            description = spec.get("description", f"{tag.title()} ripple from expedition")
+            description = spec.get(
+                "description", f"{tag.title()} ripple from expedition"
+            )
             if effect_type == SidewaysEffectType.SPAWN_THEORY:
-                theory_text = discovery_text or f"{tag.title()} implications for {expedition_type}"
+                theory_text = (
+                    discovery_text
+                    or f"{tag.title()} implications for {expedition_type}"
+                )
                 confidence = spec.get("confidence", "suspect")
                 effects.append(
                     SidewaysEffect.spawn_theory(
@@ -562,13 +599,15 @@ class ExpeditionResolver:
                     )
                 )
             elif effect_type == SidewaysEffectType.FACTION_SHIFT:
-                faction = spec.get("faction") or rng.choice([
-                    "Academic",
-                    "Government",
-                    "Industry",
-                    "Religious",
-                    "Foreign",
-                ])
+                faction = spec.get("faction") or rng.choice(
+                    [
+                        "Academic",
+                        "Government",
+                        "Industry",
+                        "Religious",
+                        "Foreign",
+                    ]
+                )
                 amount = int(spec.get("amount", 1))
                 effects.append(
                     SidewaysEffect.faction_shift(

@@ -1,4 +1,5 @@
 """Discord command telemetry decorator."""
+
 from __future__ import annotations
 
 import functools
@@ -39,7 +40,7 @@ def track_command(func: Callable) -> Callable:
                 error_type,
                 command=command_name,
                 player_id=player_id,
-                error_details=str(e)
+                error_details=str(e),
             )
             raise
 
@@ -52,11 +53,11 @@ def track_command(func: Callable) -> Callable:
                 guild_id,
                 success=success,
                 duration_ms=duration_ms,
-                channel_id=channel_id
+                channel_id=channel_id,
             )
 
             # Track player activity if successful
-            if success and hasattr(interaction, 'user'):
+            if success and hasattr(interaction, "user"):
                 bot = getattr(interaction, "client", None)
                 service = getattr(bot, "state_service", None) if bot else None
 
@@ -68,8 +69,8 @@ def track_command(func: Callable) -> Callable:
                             telemetry.track_player_activity(
                                 player_id,
                                 command_name,
-                                status.get('reputation', 0),
-                                status.get('influence', {})
+                                status.get("reputation", 0),
+                                status.get("influence", {}),
                             )
                     except Exception:
                         pass  # Do not break command execution if telemetry fails

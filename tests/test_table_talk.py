@@ -1,4 +1,5 @@
 """Tests for table-talk layered press."""
+
 import os
 import tempfile
 from pathlib import Path

@@ -1,4 +1,5 @@
 """Scholar generation and lifecycle management."""
+
 from __future__ import annotations
 
 import math
@@ -72,7 +73,9 @@ class ScholarRepository:
                 timestamp=datetime.fromisoformat(fact["t"]),
                 type=fact["type"],
                 subject=fact.get("who", ""),
-                details={k: v for k, v in fact.items() if k not in {"t", "type", "who"}},
+                details={
+                    k: v for k, v in fact.items() if k not in {"t", "type", "who"}
+                },
             )
             for fact in data.get("facts", [])
         ]
@@ -119,12 +122,14 @@ class ScholarRepository:
             "religion": rng.randint(-3, 3),
             "foreign": rng.randint(-3, 3),
         }
-        catchphrase = rng.choice([
-            "Show me {evidence} or I am not buying it.",
-            "As I have long suspected, {topic} hinges on {concept}.",
-            "Have we tried {reckless_method} yet?",
-            "Bear with me. If {premise}, then {wild_leap}.",
-        ])
+        catchphrase = rng.choice(
+            [
+                "Show me {evidence} or I am not buying it.",
+                "As I have long suspected, {topic} hinges on {concept}.",
+                "Have we tried {reckless_method} yet?",
+                "Bear with me. If {premise}, then {wild_leap}.",
+            ]
+        )
         career = {"tier": "Postdoc", "track": "Academia"}
         contract = {"employer": "Independent", "term_years": rng.randint(1, 5)}
         scholar = Scholar(
@@ -177,7 +182,14 @@ def defection_probability(
 
     loyalty = scholar.loyalty_score()
     integrity = scholar.integrity_score()
-    x = offer_quality + mistreatment + alignment + plateau - 0.6 * loyalty - 0.4 * integrity
+    x = (
+        offer_quality
+        + mistreatment
+        + alignment
+        + plateau
+        - 0.6 * loyalty
+        - 0.4 * integrity
+    )
     return 1.0 / (1.0 + math.exp(-6 * (x - 0.5)))
 
 
@@ -186,7 +198,9 @@ def apply_scar(scholar: Scholar, scar: str, subject: str, timestamp: datetime) -
 
     scholar.memory.add_scar(scar)
     scholar.memory.record_fact(
-        MemoryFact(timestamp=timestamp, type="scar", subject=subject, details={"scar": scar})
+        MemoryFact(
+            timestamp=timestamp, type="scar", subject=subject, details={"scar": scar}
+        )
     )
     scholar.memory.adjust_feeling(subject, -3.0)
 

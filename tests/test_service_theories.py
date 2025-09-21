@@ -1,4 +1,5 @@
 """Tests for GameService theory submission and validation logic."""
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,7 @@ def test_submit_theory_creates_bulletin(tmp_path):
         theory="The ancient calendar aligns with lunar cycles",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=["s.ironquill", "s.scholar2"],
-        deadline="2030-12-31"
+        deadline="2030-12-31",
     )
 
     # Verify press release
@@ -48,12 +49,18 @@ def test_submit_theory_creates_bulletin(tmp_path):
     theory_event = next((e for e in events if e.action == "submit_theory"), None)
     assert theory_event is not None
     assert theory_event.payload["player"] == "researcher1"
-    assert theory_event.payload["theory"] == "The ancient calendar aligns with lunar cycles"
+    assert (
+        theory_event.payload["theory"]
+        == "The ancient calendar aligns with lunar cycles"
+    )
     assert theory_event.payload["confidence"] == "certain"
 
     # Verify theory was recorded in database
     theories = service.state.pending_theories()
-    assert any(record.theory == "The ancient calendar aligns with lunar cycles" for theory_id, record in theories)
+    assert any(
+        record.theory == "The ancient calendar aligns with lunar cycles"
+        for theory_id, record in theories
+    )
 
     # Verify press was archived
     archived = service.state.list_press_releases()
@@ -72,7 +79,7 @@ def test_submit_theory_with_suspect_confidence(tmp_path):
         theory="Preliminary hypothesis about tidal patterns",
         confidence=ConfidenceLevel.SUSPECT,
         supporters=[],
-        deadline="2024-11-30"
+        deadline="2024-11-30",
     )
 
     submission_meta = press.metadata.get("submission", {})
@@ -93,7 +100,7 @@ def test_submit_theory_with_career_stake(tmp_path):
         theory="Revolutionary unified field theory",
         confidence=ConfidenceLevel.STAKE_CAREER,
         supporters=["s.scholar1", "s.scholar2", "s.scholar3"],
-        deadline="2025-01-15"
+        deadline="2025-01-15",
     )
 
     submission_meta = press.metadata.get("submission", {})
@@ -119,7 +126,7 @@ def test_submit_multiple_theories_increments_bulletin_number(tmp_path):
         theory="First theory",
         confidence=ConfidenceLevel.SUSPECT,
         supporters=[],
-        deadline="2024-12-01"
+        deadline="2024-12-01",
     )
 
     # Submit second theory
@@ -128,7 +135,7 @@ def test_submit_multiple_theories_increments_bulletin_number(tmp_path):
         theory="Second theory",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=["s.supporter"],
-        deadline="2024-12-02"
+        deadline="2024-12-02",
     )
 
     # Extract bulletin numbers from headlines
@@ -145,8 +152,12 @@ def test_theory_reference_snapshot_includes_status_and_supporters(tmp_path):
     db_path = tmp_path / "state.sqlite"
     service = GameService(db_path=db_path)
 
-    future_deadline = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
-    past_deadline = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+    future_deadline = (datetime.now(timezone.utc) + timedelta(days=3)).strftime(
+        "%Y-%m-%d"
+    )
+    past_deadline = (datetime.now(timezone.utc) - timedelta(days=2)).strftime(
+        "%Y-%m-%d"
+    )
 
     service.ensure_player("innovator", "Innovator")
     service.ensure_player("historian", "Historian")
@@ -182,7 +193,10 @@ def test_theory_reference_snapshot_includes_status_and_supporters(tmp_path):
     assert future_entry["confidence_display"] == "Certain"
     assert future_entry["supporters"] == ["s.lyra"]
     assert future_entry["player_display"] == "Innovator"
-    assert future_entry["days_remaining"] is not None and future_entry["days_remaining"] >= 0
+    assert (
+        future_entry["days_remaining"] is not None
+        and future_entry["days_remaining"] >= 0
+    )
 
     assert past_entry["status"] == "expired"
     assert past_entry["confidence_display"] == "Suspect"
@@ -208,7 +222,13 @@ def test_ensure_player_creates_new_player(tmp_path):
     assert player.display_name == "new_player"
     assert player.reputation == 0  # Default initial reputation
     # Influence should be initialized with all factions at 0
-    expected_influence = {"academia": 0, "government": 0, "industry": 0, "religion": 0, "foreign": 0}
+    expected_influence = {
+        "academia": 0,
+        "government": 0,
+        "industry": 0,
+        "religion": 0,
+        "foreign": 0,
+    }
     assert player.influence == expected_influence
     assert player.cooldowns == {}
 
@@ -224,7 +244,7 @@ def test_ensure_player_preserves_existing(tmp_path):
         display_name="Existing Player",
         reputation=50,
         influence={"academia": 10},
-        cooldowns={"recruitment": 3}
+        cooldowns={"recruitment": 3},
     )
     service.state.upsert_player(player)
 
@@ -250,7 +270,7 @@ def test_theory_submission_with_empty_supporters(tmp_path):
         theory="Solo research on particle physics",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=[],
-        deadline="2024-12-25"
+        deadline="2024-12-25",
     )
 
     submission_meta = press.metadata.get("submission", {})
@@ -277,7 +297,7 @@ def test_theory_submission_with_many_supporters(tmp_path):
         theory="Widely supported climate model",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=supporters,
-        deadline="2025-01-01"
+        deadline="2025-01-01",
     )
 
     submission_meta = press.metadata.get("submission", {})
@@ -292,12 +312,7 @@ def test_theory_deadline_formats(tmp_path):
 
     service.ensure_player("planner")
 
-    test_cases = [
-        "2030-12-31",
-        "2031-01-15",
-        "December 31, 2030",
-        "Jan 15, 2031"
-    ]
+    test_cases = ["2030-12-31", "2031-01-15", "December 31, 2030", "Jan 15, 2031"]
 
     for deadline in test_cases:
         press = service.submit_theory(
@@ -305,7 +320,7 @@ def test_theory_deadline_formats(tmp_path):
             theory=f"Theory with deadline {deadline}",
             confidence=ConfidenceLevel.SUSPECT,
             supporters=[],
-            deadline=deadline
+            deadline=deadline,
         )
 
         assert deadline in press.body

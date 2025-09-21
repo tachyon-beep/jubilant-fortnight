@@ -1,4 +1,5 @@
 """Tests for the narrative validation CLI."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,9 @@ from great_work.tools import validate_narrative
 
 
 def test_current_assets_pass_validation() -> None:
-    errors, related = validate_narrative.validate_files(validate_narrative.DEFAULT_FILES)
+    errors, related = validate_narrative.validate_files(
+        validate_narrative.DEFAULT_FILES
+    )
     assert errors == []
     assert related == []
 

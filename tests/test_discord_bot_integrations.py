@@ -1,4 +1,5 @@
 """Smoke tests for Discord channel routing."""
+
 from __future__ import annotations
 
 from great_work.discord_bot import ChannelRouter

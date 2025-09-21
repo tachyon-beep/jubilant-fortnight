@@ -1,4 +1,5 @@
 """Telemetry KPI and cohort reporting tests."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -10,7 +11,9 @@ import pytest
 from great_work.telemetry import MetricType, TelemetryCollector
 
 
-def _age_metric(db_path: Path, player_id: str, command_name: str, delta_seconds: float) -> None:
+def _age_metric(
+    db_path: Path, player_id: str, command_name: str, delta_seconds: float
+) -> None:
     """Adjust the timestamp of the earliest matching metric by delta_seconds."""
 
     with sqlite3.connect(db_path) as conn:

@@ -1,13 +1,14 @@
 """High-level game service orchestrating commands."""
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import os
 import random
+import textwrap
 import threading
 import time
-import textwrap
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .config import Settings, get_settings
 from .expeditions import ExpeditionResolver, FailureTables
-from .llm_client import LLMGenerationError, LLMNotEnabledError, enhance_press_release_sync
+from .llm_client import (
+    LLMGenerationError,
+    LLMNotEnabledError,
+    enhance_press_release_sync,
+)
 from .models import (
     ConfidenceLevel,
     Event,
@@ -140,7 +145,13 @@ class GameService:
         "field": {"government": 1, "industry": 1},
         "great_project": {"academia": 2, "industry": 2, "foreign": 1},
     }
-    _FACTIONS: Tuple[str, ...] = ("academia", "government", "industry", "religion", "foreign")
+    _FACTIONS: Tuple[str, ...] = (
+        "academia",
+        "government",
+        "industry",
+        "religion",
+        "foreign",
+    )
 
     _CAREER_TRACKS: Dict[str, List[str]] = {
         "Academia": ["Postdoc", "Fellow", "Professor"],
@@ -233,7 +244,7 @@ class GameService:
         snippet = text.strip().replace("\n", " ")[:140]
         note = (
             f"🛡️ Moderation blocked {surface} from {actor_label}: {detail}\n"
-            f"hash={text_hash[:12]} stage={stage} snippet=\"{snippet}\""
+            f'hash={text_hash[:12]} stage={stage} snippet="{snippet}"'
         )
         self._queue_admin_notification(note)
         self._record_moderation_event(
@@ -251,8 +262,12 @@ class GameService:
                 source=surface,
                 reason=detail,
             )
-        except Exception:  # pragma: no cover - telemetry should not fail moderation flow
-            logger.debug("Telemetry tracking for moderation block failed", exc_info=True)
+        except (
+            Exception
+        ):  # pragma: no cover - telemetry should not fail moderation flow
+            logger.debug(
+                "Telemetry tracking for moderation block failed", exc_info=True
+            )
 
     def _record_moderation_event(
         self,
@@ -292,7 +307,9 @@ class GameService:
                 source=metadata.get("source"),
             )
         except Exception:  # pragma: no cover - telemetry failure should not block flow
-            logger.debug("Telemetry tracking for moderation event failed", exc_info=True)
+            logger.debug(
+                "Telemetry tracking for moderation event failed", exc_info=True
+            )
 
     def _moderate_player_text(
         self,
@@ -319,7 +336,9 @@ class GameService:
                 text=text,
                 stage="player_input",
             )
-            raise GameService.ModerationRejectedError(decision.reason or "Content blocked")
+            raise GameService.ModerationRejectedError(
+                decision.reason or "Content blocked"
+            )
         if decision.severity == "warn":
             self._record_moderation_event(
                 severity="warn",
@@ -345,7 +364,9 @@ class GameService:
             actor=actor,
             stage="llm_output",
         )
-        text_hash = decision.text_hash or GuardianModerator.compute_hash(generated.strip())
+        text_hash = decision.text_hash or GuardianModerator.compute_hash(
+            generated.strip()
+        )
         if decision.allowed:
             if decision.severity == "warn":
                 self._record_moderation_event(
@@ -369,7 +390,9 @@ class GameService:
         )
         return fallback, decision
 
-    def release_scheduled_press(self, now: Optional[datetime] = None) -> List[PressRelease]:
+    def release_scheduled_press(
+        self, now: Optional[datetime] = None
+    ) -> List[PressRelease]:
         """Release any scheduled press items that are due as of ``now``."""
 
         now = now or datetime.now(timezone.utc)
@@ -468,7 +491,9 @@ class GameService:
 
         items.sort(key=lambda item: item["release_at"])
         items = items[:limit]
-        tone_seed = get_tone_seed("digest_highlight", getattr(self._multi_press, "setting", None))
+        tone_seed = get_tone_seed(
+            "digest_highlight", getattr(self._multi_press, "setting", None)
+        )
         headline_template = None
         callout = None
         blurb_template = None
@@ -476,7 +501,11 @@ class GameService:
             headline_template = tone_seed.get("headline")
             callout = tone_seed.get("callout")
             blurb_template = tone_seed.get("blurb_template")
-        headline = headline_template.format(count=len(items)) if headline_template else f"Upcoming Highlights ({len(items)})"
+        headline = (
+            headline_template.format(count=len(items))
+            if headline_template
+            else f"Upcoming Highlights ({len(items)})"
+        )
 
         lines: List[str] = []
         metadata_items: List[Dict[str, object]] = []
@@ -498,7 +527,7 @@ class GameService:
                 blurb = blurb_template.format(
                     headline=item["headline"],
                     relative_time=relative,
-                    call_to_action=callout or ""
+                    call_to_action=callout or "",
                 )
             else:
                 blurb = summary
@@ -599,9 +628,7 @@ class GameService:
             self._paused = True
             self._pause_reason = f"Narrative generator unavailable: {reason}"
             self._pause_source = "llm"
-        self._queue_admin_notification(
-            f"⚠️ Game paused — {self._pause_reason}"
-        )
+        self._queue_admin_notification(f"⚠️ Game paused — {self._pause_reason}")
         now = datetime.now(timezone.utc)
         pause_press = PressRelease(
             type="admin_action",
@@ -653,7 +680,9 @@ class GameService:
             self._pause_reason = None
             self._pause_source = None
             self._llm_fail_start = None
-        self._queue_admin_notification("✅ Narrative generator restored — game resumed.")
+        self._queue_admin_notification(
+            "✅ Narrative generator restored — game resumed."
+        )
         now = datetime.now(timezone.utc)
         resume_press = PressRelease(
             type="admin_action",
@@ -695,14 +724,17 @@ class GameService:
         except Exception:
             logger.debug("Telemetry tracking for llm_resume failed", exc_info=True)
 
-    def _resolve_scholar_traits(self, scholar_name: str | None) -> Optional[Dict[str, object]]:
+    def _resolve_scholar_traits(
+        self, scholar_name: str | None
+    ) -> Optional[Dict[str, object]]:
         if not scholar_name:
             return None
         for scholar in self.state.all_scholars():
             if scholar.name.lower() == scholar_name.lower():
                 return {
                     "personality": scholar.archetype,
-                    "specialization": ", ".join(scholar.disciplines) or "general research",
+                    "specialization": ", ".join(scholar.disciplines)
+                    or "general research",
                     "quirks": scholar.methods,
                     "drives": scholar.drives,
                 }
@@ -1229,6 +1261,7 @@ class GameService:
         """
         # Generate expedition code using timestamp for uniqueness
         import time
+
         timestamp_part = str(int(time.time() * 1000))[-6:]  # Last 6 digits of timestamp
         code = f"{expedition_type.upper()[:2]}-{timestamp_part}"
 
@@ -1240,10 +1273,7 @@ class GameService:
 
         # Create minimal preparation with zero bonuses
         preparation = ExpeditionPreparation(
-            think_tank_bonus=0,
-            expertise_bonus=0,
-            site_friction=0,
-            political_friction=0
+            think_tank_bonus=0, expertise_bonus=0, site_friction=0, political_friction=0
         )
 
         # Queue the expedition
@@ -1274,7 +1304,9 @@ class GameService:
             delta = self._confidence_delta(order.confidence, result.outcome)
             player = self.state.get_player(order.player_id)
             assert player is not None
-            new_reputation = self._apply_reputation_change(player, delta, order.confidence)
+            new_reputation = self._apply_reputation_change(
+                player, delta, order.confidence
+            )
             self.state.upsert_player(player)
             reactions = self._generate_reactions(order.team, result)
             ctx = OutcomeContext(
@@ -1424,7 +1456,9 @@ class GameService:
         )
         base_chance_value = chance_payload["chance"]
         relationship_details = self._relationship_bonus(scholar, player_id)
-        chance = self._clamp_probability(base_chance_value + relationship_details["total"])
+        chance = self._clamp_probability(
+            base_chance_value + relationship_details["total"]
+        )
         roll = self._rng.uniform(0.0, 1.0)
         success = roll < chance
         now = datetime.now(timezone.utc)
@@ -1530,12 +1564,23 @@ class GameService:
             faction,
             weight=self.settings.seasonal_commitment_relationship_weight,
         )
-        if not allow_override and relationship < self.settings.seasonal_commitment_min_relationship:
+        if (
+            not allow_override
+            and relationship < self.settings.seasonal_commitment_min_relationship
+        ):
             raise ValueError(
                 "Seasonal commitments require a neutral or better relationship with the faction"
             )
-        base = base_cost if base_cost is not None else self.settings.seasonal_commitment_base_cost
-        duration = duration_days if duration_days is not None else self.settings.seasonal_commitment_duration_days
+        base = (
+            base_cost
+            if base_cost is not None
+            else self.settings.seasonal_commitment_base_cost
+        )
+        duration = (
+            duration_days
+            if duration_days is not None
+            else self.settings.seasonal_commitment_duration_days
+        )
         end_at = now + timedelta(days=duration)
         return self.state.create_seasonal_commitment(
             player_id=player_id,
@@ -1564,7 +1609,9 @@ class GameService:
             metadata=metadata,
         )
 
-    def list_faction_projects(self, *, include_completed: bool = False) -> List[Dict[str, object]]:
+    def list_faction_projects(
+        self, *, include_completed: bool = False
+    ) -> List[Dict[str, object]]:
         return self.state.list_faction_projects(include_completed=include_completed)
 
     def invest_in_faction(
@@ -1590,7 +1637,9 @@ class GameService:
         self._ensure_influence_structure(player)
         available = player.influence.get(faction, 0)
         if available < amount:
-            raise ValueError(f"Not enough {faction} influence (have {available}, need {amount})")
+            raise ValueError(
+                f"Not enough {faction} influence (have {available}, need {amount})"
+            )
 
         now = datetime.now(timezone.utc)
         self._apply_influence_change(player, faction, -amount)
@@ -1708,7 +1757,9 @@ class GameService:
         reputation_gain = 0
         threshold = self.settings.archive_endowment_reputation_threshold
         if threshold > 0:
-            reputation_gain = (amount // threshold) * self.settings.archive_endowment_reputation_bonus
+            reputation_gain = (
+                amount // threshold
+            ) * self.settings.archive_endowment_reputation_bonus
         if reputation_gain:
             player.adjust_reputation(
                 reputation_gain,
@@ -1824,7 +1875,9 @@ class GameService:
                 faction=faction,
                 base_chance=base_chance,
             )
-            final_chance = self._clamp_probability(data["chance"] + relationship_details["total"])
+            final_chance = self._clamp_probability(
+                data["chance"] + relationship_details["total"]
+            )
             odds.append(
                 {
                     "faction": faction,
@@ -1880,9 +1933,13 @@ class GameService:
         if not scholar:
             raise ValueError("Unknown scholar")
 
-        relationship = self._relationship_bonus(scholar, scholar.contract.get("employer", "") or "")
+        relationship = self._relationship_bonus(
+            scholar, scholar.contract.get("employer", "") or ""
+        )
         relationship_effect = -relationship["total"]
-        probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
+        probability = defection_probability(
+            scholar, offer_quality, mistreatment, alignment, plateau
+        )
         probability = self._clamp_probability(probability + relationship_effect)
         roll = self._rng.uniform(0.0, 1.0)
         timestamp = datetime.now(timezone.utc)
@@ -2034,7 +2091,9 @@ class GameService:
         # Validate rival has enough influence
         for faction, amount in influence_offer.items():
             if rival.influence.get(faction, 0) < amount:
-                raise ValueError(f"Player {rival_id} has insufficient {faction} influence")
+                raise ValueError(
+                    f"Player {rival_id} has insufficient {faction} influence"
+                )
 
         # Create the offer record
         rival_relationship = self._relationship_bonus(scholar, rival_id)
@@ -2051,7 +2110,9 @@ class GameService:
             },
             "patron": {
                 "player_id": patron_id,
-                "display_name": patron_player.display_name if patron_player else patron_id,
+                "display_name": (
+                    patron_player.display_name if patron_player else patron_id
+                ),
                 "feeling": patron_feeling,
                 "modifiers": patron_relationship,
             },
@@ -2108,7 +2169,7 @@ class GameService:
                 "patron": patron_id,
                 "scholar": scholar_id,
                 "relationship_snapshot": relationship_snapshot,
-            }
+            },
         )
         self._archive_press(release, timestamp)
         press.append(release)
@@ -2129,7 +2190,7 @@ class GameService:
                     "scholar": scholar_id,
                     "influence": influence_offer,
                     "relationship_snapshot": relationship_snapshot,
-                }
+                },
             )
         )
 
@@ -2163,12 +2224,16 @@ class GameService:
 
         # Verify offer is still pending
         if original.status != "pending":
-            raise ValueError(f"Offer {original_offer_id} is not pending (status: {original.status})")
+            raise ValueError(
+                f"Offer {original_offer_id} is not pending (status: {original.status})"
+            )
 
         # Validate patron has enough influence
         for faction, amount in counter_influence.items():
             if player.influence.get(faction, 0) < amount:
-                raise ValueError(f"Player {player_id} has insufficient {faction} influence")
+                raise ValueError(
+                    f"Player {player_id} has insufficient {faction} influence"
+                )
 
         scholar = self.state.get_scholar(original.scholar_id)
         if not scholar:
@@ -2184,7 +2249,9 @@ class GameService:
             "captured_at": timestamp.isoformat(),
             "rival": {
                 "player_id": original.rival_id,
-                "display_name": rival_player.display_name if rival_player else original.rival_id,
+                "display_name": (
+                    rival_player.display_name if rival_player else original.rival_id
+                ),
                 "feeling": rival_feeling,
                 "modifiers": rival_relationship,
             },
@@ -2252,7 +2319,7 @@ class GameService:
                 "counter_offer_id": counter_id,
                 "original_offer_id": original_offer_id,
                 "relationship_snapshot": relationship_snapshot,
-            }
+            },
         )
         self._archive_press(release, timestamp)
         press.append(release)
@@ -2273,7 +2340,7 @@ class GameService:
                     "patron": player_id,
                     "influence": counter_influence,
                     "relationship_snapshot": relationship_snapshot,
-                }
+                },
             )
         )
 
@@ -2311,15 +2378,19 @@ class GameService:
 
         # Check for plateau (no recent discoveries)
         recent_discoveries = [
-            fact for fact in scholar.memory.facts
-            if fact.kind == "discovery" and
-            (datetime.now(timezone.utc) - fact.when).days < 90
+            fact
+            for fact in scholar.memory.facts
+            if fact.kind == "discovery"
+            and (datetime.now(timezone.utc) - fact.when).days < 90
         ]
         plateau = 0.0 if recent_discoveries else 0.2
 
         # Use existing defection probability calculation
         from .scholars import defection_probability
-        probability = defection_probability(scholar, offer_quality, mistreatment, alignment, plateau)
+
+        probability = defection_probability(
+            scholar, offer_quality, mistreatment, alignment, plateau
+        )
 
         # Apply relationship bonuses: rival increases, patron decreases
         probability += rival_relationship["total"]
@@ -2372,7 +2443,9 @@ class GameService:
             for offer in offer_chain:
                 self.state.update_offer_status(offer.id, "expired", timestamp)
                 # Return escrowed influence
-                player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                player = self.state.get_player(
+                    offer.rival_id if offer.offer_type == "initial" else offer.patron_id
+                )
                 for faction, amount in offer.influence_offered.items():
                     player.influence[faction] += amount
                 self.state.upsert_player(player)
@@ -2388,17 +2461,30 @@ class GameService:
 
         if roll < best_probability:
             # Scholar accepts the offer
-            winner_id = best_offer.rival_id if best_offer.offer_type == "initial" else best_offer.patron_id
-            loser_id = best_offer.patron_id if best_offer.offer_type == "initial" else best_offer.rival_id
+            winner_id = (
+                best_offer.rival_id
+                if best_offer.offer_type == "initial"
+                else best_offer.patron_id
+            )
+            loser_id = (
+                best_offer.patron_id
+                if best_offer.offer_type == "initial"
+                else best_offer.rival_id
+            )
             winner_player = self.state.get_player(winner_id)
             winner_name = winner_player.display_name if winner_player else winner_id
 
             # Transfer scholar
             old_employer = scholar.contract.get("employer", "")
-            scholar.contract["employer"] = best_offer.faction if best_offer.offer_type == "initial" else old_employer
+            scholar.contract["employer"] = (
+                best_offer.faction
+                if best_offer.offer_type == "initial"
+                else old_employer
+            )
 
             # Apply emotional consequences
             from .scholars import apply_scar
+
             if best_offer.offer_type == "initial":
                 # Defection - apply scar and negative feelings
                 apply_scar(scholar, "defection", old_employer, timestamp)
@@ -2429,7 +2515,7 @@ class GameService:
                     "probability": best_probability,
                     "relationship_rival": rival_relationship,
                     "relationship_patron": patron_relationship,
-                }
+                },
             )
             release = self._enhance_press_release(
                 release,
@@ -2448,7 +2534,11 @@ class GameService:
             )
             self._archive_press(release, timestamp)
             press.append(release)
-            new_faction = best_offer.faction if best_offer.offer_type == "initial" else old_employer
+            new_faction = (
+                best_offer.faction
+                if best_offer.offer_type == "initial"
+                else old_employer
+            )
             depth = self._multi_press.determine_depth(
                 event_type="defection",
                 is_first_time=best_offer.offer_type == "initial",
@@ -2456,7 +2546,9 @@ class GameService:
             layers = self._multi_press.generate_defection_layers(
                 DefectionContext(
                     scholar=scholar.name,
-                    outcome="defected" if best_offer.offer_type == "initial" else "remained",
+                    outcome=(
+                        "defected" if best_offer.offer_type == "initial" else "remained"
+                    ),
                     new_faction=new_faction,
                     probability=best_probability,
                 ),
@@ -2481,7 +2573,11 @@ class GameService:
             # Return escrowed influence for losing offers
             for offer in offer_chain:
                 if offer.id != best_offer.id:
-                    player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                    player = self.state.get_player(
+                        offer.rival_id
+                        if offer.offer_type == "initial"
+                        else offer.patron_id
+                    )
                     for faction, amount in offer.influence_offered.items():
                         player.influence[faction] += amount
                     self.state.upsert_player(player)
@@ -2491,19 +2587,26 @@ class GameService:
 
             # Schedule followup for potential return (if defected)
             if best_offer.offer_type == "initial":
-                resolve_at = timestamp + self._FOLLOWUP_DELAYS.get("defection_return", timedelta(days=30))
+                resolve_at = timestamp + self._FOLLOWUP_DELAYS.get(
+                    "defection_return", timedelta(days=30)
+                )
                 self.state.schedule_followup(
                     scholar.id,
                     "defection_return",
                     resolve_at,
-                    {"former_employer": old_employer, "new_faction": best_offer.faction},
+                    {
+                        "former_employer": old_employer,
+                        "new_faction": best_offer.faction,
+                    },
                 )
 
         else:
             # Scholar rejects all offers
             headline = f"{scholar.name} Rejects All Offers"
             body = f"{scholar.name} has decided to remain with their current patron.\n"
-            body += f"Best offer had {best_probability:.1%} chance of success but failed."
+            body += (
+                f"Best offer had {best_probability:.1%} chance of success but failed."
+            )
 
             release = PressRelease(
                 type="negotiation_resolved",
@@ -2515,7 +2618,7 @@ class GameService:
                     "probability": best_probability,
                     "relationship_rival": rival_relationship,
                     "relationship_patron": patron_relationship,
-                }
+                },
             )
             release = self._enhance_press_release(
                 release,
@@ -2557,7 +2660,9 @@ class GameService:
             # Mark all offers as rejected and return influence
             for offer in offer_chain:
                 self.state.update_offer_status(offer.id, "rejected", timestamp)
-                player = self.state.get_player(offer.rival_id if offer.offer_type == "initial" else offer.patron_id)
+                player = self.state.get_player(
+                    offer.rival_id if offer.offer_type == "initial" else offer.patron_id
+                )
                 for faction, amount in offer.influence_offered.items():
                     player.influence[faction] += amount
                 self.state.upsert_player(player)
@@ -2579,7 +2684,7 @@ class GameService:
                     "accepted": roll < best_probability,
                     "relationship_rival": rival_relationship if best_offer else None,
                     "relationship_patron": patron_relationship if best_offer else None,
-                }
+                },
             )
         )
 
@@ -2667,7 +2772,9 @@ class GameService:
             else:
                 unscheduled += 1
 
-            supporters = [str(value) for value in record.supporters] if record.supporters else []
+            supporters = (
+                [str(value) for value in record.supporters] if record.supporters else []
+            )
             confidence_value = record.confidence
             try:
                 confidence_label = ConfidenceLevel(confidence_value).value
@@ -2707,17 +2814,19 @@ class GameService:
         """Get status information for all scholars in the roster."""
         roster = []
         for scholar in self.state.all_scholars():
-            roster.append({
-                "id": scholar.id,
-                "name": scholar.name,
-                "archetype": scholar.archetype,
-                "stats": scholar.stats,
-                "memory": {
-                    "facts": scholar.memory.facts,
-                    "feelings": scholar.memory.feelings,
-                    "scars": scholar.memory.scars,
+            roster.append(
+                {
+                    "id": scholar.id,
+                    "name": scholar.name,
+                    "archetype": scholar.archetype,
+                    "stats": scholar.stats,
+                    "memory": {
+                        "facts": scholar.memory.facts,
+                        "feelings": scholar.memory.feelings,
+                        "scars": scholar.memory.scars,
+                    },
                 }
-            })
+            )
         return roster
 
     def archive_digest(self) -> PressRelease:
@@ -2736,7 +2845,9 @@ class GameService:
 
         if event_counts:
             for event_type, count in sorted(event_counts.items()):
-                body_lines.append(f"- {count} {event_type.replace('_', ' ').title()} events")
+                body_lines.append(
+                    f"- {count} {event_type.replace('_', ' ').title()} events"
+                )
         else:
             body_lines.append("- No recent events to report")
 
@@ -2750,7 +2861,7 @@ class GameService:
             type="archive_digest",
             headline="Archive Digest",
             body="\n".join(body_lines),
-            metadata={"event_count": len(recent_press)}
+            metadata={"event_count": len(recent_press)},
         )
 
         # Archive the digest itself
@@ -2862,12 +2973,16 @@ class GameService:
             raise ValueError(f"Scholar {scholar_id} not found")
 
         if career_track not in self._CAREER_TRACKS:
-            raise ValueError(f"Invalid career track: {career_track}. Choose from {list(self._CAREER_TRACKS.keys())}")
+            raise ValueError(
+                f"Invalid career track: {career_track}. Choose from {list(self._CAREER_TRACKS.keys())}"
+            )
 
         # Check if player is mentoring this scholar
         mentorship = self.state.get_active_mentorship(scholar_id)
         if not mentorship or mentorship[1] != player_id:
-            raise ValueError(f"You must be actively mentoring {scholar.name} to assign their lab")
+            raise ValueError(
+                f"You must be actively mentoring {scholar.name} to assign their lab"
+            )
 
         # Update scholar's career track
         old_track = scholar.career.get("track", "Academia")
@@ -2959,8 +3074,12 @@ class GameService:
             supporters=supporters,
             opposition=opposition,
         )
-        supporter_names = [s.name for s in self.state.all_scholars() if s.id in supporters]
-        opposition_names = [s.name for s in self.state.all_scholars() if s.id in opposition]
+        supporter_names = [
+            s.name for s in self.state.all_scholars() if s.id in supporters
+        ]
+        opposition_names = [
+            s.name for s in self.state.all_scholars() if s.id in opposition
+        ]
 
         self.state.enqueue_order(
             "conference_resolution",
@@ -3037,7 +3156,9 @@ class GameService:
                 )
                 continue
 
-            code, player_id, theory_id, confidence_str, supporters, opposition, _ = conference
+            code, player_id, theory_id, confidence_str, supporters, opposition, _ = (
+                conference
+            )
             player = self.state.get_player(player_id)
             theory_data = self.state.get_theory_by_id(theory_id)
             if not player or not theory_data:
@@ -3145,7 +3266,9 @@ class GameService:
 
         pending_count = self.state.count_pending_symposium_proposals(now=now)
         if pending_count >= self.settings.symposium_max_backlog:
-            raise ValueError("Proposal backlog is full; wait for pending topics to be scheduled.")
+            raise ValueError(
+                "Proposal backlog is full; wait for pending topics to be scheduled."
+            )
 
         player_pending = self.state.count_player_pending_symposium_proposals(
             player_id, now=now
@@ -3238,7 +3361,9 @@ class GameService:
                     "player_id": proposal["player_id"],
                     "expires_at": proposal.get("expire_at"),
                     "priority": proposal.get("priority", 0),
-                    "proposer": player.display_name if player else proposal["player_id"],
+                    "proposer": (
+                        player.display_name if player else proposal["player_id"]
+                    ),
                 }
             )
         return enriched
@@ -3253,7 +3378,9 @@ class GameService:
         participation = self.state.get_symposium_participation(player_id)
         grace_limit = self.settings.symposium_grace_misses
         miss_streak = int(participation.get("miss_streak", 0)) if participation else 0
-        grace_used = int(participation.get("grace_miss_consumed", 0)) if participation else 0
+        grace_used = (
+            int(participation.get("grace_miss_consumed", 0)) if participation else 0
+        )
         grace_remaining = max(0, grace_limit - grace_used)
         grace_window_start = (
             participation.get("grace_window_start") if participation else None
@@ -3273,18 +3400,26 @@ class GameService:
                     "faction": entry.get("faction"),
                     "amount": entry.get("amount", 0),
                     "reprisal_level": entry.get("reprisal_level", 0),
-                    "created_at": entry.get("created_at").isoformat()
-                    if isinstance(entry.get("created_at"), datetime)
-                    else None,
-                    "updated_at": entry.get("updated_at").isoformat()
-                    if isinstance(entry.get("updated_at"), datetime)
-                    else None,
-                    "last_reprisal_at": last_reprisal_at.isoformat()
-                    if isinstance(last_reprisal_at, datetime)
-                    else None,
-                    "next_reprisal_at": next_reprisal_at.isoformat()
-                    if isinstance(next_reprisal_at, datetime)
-                    else None,
+                    "created_at": (
+                        entry.get("created_at").isoformat()
+                        if isinstance(entry.get("created_at"), datetime)
+                        else None
+                    ),
+                    "updated_at": (
+                        entry.get("updated_at").isoformat()
+                        if isinstance(entry.get("updated_at"), datetime)
+                        else None
+                    ),
+                    "last_reprisal_at": (
+                        last_reprisal_at.isoformat()
+                        if isinstance(last_reprisal_at, datetime)
+                        else None
+                    ),
+                    "next_reprisal_at": (
+                        next_reprisal_at.isoformat()
+                        if isinstance(next_reprisal_at, datetime)
+                        else None
+                    ),
                     "cooldown_days": cooldown_days,
                 }
             )
@@ -3293,7 +3428,9 @@ class GameService:
         current_summary: Optional[Dict[str, object]] = None
         if current_topic is not None:
             topic_id, topic, description, proposal_id, _ = current_topic
-            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player_id)
+            pledge = self.state.get_symposium_pledge(
+                topic_id=topic_id, player_id=player_id
+            )
             if pledge:
                 current_summary = {
                     "topic_id": topic_id,
@@ -3302,10 +3439,14 @@ class GameService:
                     "faction": pledge.get("faction"),
                     "status": pledge.get("status"),
                     "created_at": (
-                        pledge["created_at"].isoformat() if pledge.get("created_at") else None
+                        pledge["created_at"].isoformat()
+                        if pledge.get("created_at")
+                        else None
                     ),
                     "resolved_at": (
-                        pledge["resolved_at"].isoformat() if pledge.get("resolved_at") else None
+                        pledge["resolved_at"].isoformat()
+                        if pledge.get("resolved_at")
+                        else None
                     ),
                 }
             else:
@@ -3317,23 +3458,29 @@ class GameService:
                     "status": "none",
                 }
 
-        history = self.state.list_recent_symposium_pledges_for_player(player_id, limit=5)
+        history = self.state.list_recent_symposium_pledges_for_player(
+            player_id, limit=5
+        )
         history_payload = [
             {
                 "topic_id": entry["topic_id"],
                 "topic": entry["topic"],
-                "symposium_date": entry["symposium_date"].isoformat()
-                if entry.get("symposium_date")
-                else None,
+                "symposium_date": (
+                    entry["symposium_date"].isoformat()
+                    if entry.get("symposium_date")
+                    else None
+                ),
                 "pledge_amount": entry["pledge_amount"],
                 "faction": entry["faction"],
                 "status": entry["status"],
-                "created_at": entry["created_at"].isoformat()
-                if entry.get("created_at")
-                else None,
-                "resolved_at": entry["resolved_at"].isoformat()
-                if entry.get("resolved_at")
-                else None,
+                "created_at": (
+                    entry["created_at"].isoformat() if entry.get("created_at") else None
+                ),
+                "resolved_at": (
+                    entry["resolved_at"].isoformat()
+                    if entry.get("resolved_at")
+                    else None
+                ),
             }
             for entry in history
         ]
@@ -3344,12 +3491,16 @@ class GameService:
             "miss_streak": miss_streak,
             "grace_remaining": grace_remaining,
             "grace_limit": grace_limit,
-            "grace_window_start": grace_window_start.isoformat()
-            if isinstance(grace_window_start, datetime)
-            else None,
-            "last_voted_at": last_voted_at.isoformat()
-            if isinstance(last_voted_at, datetime)
-            else None,
+            "grace_window_start": (
+                grace_window_start.isoformat()
+                if isinstance(grace_window_start, datetime)
+                else None
+            ),
+            "last_voted_at": (
+                last_voted_at.isoformat()
+                if isinstance(last_voted_at, datetime)
+                else None
+            ),
             "current": current_summary,
             "history": history_payload,
             "debts": debts_payload,
@@ -3376,7 +3527,11 @@ class GameService:
                     "fresh_bonus": entry.get("fresh_bonus"),
                     "repeat_penalty": entry.get("repeat_penalty"),
                     "recent_proposer": entry.get("recent_proposer", False),
-                    "created_at": created_at.isoformat() if isinstance(created_at, datetime) else None,
+                    "created_at": (
+                        created_at.isoformat()
+                        if isinstance(created_at, datetime)
+                        else None
+                    ),
                 }
             )
         player_names: Dict[str, str] = {}
@@ -3384,6 +3539,7 @@ class GameService:
             player = self.state.get_player(proposal["player_id"])
             if player:
                 player_names[proposal["player_id"]] = player.display_name
+
         def _display_name(player_id: str) -> str:
             if player_id in player_names:
                 return player_names[player_id]
@@ -3392,6 +3548,7 @@ class GameService:
                 player_names[player_id] = player.display_name
                 return player.display_name
             return player_id
+
         for entry in score_snapshot:
             entry["display_name"] = _display_name(entry["player_id"])
         slots_remaining = max(0, backlog_cap - len(proposals))
@@ -3420,15 +3577,27 @@ class GameService:
                         "faction": faction,
                         "amount": amount,
                         "reprisal_level": debt.get("reprisal_level", 0),
-                        "last_reprisal_at": last_reprisal_at.isoformat()
-                        if isinstance(last_reprisal_at, datetime)
-                        else None,
-                        "next_reprisal_at": next_reprisal_at.isoformat()
-                        if isinstance(next_reprisal_at, datetime)
-                        else None,
+                        "last_reprisal_at": (
+                            last_reprisal_at.isoformat()
+                            if isinstance(last_reprisal_at, datetime)
+                            else None
+                        ),
+                        "next_reprisal_at": (
+                            next_reprisal_at.isoformat()
+                            if isinstance(next_reprisal_at, datetime)
+                            else None
+                        ),
                         "cooldown_days": cooldown_days,
-                        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else None,
-                        "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+                        "created_at": (
+                            created_at.isoformat()
+                            if isinstance(created_at, datetime)
+                            else None
+                        ),
+                        "updated_at": (
+                            updated_at.isoformat()
+                            if isinstance(updated_at, datetime)
+                            else None
+                        ),
                     }
                 )
                 debt_summary[player.display_name] = (
@@ -3521,7 +3690,9 @@ class GameService:
         proposer_display = None
         if selected_proposal is not None:
             proposer = self.state.get_player(selected_proposal["player_id"])
-            proposer_display = proposer.display_name if proposer else selected_proposal["player_id"]
+            proposer_display = (
+                proposer.display_name if proposer else selected_proposal["player_id"]
+            )
 
         pledges = self._initialize_symposium_pledges(topic_id=topic_id, now=now)
         pledge_base = self.settings.symposium_pledge_base
@@ -3749,10 +3920,12 @@ class GameService:
         releases.append(release)
 
         # Add to press archive
-        self.state.record_press_release(PressRecord(
-            timestamp=datetime.now(timezone.utc),
-            release=release,
-        ))
+        self.state.record_press_release(
+            PressRecord(
+                timestamp=datetime.now(timezone.utc),
+                release=release,
+            )
+        )
 
         return releases
 
@@ -3806,7 +3979,9 @@ class GameService:
         penalty_records: List[Dict[str, object]] = []
         now = datetime.now(timezone.utc)
         for player in non_voter_players:
-            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
+            pledge = self.state.get_symposium_pledge(
+                topic_id=topic_id, player_id=player.id
+            )
             if not pledge or pledge.get("status") in {"forfeited", "waived"}:
                 continue
             penalty_record = self._handle_symposium_non_voter(
@@ -3820,7 +3995,9 @@ class GameService:
         # Ensure any pending pledges for voters are fulfilled
         for player in player_records:
             if player.id in voted_players:
-                pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
+                pledge = self.state.get_symposium_pledge(
+                    topic_id=topic_id, player_id=player.id
+                )
                 if pledge and pledge.get("status") == "pending":
                     self.state.update_symposium_pledge_status(
                         topic_id=topic_id,
@@ -3839,7 +4016,9 @@ class GameService:
         ]
         if non_voters:
             body_lines.append("")
-            body_lines.append("Outstanding responses required from: " + ", ".join(non_voters))
+            body_lines.append(
+                "Outstanding responses required from: " + ", ".join(non_voters)
+            )
         if penalty_records:
             body_lines.append("")
             body_lines.append("Participation stakes:")
@@ -3866,7 +4045,9 @@ class GameService:
             for record in penalty_records
             if record["status"] in {"forfeited", "debt"}
         )
-        waived_total = sum(1 for record in penalty_records if record["status"] == "waived")
+        waived_total = sum(
+            1 for record in penalty_records if record["status"] == "waived"
+        )
         try:
             self._telemetry.track_game_progression(
                 "symposium_penalties",
@@ -3938,7 +4119,9 @@ class GameService:
         return press
 
     # Symposium helpers -------------------------------------------------
-    def _initialize_symposium_pledges(self, *, topic_id: int, now: datetime) -> Dict[str, Dict[str, object]]:
+    def _initialize_symposium_pledges(
+        self, *, topic_id: int, now: datetime
+    ) -> Dict[str, Dict[str, object]]:
         pledges: Dict[str, Dict[str, object]] = {}
         grace_window = timedelta(days=self.settings.symposium_grace_window_days)
         for player in self.state.all_players():
@@ -3962,7 +4145,9 @@ class GameService:
                 player_id=player.id,
                 miss_streak=int(participation_data.get("miss_streak", 0)),
                 grace_window_start=participation_data.get("grace_window_start"),
-                grace_miss_consumed=int(participation_data.get("grace_miss_consumed", 0)),
+                grace_miss_consumed=int(
+                    participation_data.get("grace_miss_consumed", 0)
+                ),
                 last_voted_at=participation_data.get("last_voted_at"),
                 updated_at=now,
             )
@@ -3991,7 +4176,9 @@ class GameService:
                 "amount": pledge_amount,
                 "faction": faction,
                 "miss_streak": int(participation_data.get("miss_streak", 0)),
-                "grace_miss_consumed": int(participation_data.get("grace_miss_consumed", 0)),
+                "grace_miss_consumed": int(
+                    participation_data.get("grace_miss_consumed", 0)
+                ),
                 "grace_window_start": grace_iso.isoformat() if grace_iso else None,
                 "outstanding_debt": outstanding_debt,
                 "debt_settled": debt_summary.get("settled", 0),
@@ -4081,11 +4268,15 @@ class GameService:
                         "age_contribution": age_contribution,
                         "fresh_bonus": fresh_bonus,
                         "repeat_penalty": repeat_penalty,
-                        "recent_proposer": str(proposal["player_id"] in recent_proposers),
+                        "recent_proposer": str(
+                            proposal["player_id"] in recent_proposers
+                        ),
                     },
                 )
             except Exception:  # pragma: no cover
-                logger.debug("Failed to record symposium score telemetry", exc_info=True)
+                logger.debug(
+                    "Failed to record symposium score telemetry", exc_info=True
+                )
             if (
                 best is None
                 or score > best_score
@@ -4110,9 +4301,7 @@ class GameService:
     def _select_pledge_faction(self, player: Player) -> Optional[str]:
         self._ensure_influence_structure(player)
         positive_balances = [
-            (faction, value)
-            for faction, value in player.influence.items()
-            if value > 0
+            (faction, value) for faction, value in player.influence.items() if value > 0
         ]
         if not positive_balances:
             return None
@@ -4155,7 +4344,9 @@ class GameService:
             grace_start = now
             grace_miss_consumed = 0
         miss_streak = int(participation.get("miss_streak", 0)) + 1
-        pledge_amount = int(pledge.get("pledge_amount", self.settings.symposium_pledge_base))
+        pledge_amount = int(
+            pledge.get("pledge_amount", self.settings.symposium_pledge_base)
+        )
         grace_limit = self.settings.symposium_grace_misses
 
         status = "waived"
@@ -4176,7 +4367,9 @@ class GameService:
                 )
             if deducted < pledge_amount:
                 remaining_debt = pledge_amount - deducted
-                debt_faction = faction or self._select_pledge_faction(player) or self._FACTIONS[0]
+                debt_faction = (
+                    faction or self._select_pledge_faction(player) or self._FACTIONS[0]
+                )
                 self.state.record_symposium_debt(
                     player_id=player.id,
                     faction=debt_faction,
@@ -4217,7 +4410,9 @@ class GameService:
             "remaining_debt": remaining_debt,
         }
 
-    def _apply_symposium_penalty(self, player: Player, pledge_amount: int) -> Dict[str, object]:
+    def _apply_symposium_penalty(
+        self, player: Player, pledge_amount: int
+    ) -> Dict[str, object]:
         if pledge_amount <= 0:
             return {"deducted": 0, "faction": None}
         faction = self._select_pledge_faction(player)
@@ -4278,7 +4473,7 @@ class GameService:
                     self.settings.reputation_bounds["max"],
                 )
                 self.state.upsert_player(player)
-            reprisal_level = (debt_record.get("reprisal_level", 0) + 1)
+            reprisal_level = debt_record.get("reprisal_level", 0) + 1
             self.state.update_influence_debt_reprisal(
                 player_id=player.id,
                 faction=faction,
@@ -4452,7 +4647,9 @@ class GameService:
                     faction=faction,
                     source="contract",
                 )
-                existing_debt = existing_record.get("amount", 0) if existing_record else 0
+                existing_debt = (
+                    existing_record.get("amount", 0) if existing_record else 0
+                )
                 paid_toward_debt = 0
                 if existing_debt and available > 0:
                     paid_toward_debt = min(available, existing_debt)
@@ -4495,9 +4692,11 @@ class GameService:
                         "faction": faction,
                         "remaining": remaining,
                         "reprisal_level": reprisal_level,
-                        "last_reprisal_at": last_reprisal.isoformat()
-                        if isinstance(last_reprisal, datetime)
-                        else last_reprisal,
+                        "last_reprisal_at": (
+                            last_reprisal.isoformat()
+                            if isinstance(last_reprisal, datetime)
+                            else last_reprisal
+                        ),
                     }
                 )
                 try:
@@ -4513,7 +4712,9 @@ class GameService:
                         },
                     )
                 except Exception:  # pragma: no cover
-                    logger.debug("Failed to record contract upkeep telemetry", exc_info=True)
+                    logger.debug(
+                        "Failed to record contract upkeep telemetry", exc_info=True
+                    )
             self.state.upsert_player(player)
             if debt_details:
                 reprisal_events = self._apply_influence_debt_reprisal(
@@ -4574,7 +4775,9 @@ class GameService:
                 faction,
                 weight=self.settings.seasonal_commitment_relationship_weight,
             )
-            base_cost = int(commitment.get("base_cost", self.settings.seasonal_commitment_base_cost))
+            base_cost = int(
+                commitment.get("base_cost", self.settings.seasonal_commitment_base_cost)
+            )
             modifier = max(0.5, 1.0 - relationship)
             effective_cost = max(0, int(round(base_cost * modifier)))
 
@@ -4627,7 +4830,9 @@ class GameService:
                         ),
                     )
                 except Exception:  # pragma: no cover
-                    logger.debug("Failed to record commitment overdue alert", exc_info=True)
+                    logger.debug(
+                        "Failed to record commitment overdue alert", exc_info=True
+                    )
 
             if debt_details:
                 self._apply_influence_debt_reprisal(
@@ -4707,7 +4912,9 @@ class GameService:
                     },
                 )
             except Exception:  # pragma: no cover
-                logger.debug("Failed to record seasonal commitment telemetry", exc_info=True)
+                logger.debug(
+                    "Failed to record seasonal commitment telemetry", exc_info=True
+                )
 
             days_remaining = None
             end_at = commitment.get("end_at")
@@ -4734,11 +4941,15 @@ class GameService:
                     },
                 )
             except Exception:  # pragma: no cover
-                logger.debug("Failed to record seasonal commitment status", exc_info=True)
+                logger.debug(
+                    "Failed to record seasonal commitment status", exc_info=True
+                )
 
         return releases
 
-    def _contract_summary_for_player(self, player: Player) -> Dict[str, Dict[str, object]]:
+    def _contract_summary_for_player(
+        self, player: Player
+    ) -> Dict[str, Dict[str, object]]:
         commitments = self._contract_commitments().get(player.id, {})
         summary: Dict[str, Dict[str, object]] = {}
         for faction, count in commitments.items():
@@ -4987,7 +5198,9 @@ class GameService:
         self._ensure_not_paused()
         # Check if expedition exists in pending expeditions
         if expedition_code not in self._pending_expeditions:
-            raise ValueError(f"Expedition {expedition_code} not found or already resolved")
+            raise ValueError(
+                f"Expedition {expedition_code} not found or already resolved"
+            )
 
         expedition = self._pending_expeditions[expedition_code]
 
@@ -5421,9 +5634,8 @@ class GameService:
             "reason": reason,
         }
 
-        notice = (
-            f"🧾 Cancelled order #{order_id} ({summary['order_type']})"
-            + (f" – {reason}" if reason else "")
+        notice = f"🧾 Cancelled order #{order_id} ({summary['order_type']})" + (
+            f" – {reason}" if reason else ""
         )
         self._queue_admin_notification(notice)
         now = datetime.now(timezone.utc)
@@ -5450,7 +5662,9 @@ class GameService:
         *,
         include_expired: bool = False,
     ) -> List[Dict[str, Any]]:
-        overrides = self.state.list_moderation_overrides(include_expired=include_expired)
+        overrides = self.state.list_moderation_overrides(
+            include_expired=include_expired
+        )
         results: List[Dict[str, Any]] = []
         for override in overrides:
             entry = dict(override)
@@ -5515,7 +5729,9 @@ class GameService:
 
     def remove_moderation_override(self, override_id: int) -> bool:
         overrides = self.state.list_moderation_overrides(include_expired=True)
-        entry = next((item for item in overrides if item.get("id") == override_id), None)
+        entry = next(
+            (item for item in overrides if item.get("id") == override_id), None
+        )
         if not entry:
             return False
         removed = self.state.remove_moderation_override(override_id)
@@ -5703,7 +5919,9 @@ class GameService:
             },
         }
 
-    def export_press_archive(self, limit: int = 10, offset: int = 0) -> List[PressRecord]:
+    def export_press_archive(
+        self, limit: int = 10, offset: int = 0
+    ) -> List[PressRecord]:
         return self.state.list_press_releases(limit=limit, offset=offset)
 
     def export_log(self, limit: int = 20) -> Dict[str, Iterable[object]]:
@@ -5741,7 +5959,9 @@ class GameService:
                 reason=str(result),
             )
         except Exception:
-            logger.debug("Telemetry tracking for web archive export failed", exc_info=True)
+            logger.debug(
+                "Telemetry tracking for web archive export failed", exc_info=True
+            )
         return result
 
     def advance_digest(self) -> List[PressRelease]:
@@ -5797,7 +6017,9 @@ class GameService:
         releases.extend(self.resolve_conferences())
         return releases
 
-    def _confidence_delta(self, confidence: ConfidenceLevel, outcome: ExpeditionOutcome) -> int:
+    def _confidence_delta(
+        self, confidence: ConfidenceLevel, outcome: ExpeditionOutcome
+    ) -> int:
         wagers = self.settings.confidence_wagers
         table = wagers[confidence.value]
         success_states = {ExpeditionOutcome.SUCCESS, ExpeditionOutcome.LANDMARK}
@@ -5831,11 +6053,22 @@ class GameService:
             press_id = f"press-{h}"
             content = press.body
             metadata = dict(press.metadata)
-            meta_ts = metadata.setdefault("metadata", {}) if isinstance(metadata, dict) else {}
+            meta_ts = (
+                metadata.setdefault("metadata", {})
+                if isinstance(metadata, dict)
+                else {}
+            )
             if isinstance(meta_ts, dict):
                 meta_ts.setdefault("timestamp", timestamp.isoformat())
-            manager.store_press(press_id=press_id, headline=press.headline, content=content, metadata=metadata)
-        except Exception as e:  # pragma: no cover - integration failures should not break game
+            manager.store_press(
+                press_id=press_id,
+                headline=press.headline,
+                content=content,
+                metadata=metadata,
+            )
+        except (
+            Exception
+        ) as e:  # pragma: no cover - integration failures should not break game
             reason = str(e)
             self._qdrant_unavailable_reason = reason
             self._queue_admin_notification(
@@ -5938,7 +6171,11 @@ class GameService:
                 Event(
                     timestamp=datetime.now(timezone.utc),
                     action="scholar_spawned",
-                    payload={"id": scholar.id, "name": scholar.name, "origin": "roster_fill"},
+                    payload={
+                        "id": scholar.id,
+                        "name": scholar.name,
+                        "origin": "roster_fill",
+                    },
                 )
             )
         if len(scholars) <= self._MAX_SCHOLAR_ROSTER:
@@ -5973,7 +6210,11 @@ class GameService:
                     "surface": entry.get("surface"),
                     "stage": entry.get("stage"),
                     "category": entry.get("category"),
-                    "expires_at": expires_at.isoformat() if isinstance(expires_at, datetime) else None,
+                    "expires_at": (
+                        expires_at.isoformat()
+                        if isinstance(expires_at, datetime)
+                        else None
+                    ),
                 }
             )
         self._moderator.load_allowlist(sanitized)
@@ -6008,7 +6249,9 @@ class GameService:
 
                 # Get mentor's name for the press release
                 mentor_player = self.state.get_player(mentorship[1])
-                mentor_name = mentor_player.display_name if mentor_player else "their mentor"
+                mentor_name = (
+                    mentor_player.display_name if mentor_player else "their mentor"
+                )
 
                 self._record_mentorship_memory(
                     scholar,
@@ -6020,7 +6263,9 @@ class GameService:
 
                 quote = f"Advanced to {scholar.career['tier']} under the guidance of {mentor_name}."
                 press = academic_gossip(
-                    GossipContext(scholar=scholar.name, quote=quote, trigger="Career advancement"),
+                    GossipContext(
+                        scholar=scholar.name, quote=quote, trigger="Career advancement"
+                    ),
                 )
                 releases.append(press)
                 self._archive_press(press, now)
@@ -6226,7 +6471,9 @@ class GameService:
                     impacts.append(f"{penalty_influence} influence seized by {faction}")
                 if penalty_reputation:
                     impacts.append(f"{penalty_reputation} reputation deducted")
-                impact_text = "; ".join(impacts) if impacts else "Public reprimand issued"
+                impact_text = (
+                    "; ".join(impacts) if impacts else "Public reprimand issued"
+                )
                 body = (
                     f"{display_name} faces a symposium reprisal from {faction}. {impact_text}. "
                     f"Outstanding debt: {remaining}. Reprisal level now {reprisal_level}."
@@ -6279,9 +6526,17 @@ class GameService:
                 else:
                     scenario = scenario or "reconciliation"
 
-                former_employer_id = payload.get("former_employer") or scholar.contract.get("sidecast_sponsor") or scholar.contract.get("employer")
+                former_employer_id = (
+                    payload.get("former_employer")
+                    or scholar.contract.get("sidecast_sponsor")
+                    or scholar.contract.get("employer")
+                )
                 former_employer = self.state.get_player(former_employer_id)
-                former_name = former_employer.display_name if former_employer else (former_employer_id or "their patron")
+                former_name = (
+                    former_employer.display_name
+                    if former_employer
+                    else (former_employer_id or "their patron")
+                )
 
                 if scenario == "reconciliation":
                     scholar.memory.adjust_feeling(former_employer_id or "patron", 1.5)
@@ -6289,10 +6544,18 @@ class GameService:
                     if former_employer_id:
                         scholar.contract["employer"] = former_employer_id
                 else:
-                    new_faction = payload.get("new_faction") or payload.get("faction") or scholar.contract.get("employer", "Unknown")
+                    new_faction = (
+                        payload.get("new_faction")
+                        or payload.get("faction")
+                        or scholar.contract.get("employer", "Unknown")
+                    )
                     scholar.memory.adjust_feeling(new_faction, -1.5)
 
-                new_faction_name = payload.get("new_faction") or payload.get("faction") or scholar.contract.get("employer", "Unknown")
+                new_faction_name = (
+                    payload.get("new_faction")
+                    or payload.get("faction")
+                    or scholar.contract.get("employer", "Unknown")
+                )
 
                 layers = self._multi_press.generate_defection_epilogue_layers(
                     scenario=scenario,
@@ -6330,11 +6593,23 @@ class GameService:
                 scholar.memory.adjust_feeling(payload.get("player", "Unknown"), -1.0)
                 quote = "The slighted scholar sharpens their public retort."
             elif kind.startswith("sidecast_"):
-                arc_key = payload.get("arc") or scholar.contract.get("sidecast_arc") or self._multi_press.pick_sidecast_arc()
+                arc_key = (
+                    payload.get("arc")
+                    or scholar.contract.get("sidecast_arc")
+                    or self._multi_press.pick_sidecast_arc()
+                )
                 phase = payload.get("phase") or kind.split("_", 1)[1]
-                sponsor_id = payload.get("sponsor") or scholar.contract.get("sidecast_sponsor")
-                sponsor_player = self.state.get_player(sponsor_id) if sponsor_id else None
-                sponsor_display = sponsor_player.display_name if sponsor_player else (sponsor_id or "Patron")
+                sponsor_id = payload.get("sponsor") or scholar.contract.get(
+                    "sidecast_sponsor"
+                )
+                sponsor_player = (
+                    self.state.get_player(sponsor_id) if sponsor_id else None
+                )
+                sponsor_display = (
+                    sponsor_player.display_name
+                    if sponsor_player
+                    else (sponsor_id or "Patron")
+                )
                 expedition_type = payload.get("expedition_type")
                 expedition_code = payload.get("expedition_code")
 
@@ -6389,7 +6664,9 @@ class GameService:
                 if plan.next_phase:
                     next_delay = plan.next_delay_hours
                     if next_delay is None:
-                        next_delay = self._multi_press.sidecast_phase_delay(arc_key, plan.next_phase, default_hours=36.0)
+                        next_delay = self._multi_press.sidecast_phase_delay(
+                            arc_key, plan.next_phase, default_hours=36.0
+                        )
                     scheduled_at = now + timedelta(hours=next_delay)
                     self.state.enqueue_order(
                         f"followup:sidecast_{plan.next_phase}",
@@ -6406,7 +6683,9 @@ class GameService:
                     )
                 continue
             elif kind == "sideways_vignette":
-                headline = payload.get("headline", f"Sideways Vignette — {scholar.name}")
+                headline = payload.get(
+                    "headline", f"Sideways Vignette — {scholar.name}"
+                )
                 body = payload.get("body", "")
                 tags = payload.get("tags", [])
                 base_press = PressRelease(
@@ -6487,7 +6766,11 @@ class GameService:
                 Event(
                     timestamp=now,
                     action="followup_resolved",
-                    payload={"scholar": scholar.id, "kind": kind, "order_id": followup_id},
+                    payload={
+                        "scholar": scholar.id,
+                        "kind": kind,
+                        "order_id": followup_id,
+                    },
                 )
             )
             self.state.save_scholar(scholar)
@@ -6516,8 +6799,12 @@ class GameService:
         escalation_delta = timedelta(hours=escalation_delay)
 
         for player in players:
-            pledge = self.state.get_symposium_pledge(topic_id=topic_id, player_id=player.id)
-            pledged_amount = int(pledge.get("pledge_amount", pledge_base)) if pledge else pledge_base
+            pledge = self.state.get_symposium_pledge(
+                topic_id=topic_id, player_id=player.id
+            )
+            pledged_amount = (
+                int(pledge.get("pledge_amount", pledge_base)) if pledge else pledge_base
+            )
             if first_delay >= 0:
                 self.state.enqueue_order(
                     "symposium_vote_reminder",
@@ -6592,13 +6879,17 @@ class GameService:
                 )
                 continue
 
-            topic = payload.get("topic") or topic_meta.get("topic", "the symposium topic")
+            topic = payload.get("topic") or topic_meta.get(
+                "topic", "the symposium topic"
+            )
             pledged_amount = int(
                 payload.get("pledge_amount", self.settings.symposium_pledge_base)
             )
             participation = self.state.get_symposium_participation(player_id)
             grace_limit = self.settings.symposium_grace_misses
-            grace_used = int(participation.get("grace_miss_consumed", 0)) if participation else 0
+            grace_used = (
+                int(participation.get("grace_miss_consumed", 0)) if participation else 0
+            )
             grace_remaining = max(0, grace_limit - grace_used)
             if reminder_level == "escalation":
                 body = (
@@ -6609,13 +6900,9 @@ class GameService:
             else:
                 if grace_remaining > 0:
                     plural = "s" if grace_remaining != 1 else ""
-                    grace_text = (
-                        f"You have {grace_remaining} grace miss{plural} remaining; voting preserves it."
-                    )
+                    grace_text = f"You have {grace_remaining} grace miss{plural} remaining; voting preserves it."
                 else:
-                    grace_text = (
-                        f"You are out of grace—silence will cost {pledged_amount} influence."
-                    )
+                    grace_text = f"You are out of grace—silence will cost {pledged_amount} influence."
                 body = (
                     f"{player.display_name} is requested to cast a vote on '{topic}'. "
                     f"{grace_text} Use /symposium_vote to weigh in."
@@ -6664,16 +6951,21 @@ class GameService:
                 result={"reminder": reminder_level},
             )
         return releases
+
     def _apply_reputation_change(
         self, player: Player, delta: int, confidence: ConfidenceLevel
     ) -> int:
         bounds = self.settings.reputation_bounds
         new_value = player.adjust_reputation(delta, bounds["min"], bounds["max"])
         if confidence is ConfidenceLevel.STAKE_CAREER:
-            player.cooldowns["recruitment"] = max(2, player.cooldowns.get("recruitment", 0))
+            player.cooldowns["recruitment"] = max(
+                2, player.cooldowns.get("recruitment", 0)
+            )
         return new_value
 
-    def _apply_expedition_costs(self, player: Player, expedition_type: str, funding: List[str]) -> None:
+    def _apply_expedition_costs(
+        self, player: Player, expedition_type: str, funding: List[str]
+    ) -> None:
         costs = self._EXPEDITION_COSTS.get(expedition_type, {})
         for faction, amount in costs.items():
             self._apply_influence_change(player, faction, -amount)
@@ -6689,7 +6981,9 @@ class GameService:
         for faction, amount in rewards.items():
             self._apply_influence_change(player, faction, amount)
 
-    def _summarize_preparation(self, preparation: ExpeditionPreparation) -> Dict[str, Any]:
+    def _summarize_preparation(
+        self, preparation: ExpeditionPreparation
+    ) -> Dict[str, Any]:
         mapping = (
             ("think_tank_bonus", "Think tank modelling"),
             ("expertise_bonus", "Field expertise"),
@@ -6784,7 +7078,11 @@ class GameService:
                         type="faction_shift",
                         headline=f"Expedition Discovery Shifts {faction} Relations",
                         body=f"{effect.description}. {player.display_name}'s {faction} influence changes by {amount} (from {old_influence} to {player.influence[faction]}).",
-                        metadata={"player": player.display_name, "faction": faction, "change": amount},
+                        metadata={
+                            "player": player.display_name,
+                            "faction": faction,
+                            "change": amount,
+                        },
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
@@ -6793,14 +7091,16 @@ class GameService:
                 # Create a new theory from the discovery
                 theory_text = effect.payload["theory"]
                 confidence = ConfidenceLevel(effect.payload["confidence"])
-                deadline = (now + timedelta(days=7)).strftime("%Y-%m-%d")  # 7 days to support/challenge
+                deadline = (now + timedelta(days=7)).strftime(
+                    "%Y-%m-%d"
+                )  # 7 days to support/challenge
                 theory_record = TheoryRecord(
                     player_id=order.player_id,
                     theory=theory_text,
                     confidence=confidence.value,
                     timestamp=now,
                     supporters=[],  # Empty initially
-                    deadline=deadline
+                    deadline=deadline,
                 )
                 self.state.record_theory(theory_record)
                 releases.append(
@@ -6834,7 +7134,10 @@ class GameService:
                                 type="scholar_grudge",
                                 headline=f"{target.name} Objects to Expedition Approach",
                                 body=f"{effect.description}. {target.name} expresses concerns about {player.display_name}'s expedition methods.",
-                                metadata={"scholar": target.name, "player": player.display_name},
+                                metadata={
+                                    "scholar": target.name,
+                                    "player": player.display_name,
+                                },
                             )
                         )
                         self._attach_tags_to_release(releases[-1], tags)
@@ -6846,7 +7149,9 @@ class GameService:
 
                 if order_type == "conference":
                     # Auto-schedule a conference by first creating a theory
-                    theory_text = order_data.get("topic", "Emergency colloquium on expedition findings")
+                    theory_text = order_data.get(
+                        "topic", "Emergency colloquium on expedition findings"
+                    )
                     # Submit the theory first
                     theory_record = TheoryRecord(
                         player_id=order.player_id,
@@ -6854,7 +7159,9 @@ class GameService:
                         confidence=ConfidenceLevel.SUSPECT.value,
                         timestamp=now,
                         supporters=[],  # Empty initially
-                        deadline=(now + timedelta(hours=48)).strftime("%Y-%m-%d %H:%M")  # 48 hours for the conference
+                        deadline=(now + timedelta(hours=48)).strftime(
+                            "%Y-%m-%d %H:%M"
+                        ),  # 48 hours for the conference
                     )
                     self.state.record_theory(theory_record)
                     # Get the theory ID we just created
@@ -6870,7 +7177,7 @@ class GameService:
                             theory_id,
                             ConfidenceLevel.SUSPECT,
                             supporters,
-                            opposition
+                            opposition,
                         )
                         releases.append(
                             PressRelease(
@@ -6888,7 +7195,10 @@ class GameService:
                 old_rep = player.reputation
                 player.reputation = max(
                     self.settings.reputation_bounds["min"],
-                    min(self.settings.reputation_bounds["max"], player.reputation + amount),
+                    min(
+                        self.settings.reputation_bounds["max"],
+                        player.reputation + amount,
+                    ),
                 )
                 releases.append(
                     PressRelease(
@@ -6916,14 +7226,17 @@ class GameService:
                         "source_type": "expedition_opportunity",
                         "source_id": order.code,
                         "details": details,
-                    }
+                    },
                 )
                 releases.append(
                     PressRelease(
                         type="opportunity_unlocked",
                         headline="New Opportunity Emerges",
                         body=f"{effect.description}. Opportunity expires in {details.get('expires_in_days', 3)} days.",
-                        metadata={"player": player.display_name, "opportunity": opportunity_type},
+                        metadata={
+                            "player": player.display_name,
+                            "opportunity": opportunity_type,
+                        },
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
@@ -6937,7 +7250,9 @@ class GameService:
         return releases
 
     @staticmethod
-    def _attach_tags_to_release(release: PressRelease, tags: Optional[List[str]]) -> None:
+    def _attach_tags_to_release(
+        release: PressRelease, tags: Optional[List[str]]
+    ) -> None:
         if not tags:
             return
         existing = release.metadata.setdefault("tags", [])
@@ -7115,7 +7430,9 @@ class GameService:
             )
         return immediate
 
-    def _maybe_spawn_sidecast(self, order: ExpeditionOrder, result) -> Optional[PressRelease]:
+    def _maybe_spawn_sidecast(
+        self, order: ExpeditionOrder, result
+    ) -> Optional[PressRelease]:
         if result.outcome == ExpeditionOutcome.FAILURE:
             return None
         if sum(1 for _ in self.state.all_scholars()) >= self._MAX_SCHOLAR_ROSTER:
@@ -7162,7 +7479,9 @@ class GameService:
             )
         )
         # Schedule debut follow-up to introduce the sidecast arc
-        delay_hours = self._multi_press.sidecast_phase_delay(arc_key, "debut", default_hours=6.0)
+        delay_hours = self._multi_press.sidecast_phase_delay(
+            arc_key, "debut", default_hours=6.0
+        )
         scheduled_at = now + timedelta(hours=delay_hours)
         self.state.enqueue_order(
             "followup:sidecast_debut",
@@ -7210,7 +7529,9 @@ class GameService:
         else:
             history = scholar.contract.get("mentorship_history")
             if isinstance(history, list):
-                entries = [entry for entry in history if entry.get("mentor_id") == player_id]
+                entries = [
+                    entry for entry in history if entry.get("mentor_id") == player_id
+                ]
                 if entries:
                     last_event = entries[-1].get("event")
                     if last_event == "completion":
@@ -7243,7 +7564,11 @@ class GameService:
         *,
         weight: Optional[float] = None,
     ) -> float:
-        factor = weight if weight is not None else self.settings.seasonal_commitment_relationship_weight
+        factor = (
+            weight
+            if weight is not None
+            else self.settings.seasonal_commitment_relationship_weight
+        )
         total = 0.0
         count = 0
         for scholar in self.state.all_scholars():
@@ -7293,19 +7618,29 @@ class GameService:
             }
         return sentiments
 
-    def _player_relationship_summary(self, player: Player, limit: int = 5) -> List[Dict[str, object]]:
+    def _player_relationship_summary(
+        self, player: Player, limit: int = 5
+    ) -> List[Dict[str, object]]:
         entries: List[Dict[str, object]] = []
         for scholar in self.state.all_scholars():
             feeling = scholar.memory.feelings.get(player.id)
             mentorship_history = scholar.contract.get("mentorship_history")
             mentorship_entries = []
             if isinstance(mentorship_history, list):
-                mentorship_entries = [entry for entry in mentorship_history if entry.get("mentor_id") == player.id]
+                mentorship_entries = [
+                    entry
+                    for entry in mentorship_history
+                    if entry.get("mentor_id") == player.id
+                ]
 
             sidecast_history = scholar.contract.get("sidecast_history")
             sidecast_entries = []
             if isinstance(sidecast_history, list):
-                sidecast_entries = [entry for entry in sidecast_history if entry.get("sponsor_id") == player.id]
+                sidecast_entries = [
+                    entry
+                    for entry in sidecast_history
+                    if entry.get("sponsor_id") == player.id
+                ]
 
             if feeling is None and not mentorship_entries and not sidecast_entries:
                 continue
@@ -7318,7 +7653,9 @@ class GameService:
             if mentorship_entries:
                 last_entry = mentorship_entries[-1]
                 last_mentorship_event = last_entry.get("event")
-                last_mentorship_at = last_entry.get("timestamp") or last_entry.get("resolved_at")
+                last_mentorship_at = last_entry.get("timestamp") or last_entry.get(
+                    "resolved_at"
+                )
 
             last_sidecast_phase = None
             last_sidecast_at = None
@@ -7329,7 +7666,9 @@ class GameService:
 
             sidecast_arc = None
             if sidecast_entries:
-                sidecast_arc = sidecast_entries[-1].get("arc") or scholar.contract.get("sidecast_arc")
+                sidecast_arc = sidecast_entries[-1].get("arc") or scholar.contract.get(
+                    "sidecast_arc"
+                )
 
             history: List[Dict[str, object]] = []
             for entry in mentorship_entries[-3:]:
@@ -7373,7 +7712,9 @@ class GameService:
             entries = entries[:limit]
         return entries
 
-    def _player_commitment_summary(self, player: Player, limit: int = 10) -> List[Dict[str, object]]:
+    def _player_commitment_summary(
+        self, player: Player, limit: int = 10
+    ) -> List[Dict[str, object]]:
         commitments = self.state.list_player_commitments(player.id)
         summary: List[Dict[str, object]] = []
         for entry in commitments:
@@ -7417,9 +7758,7 @@ class GameService:
             entry["total"] += int(record.get("amount", 0))
             entry["count"] += 1
             created_at = record.get("created_at")
-            if created_at and (
-                entry["latest"] is None or created_at > entry["latest"]
-            ):
+            if created_at and (entry["latest"] is None or created_at > entry["latest"]):
                 entry["latest"] = created_at
             program = record.get("program")
             if program:
@@ -7431,7 +7770,11 @@ class GameService:
                     "faction": faction,
                     "total": data["total"],
                     "count": data["count"],
-                    "latest": data["latest"].isoformat() if isinstance(data["latest"], datetime) else None,
+                    "latest": (
+                        data["latest"].isoformat()
+                        if isinstance(data["latest"], datetime)
+                        else None
+                    ),
                     "programs": sorted(data["programs"]),
                 }
             )
@@ -7456,9 +7799,7 @@ class GameService:
             entry["total"] += int(record.get("amount", 0))
             entry["count"] += 1
             created_at = record.get("created_at")
-            if created_at and (
-                entry["latest"] is None or created_at > entry["latest"]
-            ):
+            if created_at and (entry["latest"] is None or created_at > entry["latest"]):
                 entry["latest"] = created_at
             program = record.get("program")
             if program:
@@ -7470,7 +7811,11 @@ class GameService:
                     "faction": faction,
                     "total": data["total"],
                     "count": data["count"],
-                    "latest": data["latest"].isoformat() if isinstance(data["latest"], datetime) else None,
+                    "latest": (
+                        data["latest"].isoformat()
+                        if isinstance(data["latest"], datetime)
+                        else None
+                    ),
                     "programs": sorted(data["programs"]),
                 }
             )
@@ -7513,7 +7858,9 @@ class GameService:
             if not contributions:
                 continue
 
-            self.state.update_faction_project_progress(project["id"], total_progress, now)
+            self.state.update_faction_project_progress(
+                project["id"], total_progress, now
+            )
 
             ctx = FactionProjectUpdateContext(
                 name=project.get("name", "Project"),
@@ -7575,7 +7922,9 @@ class GameService:
                     },
                 )
             except Exception:  # pragma: no cover
-                logger.debug("Failed to record faction project telemetry", exc_info=True)
+                logger.debug(
+                    "Failed to record faction project telemetry", exc_info=True
+                )
 
         return releases
 
@@ -7612,7 +7961,9 @@ class GameService:
             elif event == "activation":
                 faction_change = 1
             if faction_change:
-                self._apply_influence_change(mentor, primary_faction, int(faction_change))
+                self._apply_influence_change(
+                    mentor, primary_faction, int(faction_change)
+                )
                 faction_bonus = {
                     "faction": primary_faction,
                     "change": faction_change,
@@ -7718,7 +8069,12 @@ class GameService:
             scholar = self.state.get_scholar(scholar_id)
             if not scholar:
                 continue
-            tone = "thrilled" if result.outcome in {ExpeditionOutcome.SUCCESS, ExpeditionOutcome.LANDMARK} else "wary"
+            tone = (
+                "thrilled"
+                if result.outcome
+                in {ExpeditionOutcome.SUCCESS, ExpeditionOutcome.LANDMARK}
+                else "wary"
+            )
             phrase = scholar.catchphrase.format(
                 evidence="evidence",
                 topic="the work",
@@ -7760,5 +8116,6 @@ class GameService:
             raise PermissionError(
                 f"Action '{action}' requires reputation {threshold} but {player.display_name} has {player.reputation}."
             )
+
 
 __all__ = ["GameService", "ExpeditionOrder"]

@@ -1,4 +1,5 @@
 """Tests for GameService edge cases and additional coverage."""
+
 from __future__ import annotations
 
 import os
@@ -33,7 +34,7 @@ def test_player_status_returns_complete_info(tmp_path):
         display_name="Test Player",
         reputation=25,
         influence={"academia": 5, "government": 3},
-        cooldowns={"recruitment": 2}
+        cooldowns={"recruitment": 2},
     )
     service.state.upsert_player(player)
 
@@ -164,7 +165,7 @@ def test_archive_digest_generates_summary(tmp_path):
         theory="Test theory",
         confidence=ConfidenceLevel.CERTAIN,
         supporters=[],
-        deadline="2024-12-31"
+        deadline="2024-12-31",
     )
 
     # Generate digest
@@ -211,7 +212,7 @@ def test_evaluate_defection_offer_with_high_probability(tmp_path):
             mistreatment=1.0,
             alignment=1.0,
             plateau=1.0,
-            new_faction="Foreign Academy"
+            new_faction="Foreign Academy",
         )
 
         assert notice.type == "defection_notice"
@@ -235,7 +236,7 @@ def test_evaluate_defection_offer_with_zero_probability(tmp_path):
             mistreatment=0.0,
             alignment=-1.0,
             plateau=0.0,
-            new_faction="Industry"
+            new_faction="Industry",
         )
 
         assert notice.type == "defection_notice"
@@ -264,10 +265,14 @@ def test_confidence_delta_with_landmark(tmp_path):
     service = GameService(db_path=db_path)
 
     # Landmark gives same reward as success
-    delta = service._confidence_delta(ConfidenceLevel.SUSPECT, ExpeditionOutcome.LANDMARK)
+    delta = service._confidence_delta(
+        ConfidenceLevel.SUSPECT, ExpeditionOutcome.LANDMARK
+    )
     assert delta == service.settings.confidence_wagers["suspect"]["reward"]
 
-    delta = service._confidence_delta(ConfidenceLevel.CERTAIN, ExpeditionOutcome.LANDMARK)
+    delta = service._confidence_delta(
+        ConfidenceLevel.CERTAIN, ExpeditionOutcome.LANDMARK
+    )
     assert delta == service.settings.confidence_wagers["certain"]["reward"]
 
 
@@ -282,7 +287,7 @@ def test_recruitment_with_cooldown(tmp_path):
         display_name="Cooldown Player",
         reputation=50,
         influence={"academia": 10},
-        cooldowns={"recruitment": 5}
+        cooldowns={"recruitment": 5},
     )
     service.state.upsert_player(player)
 
@@ -293,7 +298,7 @@ def test_recruitment_with_cooldown(tmp_path):
             player_id="cooldown_player",
             scholar_id=scholars[0].id,
             faction="academia",
-            base_chance=0.5
+            base_chance=0.5,
         )
 
         assert isinstance(press.type, str)
@@ -578,7 +583,9 @@ def test_llm_failure_triggers_pause(tmp_path, monkeypatch):
     def failing_enhance(*args, **kwargs):
         raise LLMGenerationError("LLM offline")
 
-    monkeypatch.setattr("great_work.service.enhance_press_release_sync", failing_enhance)
+    monkeypatch.setattr(
+        "great_work.service.enhance_press_release_sync", failing_enhance
+    )
 
     service.ensure_player("sarah", "Sarah")
     prep = ExpeditionPreparation()
@@ -616,7 +623,9 @@ def test_llm_failure_triggers_pause(tmp_path, monkeypatch):
     def recovering_enhance(*args, **kwargs):
         return "Recovered narrative"
 
-    monkeypatch.setattr("great_work.service.enhance_press_release_sync", recovering_enhance)
+    monkeypatch.setattr(
+        "great_work.service.enhance_press_release_sync", recovering_enhance
+    )
 
     resume_press = service.resume_game("Admin")
     assert service.is_paused() is False

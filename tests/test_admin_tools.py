@@ -1,4 +1,5 @@
 """Test admin tools implementation."""
+
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -27,7 +28,7 @@ def test_admin_tools():
             admin_id=admin_id,
             player_id=player_id,
             delta=10,
-            reason="Testing positive adjustment"
+            reason="Testing positive adjustment",
         )
         assert press is not None
         assert "reputation" in press.headline.lower()
@@ -40,7 +41,7 @@ def test_admin_tools():
             admin_id=admin_id,
             player_id=player_id,
             delta=-5,
-            reason="Testing negative adjustment"
+            reason="Testing negative adjustment",
         )
         player = service.state.get_player(player_id)
         assert player.reputation == 5
@@ -51,7 +52,7 @@ def test_admin_tools():
             player_id=player_id,
             faction="academia",
             delta=20,
-            reason="Testing influence boost"
+            reason="Testing influence boost",
         )
         assert press is not None
         assert "influence" in press.headline.lower()
@@ -68,7 +69,7 @@ def test_admin_tools():
             admin_id=admin_id,
             scholar_id=scholar.id,
             new_faction="industry",
-            reason="Testing forced defection"
+            reason="Testing forced defection",
         )
         assert press is not None
         assert "defection" in press.headline.lower()
@@ -93,15 +94,13 @@ def test_admin_tools():
                 expertise_bonus=0,
                 site_friction=0,
                 political_friction=0,
-            )
+            ),
         )
         assert expedition_press is not None
 
         # Now cancel it
         press = service.admin_cancel_expedition(
-            admin_id=admin_id,
-            expedition_code="TEST-001",
-            reason="Testing cancellation"
+            admin_id=admin_id, expedition_code="TEST-001", reason="Testing cancellation"
         )
         assert press is not None
         assert "cancelled" in press.headline.lower()
@@ -116,7 +115,9 @@ def test_admin_tools():
             subject_id="subject",
             payload={"note": "for testing"},
         )
-        orders = service.admin_list_orders(order_type="test_manual", status="pending", limit=5)
+        orders = service.admin_list_orders(
+            order_type="test_manual", status="pending", limit=5
+        )
         assert any(order["id"] == order_id for order in orders)
 
         summary = service.admin_cancel_order(order_id=order_id, reason="cleanup")

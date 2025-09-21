@@ -1,4 +1,5 @@
 """Export product KPI snapshots for offline analysis."""
+
 from __future__ import annotations
 
 import argparse
@@ -41,7 +42,11 @@ def export_metrics(
     json_path.write_text(json.dumps(payload, indent=2))
 
     # Emit a lightweight CSV for quick spreadsheet import (active players focus).
-    history = payload.get("product_kpi_history", {}).get("daily", []) if include_history else []
+    history = (
+        payload.get("product_kpi_history", {}).get("daily", [])
+        if include_history
+        else []
+    )
     csv_lines = [
         "date,active_players,manifesto_events,archive_events,nickname_events,press_share_events",
     ]
@@ -66,7 +71,9 @@ def export_metrics(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export product KPI metrics for offline analysis.")
+    parser = argparse.ArgumentParser(
+        description="Export product KPI metrics for offline analysis."
+    )
     parser.add_argument(
         "--telemetry-db",
         type=Path,

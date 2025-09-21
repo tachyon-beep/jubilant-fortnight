@@ -1,4 +1,5 @@
 """Scheduler health integration tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,6 +34,10 @@ def test_gazette_scheduler_registers_jobs(tmp_path):
 
     assert instances, "scheduler was not constructed"
     fake = instances[0]
-    digest_jobs = [kwargs for trigger, kwargs in fake.jobs if trigger == "cron" and "hour" in kwargs]
+    digest_jobs = [
+        kwargs
+        for trigger, kwargs in fake.jobs
+        if trigger == "cron" and "hour" in kwargs
+    ]
     assert digest_jobs, "expected digest cron jobs"
     assert fake.started is True

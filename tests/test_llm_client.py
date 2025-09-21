@@ -1,4 +1,5 @@
 """Tests for LLM client integration."""
+
 import asyncio
 import os
 from unittest.mock import Mock, patch
@@ -18,15 +19,18 @@ from great_work.llm_client import (
 
 def test_llm_config_from_env():
     """Test loading LLM configuration from environment variables."""
-    with patch.dict(os.environ, {
-        "LLM_API_BASE": "http://test:8080/v1",
-        "LLM_API_KEY": "test-key",
-        "LLM_MODEL_NAME": "test-model",
-        "LLM_TEMPERATURE": "0.5",
-        "LLM_MAX_TOKENS": "300",
-        "LLM_MODE": "mock",
-        "LLM_RETRY_SCHEDULE": "1,5,15",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "LLM_API_BASE": "http://test:8080/v1",
+            "LLM_API_KEY": "test-key",
+            "LLM_MODEL_NAME": "test-model",
+            "LLM_TEMPERATURE": "0.5",
+            "LLM_MAX_TOKENS": "300",
+            "LLM_MODE": "mock",
+            "LLM_RETRY_SCHEDULE": "1,5,15",
+        },
+    ):
         config = LLMConfig.from_env()
         assert config.api_base == "http://test:8080/v1"
         assert config.api_key == "test-key"
@@ -84,8 +88,8 @@ def test_persona_prompt_generation():
         {
             "personality": "eccentric",
             "specialization": "quantum physics",
-            "quirks": ["speaks in riddles", "loves tea"]
-        }
+            "quirks": ["speaks in riddles", "loves tea"],
+        },
     )
 
     assert "Dr. Smith" in prompt
@@ -99,11 +103,7 @@ def test_fallback_template():
     client = LLMClient.__new__(LLMClient)
     client.config = LLMConfig()
 
-    context = {
-        "type": "discovery",
-        "player": "Alice",
-        "action": "made a breakthrough"
-    }
+    context = {"type": "discovery", "player": "Alice", "action": "made a breakthrough"}
 
     result = client._fallback_template(context)
     assert "Alice" in result
@@ -135,9 +135,12 @@ async def test_generate_narrative_with_fallback():
 async def test_enhance_press_release():
     """Test enhancing press release with LLM."""
     from unittest.mock import AsyncMock
-    with patch('great_work.llm_client.get_llm_client') as mock_get_client:
+
+    with patch("great_work.llm_client.get_llm_client") as mock_get_client:
         mock_client = Mock()
-        mock_client.generate_narrative = AsyncMock(return_value="Enhanced narrative text")
+        mock_client.generate_narrative = AsyncMock(
+            return_value="Enhanced narrative text"
+        )
         mock_get_client.return_value = mock_client
 
         result = await enhance_press_release(
@@ -145,7 +148,7 @@ async def test_enhance_press_release():
             "Base content",
             {"player": "Charlie"},
             "Dr. Jones",
-            {"personality": "serious"}
+            {"personality": "serious"},
         )
 
         assert result == "Enhanced narrative text"
@@ -153,12 +156,13 @@ async def test_enhance_press_release():
 
 def test_singleton_client():
     """Test singleton LLM client pattern."""
-    with patch('great_work.llm_client.LLMClient') as MockLLMClient:
+    with patch("great_work.llm_client.LLMClient") as MockLLMClient:
         mock_instance = Mock()
         MockLLMClient.return_value = mock_instance
 
         # Reset the singleton
         import great_work.llm_client
+
         great_work.llm_client._llm_client = None
 
         client1 = get_llm_client()

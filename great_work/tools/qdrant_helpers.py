@@ -1,4 +1,5 @@
 """Shared helpers for optional Qdrant-powered semantic search."""
+
 from __future__ import annotations
 
 import textwrap
@@ -18,7 +19,7 @@ else:
 def _get_manager() -> "QdrantManager":  # pragma: no cover - thin wrapper
     if QdrantManager is None:
         raise RuntimeError(
-            "Qdrant support is unavailable (missing dependencies)." \
+            "Qdrant support is unavailable (missing dependencies)."
             f" Details: {_IMPORT_ERROR}"
         )
     return QdrantManager()

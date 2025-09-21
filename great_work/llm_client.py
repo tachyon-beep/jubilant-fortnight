@@ -1,4 +1,5 @@
 """LLM integration for narrative generation with OpenAI-compatible API."""
+
 from __future__ import annotations
 
 import asyncio
@@ -44,6 +45,7 @@ class LLMNotEnabledError(LLMGenerationError):
 
 class SafetyLevel(Enum):
     """Content safety levels for moderation."""
+
     SAFE = "safe"
     MINOR_CONCERN = "minor_concern"
     MODERATE_CONCERN = "moderate_concern"
@@ -53,6 +55,7 @@ class SafetyLevel(Enum):
 @dataclass
 class LLMConfig:
     """Configuration for LLM client."""
+
     api_base: str = "http://localhost:5000/v1"  # Default to local server
     api_key: str = "not-needed-for-local"  # Local servers often don't need keys
     model_name: str = "local-model"  # Model identifier
@@ -67,14 +70,18 @@ class LLMConfig:
     retry_schedule: Optional[List[float]] = None
 
     @classmethod
-    def from_env(cls) -> 'LLMConfig':
+    def from_env(cls) -> "LLMConfig":
         """Load configuration from environment variables."""
         mock_mode = os.getenv("LLM_MODE", "").lower() == "mock"
         schedule_env = os.getenv("LLM_RETRY_SCHEDULE")
         retry_schedule: Optional[List[float]] = None
         if schedule_env:
             try:
-                retry_schedule = [float(item.strip()) for item in schedule_env.split(",") if item.strip()]
+                retry_schedule = [
+                    float(item.strip())
+                    for item in schedule_env.split(",")
+                    if item.strip()
+                ]
             except ValueError:
                 logger.warning("Invalid LLM_RETRY_SCHEDULE value: %s", schedule_env)
                 retry_schedule = None
@@ -88,7 +95,8 @@ class LLMConfig:
             timeout=int(os.getenv("LLM_TIMEOUT", "30")),
             retry_attempts=int(os.getenv("LLM_RETRY_ATTEMPTS", "3")),
             batch_size=int(os.getenv("LLM_BATCH_SIZE", "10")),
-            use_fallback_templates=os.getenv("LLM_USE_FALLBACK", "true").lower() == "true",
+            use_fallback_templates=os.getenv("LLM_USE_FALLBACK", "true").lower()
+            == "true",
             safety_enabled=os.getenv("LLM_SAFETY_ENABLED", "true").lower() == "true",
             mock_mode=mock_mode,
             retry_schedule=retry_schedule,
@@ -123,7 +131,9 @@ class ContentModerator:
                 return SafetyLevel.BLOCKED
 
         # Check for warning phrases
-        concern_count = sum(1 for phrase in self.warning_phrases if phrase in text_lower)
+        concern_count = sum(
+            1 for phrase in self.warning_phrases if phrase in text_lower
+        )
         if concern_count >= 3:
             return SafetyLevel.MODERATE_CONCERN
         elif concern_count >= 1:
@@ -140,7 +150,14 @@ class LLMClient:
         self.config = config or LLMConfig.from_env()
         self.moderator = ContentModerator() if self.config.safety_enabled else None
         self._executor = ThreadPoolExecutor(max_workers=4)
-        self._retry_schedule = self.config.retry_schedule or [1.0, 3.0, 10.0, 30.0, 60.0, 120.0]
+        self._retry_schedule = self.config.retry_schedule or [
+            1.0,
+            3.0,
+            10.0,
+            30.0,
+            60.0,
+            120.0,
+        ]
         self.enabled = True
 
         if self.config.mock_mode:
@@ -152,16 +169,19 @@ class LLMClient:
         # Import openai library if available
         try:
             import openai
+
             self.openai = openai
             # Configure OpenAI client with custom base URL
             self.client = openai.OpenAI(
                 api_key=self.config.api_key,
                 base_url=self.config.api_base,
-                timeout=self.config.timeout
+                timeout=self.config.timeout,
             )
             logger.info(f"LLM client initialized with base URL: {self.config.api_base}")
         except ImportError:
-            logger.warning("OpenAI library not installed. LLM features will be disabled.")
+            logger.warning(
+                "OpenAI library not installed. LLM features will be disabled."
+            )
             self.openai = None
             self.client = None
             self.enabled = False
@@ -184,7 +204,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
         prompt: str,
         context: Dict[str, Any],
         persona_name: Optional[str] = None,
-        persona_traits: Optional[Dict[str, Any]] = None
+        persona_traits: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Generate narrative text using LLM with optional persona voice."""
         if self.config.mock_mode:
@@ -199,13 +219,18 @@ Be concise but flavorful. Maximum 2-3 sentences."""
             # Build full prompt with persona if provided
             full_prompt = prompt
             if persona_name and persona_traits:
-                persona_prompt = self.generate_persona_prompt(persona_name, persona_traits)
+                persona_prompt = self.generate_persona_prompt(
+                    persona_name, persona_traits
+                )
                 full_prompt = f"{persona_prompt}\n\nContext: {prompt}"
 
             # Add context as system message
             messages = [
-                {"role": "system", "content": "You are generating narrative content for an academic research game."},
-                {"role": "user", "content": full_prompt}
+                {
+                    "role": "system",
+                    "content": "You are generating narrative content for an academic research game.",
+                },
+                {"role": "user", "content": full_prompt},
             ]
 
             # Make API call with retries
@@ -218,12 +243,21 @@ Be concise but flavorful. Maximum 2-3 sentences."""
                 if self.moderator:
                     safety = self.moderator.check_content(generated_text)
                     if safety == SafetyLevel.BLOCKED:
-                        logger.warning(f"Generated content blocked for safety: {generated_text[:50]}...")
+                        logger.warning(
+                            f"Generated content blocked for safety: {generated_text[:50]}..."
+                        )
                         if self.config.use_fallback_templates:
                             return self._fallback_template(context)
-                        raise LLMGenerationError("Generated content blocked by moderator")
-                    elif safety in [SafetyLevel.MINOR_CONCERN, SafetyLevel.MODERATE_CONCERN]:
-                        logger.info(f"Content passed with {safety.value}: {generated_text[:50]}...")
+                        raise LLMGenerationError(
+                            "Generated content blocked by moderator"
+                        )
+                    elif safety in [
+                        SafetyLevel.MINOR_CONCERN,
+                        SafetyLevel.MODERATE_CONCERN,
+                    ]:
+                        logger.info(
+                            f"Content passed with {safety.value}: {generated_text[:50]}..."
+                        )
 
                 return generated_text
             else:
@@ -248,14 +282,16 @@ Be concise but flavorful. Maximum 2-3 sentences."""
                         model=self.config.model_name,
                         messages=messages,
                         temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens
-                    )
+                        max_tokens=self.config.max_tokens,
+                    ),
                 )
                 return response
             except Exception as e:
                 logger.warning(f"LLM API call attempt {attempt + 1} failed: {e}")
                 if attempt < attempts - 1:
-                    delay = self._retry_schedule[min(attempt, len(self._retry_schedule) - 1)]
+                    delay = self._retry_schedule[
+                        min(attempt, len(self._retry_schedule) - 1)
+                    ]
                     await asyncio.sleep(delay)
                 else:
                     logger.error("All retry attempts exhausted for LLM call")
@@ -277,10 +313,16 @@ Be concise but flavorful. Maximum 2-3 sentences."""
 
         return _random_choice(templates)
 
-    def _mock_generation(self, prompt: str, context: Dict[str, Any], persona_name: Optional[str]) -> str:
+    def _mock_generation(
+        self, prompt: str, context: Dict[str, Any], persona_name: Optional[str]
+    ) -> str:
         """Return deterministic text in mock mode."""
         speaker = persona_name or context.get("player", "Narrator")
-        summary = context.get("summary") or context.get("action") or context.get("type", "event")
+        summary = (
+            context.get("summary")
+            or context.get("action")
+            or context.get("type", "event")
+        )
         return f"[MOCK] {speaker}: {summary or prompt}"
 
     def generate_narrative_sync(
@@ -320,9 +362,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
         return result_container["value"]
 
     async def generate_batch(
-        self,
-        prompts: List[Dict[str, Any]],
-        max_concurrent: int = 5
+        self, prompts: List[Dict[str, Any]], max_concurrent: int = 5
     ) -> List[str]:
         """Generate multiple narratives in batch with concurrency control."""
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -333,7 +373,7 @@ Be concise but flavorful. Maximum 2-3 sentences."""
                     prompt_data["prompt"],
                     prompt_data.get("context", {}),
                     prompt_data.get("persona_name"),
-                    prompt_data.get("persona_traits")
+                    prompt_data.get("persona_traits"),
                 )
 
         tasks = [generate_with_limit(p) for p in prompts]
@@ -362,7 +402,7 @@ async def enhance_press_release(
     base_content: str,
     context: Dict[str, Any],
     scholar_name: Optional[str] = None,
-    scholar_traits: Optional[Dict[str, Any]] = None
+    scholar_traits: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Enhance a press release with LLM-generated narrative."""
     client = get_llm_client()
@@ -388,7 +428,7 @@ async def enhance_press_release(
         prompt=prompt,
         context=context,
         persona_name=scholar_name,
-        persona_traits=scholar_traits
+        persona_traits=scholar_traits,
     )
 
     return enhanced
