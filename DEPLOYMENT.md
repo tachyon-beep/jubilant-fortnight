@@ -71,6 +71,7 @@ GREAT_WORK_GUARDIAN_URL=http://localhost:8085/score   # Only in sidecar mode
 GREAT_WORK_GUARDIAN_CATEGORIES=HAP,sexual,violence,self-harm,illicit
 GREAT_WORK_MODERATION_STRICT=true            # If true, pause the game when the sidecar is offline
 GREAT_WORK_MODERATION_PREFILTER_ONLY=false  # Force regex-only moderation (for development)
+GREAT_WORK_ENFORCE_HTTPS=true               # Enforce HTTPS for Guardian/LLM in production (smoke warns/errors if http)
 
 # Archive Publishing (optional overrides)
 GREAT_WORK_ARCHIVE_BASE_URL=/archive                # Adjust when hosting under a prefix
@@ -226,7 +227,7 @@ Before launching a new environment run:
 python -m great_work.tools.deployment_smoke
 ```
 
-The command reports missing tokens, channel routing gaps, Guardian misconfiguration, and alert routing coverage. Resolve any **error** rows before starting the bot; **warning** rows highlight optional but recommended settings (e.g., public channel mirroring or alert webhooks).
+The command reports missing tokens, channel routing gaps, Guardian misconfiguration, and alert routing coverage. When `GREAT_WORK_ENFORCE_HTTPS=true`, it will also flag non‑HTTPS Guardian/LLM URLs. Resolve any **error** rows before starting the bot; **warning** rows highlight optional but recommended settings (e.g., public channel mirroring or alert webhooks).
 
 ## 4. Archive Publishing
 
@@ -253,6 +254,10 @@ LLM_MODEL_NAME=your_model
 ```
 
 The game pauses automatically if the LLM fails repeatedly; monitor admin notifications and `/telemetry_report` for pause/resume events.
+
+### Deterministic Narrative (optional)
+
+- For reproducible runs/tests, set `GREAT_WORK_RANDOM_SEED=<int>` to seed the module-level RNGs used in narrative/template selection. When unset, narrative remains non-deterministic for variety.
 
 ## 6. Moderation Sidecar
 
