@@ -60,6 +60,14 @@ LLM_RETRY_ATTEMPTS=3
 LLM_RETRY_SCHEDULE=1,3,10,30                # seconds between retries
 LLM_USE_FALLBACK=true
 
+# Guardian Sidecar Moderation
+GREAT_WORK_GUARDIAN_MODE=sidecar             # sidecar (HTTP RPC) or local
+GREAT_WORK_GUARDIAN_URL=http://localhost:8085/score   # Only in sidecar mode
+# GREAT_WORK_GUARDIAN_LOCAL_PATH=./models/guardian    # Path to weights when mode=local
+GREAT_WORK_GUARDIAN_CATEGORIES=HAP,sexual,violence,self-harm,illicit
+GREAT_WORK_MODERATION_STRICT=true            # If true, pause the game when the sidecar is offline
+GREAT_WORK_MODERATION_PREFILTER_ONLY=false  # Force regex-only moderation (for development)
+
 # Archive Publishing (optional overrides)
 GREAT_WORK_ARCHIVE_BASE_URL=/archive                # Adjust when hosting under a prefix
 GREAT_WORK_ARCHIVE_PAGES_DIR=/opt/great-work-pages  # Local clone of the gh-pages branch
@@ -176,6 +184,14 @@ Right-size the KPI thresholds for your cohort—drop `GREAT_WORK_ALERT_MIN_ACTIV
 5. Use the dashboard’s dispatcher filter form (or call `/api/orders?event=poll&min_pending=3`) to pull JSON/CSV samples during live triage.
 
 Use `python -m great_work.tools.generate_sample_telemetry` to populate a fresh `telemetry.db` with deterministic sample data when rehearsing the workflow before live players arrive.
+
+### Guardian Sidecar Operations
+
+1. **Provision weights:** run `python -m great_work.tools.download_guardian_model --target ./models/guardian` on the host (requires `huggingface_hub`).
+2. **Sidecar service:** deploy the guardian container (`docker compose up guardian-sidecar`) or start the systemd unit; the service must expose a `/score` endpoint that accepts JSON payloads `{ "category": "HAP", "text": "..." }`.
+3. **Health checks:** confirm `/health` returns `ok` and that `/gw_admin moderation_recent` shows steady Guardian latency in `/telemetry_report`.
+4. **Incident response:** if `moderation_sidecar_offline` fires, restart the sidecar and decide whether to set `GREAT_WORK_MODERATION_STRICT=false` temporarily or pause the game via `/gw_admin pause_game reason:"guardian offline"`. After recovery, audit overrides with `/gw_admin moderation_overrides`.
+5. **Manual probes:** run `python scripts/moderation_probe.py --text "sample" --category HAP` to validate the policy before re-enabling strict mode.
 
 ## 4. Archive Publishing
 

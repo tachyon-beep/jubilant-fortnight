@@ -15,6 +15,8 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 - `python -m great_work.tools.recommend_kpi_thresholds --apply` – compute KPI guardrail suggestions from recent telemetry and persist them to `telemetry.db`; add `--output telemetry_exports/kpi_thresholds.json` for an audit trail.
 - `python -m great_work.tools.export_product_metrics` – dump current KPIs, historical trends, and cohort breakdowns to `telemetry_exports/` for offline dashboards or quarterly reviews.
 - `python -m great_work.tools.simulate_seasonal_economy --config scenario.json` – rehearse seasonal commitment + mentorship tuning scenarios offline and capture timeline summaries alongside calibration snapshots.
+- `/gw_admin moderation_recent` – surface the last N Guardian decisions plus hashed payloads for fast override review; pair with `/gw_admin add_moderation_override` to admit or block specific hashes.
+- `python -m great_work.tools.calibrate_moderation --hours 168 --telemetry-db telemetry.db` – summarise Guardian category counts and latency before adjusting policy thresholds.
 - `python -m great_work.tools.manage_orders` – summarise dispatcher orders and run follow-up migrations with optional JSON output.
 - `python -m great_work.tools.calibrate_moderation` – inspect Guardian category/severity counts for tuning and override review.
 
@@ -76,7 +78,7 @@ Targets appear in `/telemetry_report`, drive the dashboard’s KPI table, and au
 
 ### Alert Routing
 
-Set `GREAT_WORK_ALERT_WEBHOOK_URLS` with a comma-separated list to fan alerts out to multiple destinations (Discord, Slack, PagerDuty, etc.), and optionally keep `GREAT_WORK_ALERT_WEBHOOK_URL` for legacy single-channel setups. Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP alongside the webhook fan-out.
+Set `GREAT_WORK_ALERT_WEBHOOK_URLS` with a comma-separated list to fan alerts out to multiple destinations (Discord, Slack, PagerDuty, etc.), and optionally keep `GREAT_WORK_ALERT_WEBHOOK_URL` for legacy single-channel setups. Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP alongside the webhook fan-out. For Guardian-specific incidents, ensure the on-call webhook includes the moderation team so block spikes and sidecar outages surface to the right responders.
 
 Events emitted through `TelemetryCollector.track_system_event` using the `alert_` prefix—including orders dispatcher backlog warnings, health-check failures, and symposium reprisal spikes—automatically route through the webhook once their cooldown expires.
 

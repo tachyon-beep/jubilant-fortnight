@@ -70,6 +70,20 @@ _Last updated: 2025-09-30_
   - Add contract tests that mock the Guardian RPC and confirm the bot blocks/approves text as expected.
   - Include regression samples for each category to guard against policy drift.
 
+### Incident Response & Escalation
+
+| Signal | Immediate Action | Follow-up |
+| --- | --- | --- |
+| `moderation_sidecar_offline` alert, sidecar health endpoint failing | Flip `GREAT_WORK_MODERATION_STRICT=false` to allow prefiler-only mode or run `/gw_admin pause_game` if strict enforcement is required; restart the sidecar service (`systemctl restart guardian-sidecar` or `docker compose restart guardian`) and post status in the admin channel. | After recovery, send `/gw_admin moderation_recent --since 15m` to ensure queued content was held; file a postmortem entry in the ops log. |
+| Spike in Guardian blocks (`moderation_block_rate` warning/alert) | Review `/gw_admin moderation_recent` to sample excerpts; if repeated false positives occur, hash them via `/gw_admin add_moderation_override` with a short expiry and open a ticket to adjust prefilter heuristics. | Schedule a calibration session with `python -m great_work.tools.calibrate_moderation --hours 168` and update the policy docs if thresholds change. |
+| Operators flag a missed violation | Capture the offending text, run `python scripts/moderation_probe.py --text "..."` with stricter categories, and add the hash to the blocklist via `/gw_admin add_moderation_override --block`. | Update the Guardian category list (`GREAT_WORK_GUARDIAN_CATEGORIES`) and note the incident in the audit log. |
+
+**Escalation path:** On-call moderators escalate to the Narrative Lead after two consecutive failed restarts or any high-severity policy miss. Use the shared incident doc to capture timeline, root cause, corrective actions, and whether overrides were applied.
+
+**Quarterly drills:** Once per quarter run a tabletop exercise using `python scripts/moderation_probe.py --fixture stress.jsonl` to validate sidecar throughput, override workflows, and alert fan-out (Discord + on-call). Document outcomes in the ops wiki.
+
+**Override review:** Every Friday run `/gw_admin moderation_overrides` and export the list via `python -m great_work.tools.manage_orders followups migrate --moderation --json` to ensure overrides have expiry dates and a recorded justification. Remove stale overrides promptly.
+
 ## Calibration & Overrides
 
 - Run `python -m great_work.tools.calibrate_moderation --hours 168 --telemetry-db telemetry.db` weekly to summarise Guardian categories, stages, and severity counts. Use the output to adjust `GREAT_WORK_GUARDIAN_CATEGORIES`, blocklists, or prefilter heuristics.
