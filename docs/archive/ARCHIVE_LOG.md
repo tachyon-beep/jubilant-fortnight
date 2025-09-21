@@ -11,6 +11,8 @@ This log records documentation shuffles performed while preparing the 1.0.0-rc1 
 | `docs/post_1_0/USER_TELEMETRY.md` | Consolidated into `docs/ROADMAP.md` (Player Telemetry Portal). |
 | `docs/ai/` | Removed (no longer used for prompt experiments). |
 | `docs/DESIGN_COMMITMENT.md` | Removed (superseded by refreshed `docs/HLD.md` & roadmap). |
+| Public links to Guardian Safety Plan | Removed from README/DEPLOYMENT; Safety runbook maintained internally. |
+| Deployment guide references | Normalised to `DEPLOYMENT.md` at repo root; fixed outdated `docs/deployment.md` links in design/user docs. |
 
 
 ## Planned Archive (review after RC sign-off)

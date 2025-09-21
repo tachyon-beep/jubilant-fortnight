@@ -257,7 +257,7 @@ The game pauses automatically if the LLM fails repeatedly; monitor admin notific
 ## 6. Moderation Sidecar
 
 - Download Granite Guardian weights with `python -m great_work.tools.download_guardian_model --target ./models/guardian` (defaults to `ibm-granite/granite-guardian-3.2-3b-a800m`; requires `pip install huggingface_hub`). Authentication follows the standard Hugging Face token flow; pass `--token` explicitly or rely on cached credentials.
-- Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an HTTP endpoint. See `docs/archive/SAFETY_PLAN.md` for architecture and operational guidance.
+- Run the moderation sidecar (Ollama, container, or custom service) beside the bot and expose an HTTP endpoint. Refer to your internal safety runbook for architecture and operational guidance.
 - Leave the script unused if you prefer an alternate moderation provider—the repository ships without any large binaries by default.
 - Optional environment knobs:
 

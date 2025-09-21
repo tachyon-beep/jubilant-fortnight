@@ -30,7 +30,7 @@ The Great Work is an asynchronous, fully public research drama played entirely t
 - **Expedition Pipeline** – think tanks, field digs, and great projects with sideways failure tables that turn disasters into content.
 - **Five-Faction Influence Economy** – Academic, Government, Industry, Religious, and Foreign pools power recruitment, seasonal commitments, faction projects, and archive endowments.
 - **Layered Press System** – gossip, scheduled briefs, faction memos, and admin updates generated automatically with tone packs and Guardian moderation.
-- **Operational Toolkit** – telemetry collector, `/telemetry_report`, KPI calibration CLI, seasonal simulation harness, deployment smoke checks, archive mirroring, Guardian safety plan.
+- **Operational Toolkit** – telemetry collector, `/telemetry_report`, KPI calibration CLI, seasonal simulation harness, deployment smoke checks, archive mirroring, Guardian moderation.
 - **Semantic Search (optional)** – Qdrant vector DB with sentence-transformers embeddings for knowledge, press, and future retrieval tooling.
 
 ## Architecture Snapshot
@@ -237,7 +237,6 @@ python -m great_work.tools.qdrant_manager --stats
 
 - [Deployment Guide](DEPLOYMENT.md)
 - [Telemetry Runbook](docs/TELEMETRY_RUNBOOK.md)
-- [Guardian Safety Plan](docs/archive/SAFETY_PLAN.md)
 - [Implementation Plan](docs/archive/implementation_plan.md) · [Gap Analysis](docs/archive/gap_analysis.md)
 - [Archive Log](docs/archive/ARCHIVE_LOG.md)
 

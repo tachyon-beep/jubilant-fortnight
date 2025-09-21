@@ -61,7 +61,7 @@ This document captures the core gameplay, systems, and design principles of **Th
 - Guardian sidecar (or local model) evaluates text categories (HAP, sexual, violence, self-harm, illicit).
 - Prefilter + Guardian scoring; strict mode pauses gameplay on sidecar outage.
 - `/gw_admin moderation_recent`, `/gw_admin moderation_overrides`, overrides expire by default.
-- Safety runbook in `docs/SAFETY_PLAN.md` defines incident response and drill cadence.
+- Safety runbook (maintained internally) defines incident response and drill cadence.
 
 ## 6. Player Commands Overview
 
@@ -82,5 +82,5 @@ See `docs/ROADMAP.md` for post-1.0 initiatives (dynasties, conspiracies, cohort 
 
 This HLD intentionally focuses on gameplay-facing structure. For deeper technical details refer to:
 - `docs/SYSTEM_ARCHITECTURE.md` – layered architecture, data flow, integrations.
-- `docs/deployment.md` – environment configuration, Guardian operations, smoke testing.
-- `docs/TELEMETRY_RUNBOOK.md` & `docs/SAFETY_PLAN.md` – operational procedures.
+- `../../DEPLOYMENT.md` – environment configuration, Guardian operations, smoke testing.
+- `docs/TELEMETRY_RUNBOOK.md` – operational procedures.

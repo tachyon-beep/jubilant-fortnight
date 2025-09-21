@@ -36,7 +36,7 @@ This document supplements the high-level design (HLD) with implementation-centri
 - **SQLite (`var/state/great_work.db`)** – authoritative state (players, scholars, events, commitments, orders). Event sourcing via append-only log.
 - **Telemetry (`var/telemetry/telemetry.db`, `TelemetryCollector`)** – metrics for commands, queue depth, seasonal/mentorship debt, Guardian events. Decorated slash commands emit telemetry automatically.
 - **Web Archive (`web_archive/`, `web_archive_public/`)** – static HTML exports triggered each digest, mirrored to GitHub Pages when enabled.
-- **Guardian Sidecar** – optional moderation service; configuration controlled via `GREAT_WORK_GUARDIAN_*` env vars. Safety plan lives in `docs/SAFETY_PLAN.md`.
+- **Guardian Sidecar** – optional moderation service; configuration controlled via `GREAT_WORK_GUARDIAN_*` env vars. Safety runbook is maintained internally.
 - **Tooling** – CLI entry points under `great_work/tools/`: seeding, calibration snapshot export, smoke tests, seasonal simulations, moderation probes, narrative validation/preview.
 
 ## Data Flow
@@ -84,4 +84,4 @@ Guardian Moderation
 - **LLM Abstraction** – Current client is OpenAI-compatible; future roadmap could add provider registry and caching.
 - **Telemetry API** – Baseline endpoints exist; cohort comparison and player portal expansions tracked in `docs/ROADMAP.md`.
 
-For gameplay-centric details, see `docs/HLD.md`. For operational runbooks, consult `docs/deployment.md`, `docs/TELEMETRY_RUNBOOK.md`, and `docs/SAFETY_PLAN.md`.
+For gameplay-centric details, see `docs/HLD.md`. For operational runbooks, consult `../../DEPLOYMENT.md` and `docs/TELEMETRY_RUNBOOK.md`.

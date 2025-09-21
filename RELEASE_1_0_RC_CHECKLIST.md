@@ -7,8 +7,8 @@ Use this checklist when preparing the 1.0.0 release candidate. Complete each sec
 - [ ] Confirm version badge in `README.md` matches `1.0.0-rc1` and test badge reflects latest pytest count.
 - [ ] Update `CHANGELOG.md` with RC highlights and ensure entries reference new tooling (deployment smoke, roadmap consolidation).
 - [ ] Verify `docs/ROADMAP.md` captures all post-1.0 concepts (Gameplay, Telemetry Cohorts, Player Portal).
-- [ ] Review `docs/ARCHIVE_LOG.md` and record any additional documents moved or pending deletion.
-- [ ] Ensure `docs/deployment.md`, `docs/TELEMETRY_RUNBOOK.md`, and `docs/SAFETY_PLAN.md` reflect latest Guardian incident response steps.
+- [ ] Review `docs/archive/ARCHIVE_LOG.md` and record any additional documents moved or pending deletion.
+- [ ] Ensure `DEPLOYMENT.md` and `docs/TELEMETRY_RUNBOOK.md` reflect latest Guardian incident response steps.
 
 ## 2. Preflight Smoke & Tests
 
@@ -41,7 +41,6 @@ Use this checklist when preparing the 1.0.0 release candidate. Complete each sec
 
 - [ ] Monitor telemetry alerts for 24–48 hours; document incidents in ops log.
 - [ ] Begin backlog grooming for roadmap items (refer to `docs/ROADMAP.md`).
-- [ ] Archive superseded documents listed in `docs/ARCHIVE_LOG.md` once RC graduates to GA.
+- [ ] Archive superseded documents listed in `docs/archive/ARCHIVE_LOG.md` once RC graduates to GA.
 
 Keep this checklist in sync with CI and operational tooling. Update it when new smoke tests or deployment steps are added.
-

@@ -113,7 +113,7 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 - Authored [TELEMETRY_RUNBOOK.md](TELEMETRY_RUNBOOK.md) with health checks, thresholds, incident response
 - **Comprehensive Writing Guide Update**: see [WRITING_GUIDE.md](WRITING_GUIDE.md)
 - Created issue tracking system with template and resolved first issue
-- Added deployment documentation with systemd examples in [deployment.md](deployment.md)
+- Added deployment documentation with systemd examples in [DEPLOYMENT.md](../DEPLOYMENT.md)
 - Created `docs/post_1_0/` and moved post‑1.0 concepts there (e.g.,
   [USER_TELEMETRY.md](post_1_0/USER_TELEMETRY.md),
   [TELEMETRY_COHORT_COMPARISONS.md](post_1_0/TELEMETRY_COHORT_COMPARISONS.md))

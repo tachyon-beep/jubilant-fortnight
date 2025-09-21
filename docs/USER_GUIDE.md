@@ -69,4 +69,4 @@ For moderation you can run strictly or permissively. In strict mode, if the Guar
 
 Once the world is running and players are experimenting, the best thing you can do is read the Gazette, post occasional admin summaries in Table‑Talk, and let the archive do its work. The Great Work is most alive when the community discovers that their brave claims and spectacular failures matter because they’re on the record.
 
-For deployment specifics and knobs, see `DEPLOYMENT.md`. For embedding and search, see `docs/QDRANT_SETUP.md`.
+For deployment specifics and knobs, see `../DEPLOYMENT.md`. For embedding and search, see `docs/QDRANT_SETUP.md`.
