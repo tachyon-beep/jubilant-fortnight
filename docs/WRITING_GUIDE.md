@@ -22,6 +22,7 @@ ship consistent, mechanically aware copy across every surface.
 | Sidecast arcs | `great_work/data/sidecast_arcs.yaml` | `generate_sidecast_layers` | Gossip + spotlight brief chain |
 | Defection epilogues | `great_work/data/defection_epilogues.yaml` | `generate_defection_epilogue_layers` | Epilogue brief, faction memo |
 | Sideways vignettes | `great_work/data/sideways_vignettes.yaml` | `queue_order:followup:sideways_vignette` | Gazette vignette + gossip |
+| Landmark preparation briefs | `great_work/data/landmark_preparations.yaml` | `generate_expedition_layers` (landmark layer) | Landmark discovery flavour + prep brief |
 | Tone packs | `great_work/data/press_tone_packs.yaml` | `press_tone.get_tone_seed` | Headline/blurbs/callouts |
 | Seasonal commitments | Procedural (service) | `seasonal_commitment_update` / `_complete` | Cost + loyalty status briefs |
 | Faction investments | Procedural (service) | `faction_investment` | Infrastructure upgrades, faction goodwill tone |
@@ -129,6 +130,8 @@ Use one or two archetype cues per quote; combine with faction lean if known.
 
 - `primary` is the public dispatch; `faction_brief` is an internal memo tone.
 - Use `gossip` to hint at rival sentiments or remaining grudges.
+- Negotiation press now appends a **Loyalty snapshot** line summarising feelings toward the rival and
+  current patron; keep epilogues consistent with those loyalty shifts.
 
 ### 4.6 Sideways Vignettes (`sideways_vignettes.yaml`)
 
@@ -147,7 +150,32 @@ Use one or two archetype cues per quote; combine with faction lean if known.
 - Include at least three entries per depth (`shallow`, `standard`, `deep`).
 - Tags fuel Gazette highlights and telemetry dashboards—make them actionable.
 
-### 4.7 Seasonal Commitments (programmatic)
+### 4.7 Landmark Preparations (`landmark_preparations.yaml`)
+
+```yaml
+landmark_preparations:
+  think_tank:
+    deep:
+      discoveries:
+        - "Simulators stage night-long runs so {objective}'s landmark proof can survive every hostile interrogation."
+      briefs:
+        - headline: "Deep Prep Ledger — Expedition {code}"
+          body: |
+            After deep preparation, {player}'s analysts tout {strengths_text}. They document {frictions_text} as final
+            debate traps while {team_summary} script the landmark reveal.
+```
+
+- `discoveries` feed the fallback copy for landmark successes when the failure tables do not provide
+  bespoke text. Keep these celebratory but grounded in the expedition type and prep depth.
+- `briefs` populate the new `landmark_preparation` press layer. Required placeholders: `{player}`,
+  `{objective}`, `{code}`, `{prep_depth_title}`, `{prep_depth_title_lower}`, `{strengths_text}`,
+  `{frictions_text}`, `{team_summary}`. Use `{prep_depth_title_lower}` instead of calling `.lower()`
+  in templates.
+- `strengths_text` and `frictions_text` arrive as pre-joined fragments (e.g., `Think tank modelling +8`).
+  Focus on why those strengths or risks matter for the reveal rather than repeating raw numbers.
+- Preview with `python -m great_work.tools.preview_narrative landmark-prep` and keep lines ≤100 characters.
+
+### 4.8 Seasonal Commitments (programmatic)
 
 Generated directly from the service layer. Keep focus on upkeep cost, relationship modifiers, and whether debt carried forward.
 
@@ -156,7 +184,7 @@ Seasonal Commitment Update — Mentor Hal
 Mentor Hal maintains a seasonal pledge with Academia. Cost: 3. Relationship modifier +20%. Outstanding debt: 0.
 ```
 
-### 4.8 Faction Projects (programmatic)
+### 4.9 Faction Projects (programmatic)
 
 Progress updates summarise aggregate progress and spotlight the top contributors.
 
@@ -228,6 +256,8 @@ Tone packs rotate headlines, blurbs, and callouts per aesthetic.
 
 Run tests from the project root with the virtual environment active:
 
+- Static validation: `python -m great_work.tools.validate_narrative --all`
+- Narrative preview: `python -m great_work.tools.preview_narrative` (or pass a specific surface, e.g., `-- recruitment`)
 - Layered narrative sanity: `./.venv/bin/python -m pytest tests/test_multi_press.py -q`
 - Sidecast + vignette flows: `./.venv/bin/python -m pytest tests/test_service_edge_cases.py -k "sidecast or vignette" -q`
 - Mentorship lifecycle: `./.venv/bin/python -m pytest tests/test_mentorship.py -q`

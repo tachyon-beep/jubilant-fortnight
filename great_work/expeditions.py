@@ -20,6 +20,7 @@ from .rng import DeterministicRNG
 _DATA_PATH = Path(__file__).parent / "data"
 _SIDEWAYS_EFFECT_ENTRIES: Optional[List[Dict[str, Any]]] = None
 _SIDEWAYS_VIGNETTES: Optional[Dict[str, Dict[str, List[Dict[str, Any]]]]] = None
+_LANDMARK_PREPARATIONS: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 
 
 _TAG_FALLBACKS: Dict[str, Dict[str, Any]] = {
@@ -109,6 +110,25 @@ def _load_sideways_vignettes() -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
         else:
             _SIDEWAYS_VIGNETTES = {}
     return _SIDEWAYS_VIGNETTES
+
+
+def _load_landmark_preparations() -> Dict[str, Dict[str, Dict[str, Any]]]:
+    global _LANDMARK_PREPARATIONS
+    if _LANDMARK_PREPARATIONS is None:
+        data = _load_yaml_resource("landmark_preparations.yaml")
+        parsed: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        if isinstance(data, dict):
+            root = data.get("landmark_preparations", {})
+            if isinstance(root, dict):
+                for expedition_type, depths in root.items():
+                    if not isinstance(depths, dict):
+                        continue
+                    parsed[expedition_type] = {}
+                    for depth, entry in depths.items():
+                        if isinstance(entry, dict):
+                            parsed[expedition_type][depth] = entry
+        _LANDMARK_PREPARATIONS = parsed
+    return _LANDMARK_PREPARATIONS
 
 
 @dataclass
@@ -218,13 +238,41 @@ class ExpeditionResolver:
         landmark: bool = False,
     ) -> str | None:
         options = self._failure_tables.sideways(expedition_type, prep_depth)
-        if not options:
-            return None if not landmark else "New domain unlocked"
+        if not options and not landmark:
+            return None
         if landmark:
-            return options[-1]
+            landmark_text = self._pick_landmark_discovery(rng, expedition_type, prep_depth)
+            if landmark_text:
+                return landmark_text
+            if options:
+                return options[-1]
+            return "New domain unlocked"
         if len(options) == 1:
             return options[0]
         return rng.choice(options)
+
+    def _pick_landmark_discovery(
+        self,
+        rng: DeterministicRNG,
+        expedition_type: str,
+        prep_depth: str,
+    ) -> Optional[str]:
+        preparations = _load_landmark_preparations()
+        entry = preparations.get(expedition_type) or preparations.get("default")
+        if not entry:
+            return None
+
+        depth_entry = entry.get(prep_depth) or entry.get("standard") or next(
+            (value for key, value in entry.items() if isinstance(value, dict)),
+            None,
+        )
+        if not isinstance(depth_entry, dict):
+            return None
+
+        discoveries = depth_entry.get("discoveries")
+        if isinstance(discoveries, list) and discoveries:
+            return rng.choice(discoveries)
+        return None
 
     def _generate_sideways_effects(
         self,
@@ -254,27 +302,11 @@ class ExpeditionResolver:
 
         if not effects:
             text_lower = discovery_text.lower()
-            if "new domain unlocked" in text_lower and is_landmark:
-                primary_faction = rng.choice(["Academic", "Government", "Industry", "Religious", "Foreign"])
-                effects.append(
-                    SidewaysEffect.faction_shift(
-                        faction=primary_faction,
-                        amount=5,
-                        description=f"Landmark discovery resonates with {primary_faction}",
-                    )
-                )
-                effects.append(
-                    SidewaysEffect.reputation_change(
-                        amount=3,
-                        description="Landmark achievement recognized",
-                    )
-                )
-                effects.append(
-                    SidewaysEffect.spawn_theory(
-                        theory_text=f"New domain principles in {expedition_type} research",
-                        confidence="certain",
-                        description="Landmark spawns confident theory",
-                    )
+            if "new domain unlocked" in text_lower or is_landmark:
+                self._append_default_landmark_effects(
+                    effects,
+                    rng,
+                    expedition_type,
                 )
 
         vignette = self._select_sideways_vignette(rng, expedition_type, prep_depth)
@@ -304,6 +336,34 @@ class ExpeditionResolver:
             )
 
         return effects if effects else None
+
+    def _append_default_landmark_effects(
+        self,
+        effects: List[SidewaysEffect],
+        rng: DeterministicRNG,
+        expedition_type: str,
+    ) -> None:
+        primary_faction = rng.choice(["Academic", "Government", "Industry", "Religious", "Foreign"])
+        effects.append(
+            SidewaysEffect.faction_shift(
+                faction=primary_faction,
+                amount=5,
+                description=f"Landmark discovery resonates with {primary_faction}",
+            )
+        )
+        effects.append(
+            SidewaysEffect.reputation_change(
+                amount=3,
+                description="Landmark achievement recognized",
+            )
+        )
+        effects.append(
+            SidewaysEffect.spawn_theory(
+                theory_text=f"New domain principles in {expedition_type} research",
+                confidence="certain",
+                description="Landmark spawns confident theory",
+            )
+        )
 
     def _match_sideways_entry(
         self,

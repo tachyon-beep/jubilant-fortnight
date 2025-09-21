@@ -186,6 +186,88 @@
           </tr>
         </tbody>
       </table>
+
+      {% if kpi_targets %}
+      <h3>Canonical KPI Targets</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Warning</th>
+            <th>Notes</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for metric, payload in kpi_targets|dictsort %}
+          <tr>
+            <td>{{ metric }}</td>
+            <td>{{ payload.target }}</td>
+            <td>{{ payload.warning if payload.warning is not none else '—' }}</td>
+            <td>{{ payload.notes or '—' }}</td>
+            <td>{{ payload.updated_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% set cohorts = engagement_cohorts.get('cohorts', {}) %}
+      {% if cohorts %}
+      <h3>Engagement Cohorts ({{ engagement_cohorts.window_days }}d)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Cohort</th>
+            <th>Players</th>
+            <th>Share</th>
+            <th>Total Commands</th>
+            <th>Avg Commands</th>
+          </tr>
+        </thead>
+        <tbody>
+      {% for cohort_name, payload in cohorts|dictsort %}
+          <tr>
+            <td>{{ cohort_name|capitalize }}</td>
+            <td>{{ payload.players }}</td>
+            <td>{{ '%.0f%%' | format((payload.share or 0) * 100) }}</td>
+            <td>{{ '%.0f' | format(payload.command_count or 0) }}</td>
+            <td>{{ '%.1f' | format(payload.average_commands or 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Commands</th>
+            <th>Cohort</th>
+            <th>Breakdown</th>
+            <th>Last Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cohort_name, payload in cohorts|dictsort %}
+            {% for player in payload.details[:5] %}
+            <tr>
+              <td>{{ player.player_id }}</td>
+              <td>{{ '%.0f' | format(player.command_count or 0) }}</td>
+              <td>{{ cohort_name }}</td>
+              <td>
+                {% for cmd, count in player.by_command.items() %}
+                  {{ cmd }}: {{ '%.0f' | format(count) }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+              <td>{{ player.last_command_at or '—' }}</td>
+            </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
     </div>
 
     <div class="section">
@@ -465,6 +547,58 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <div class="section">
+      <h2>Symposium Participation ({{ symposium_participation.window_hours or 24 }}h)</h2>
+      {% if symposium_participation.unique_players %}
+      <p>
+        Unique participants: {{ symposium_participation.unique_players }} |
+        Total commands: {{ '%.0f' | format(symposium_participation.total_commands or 0) }}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Usage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for command, count in symposium_participation.by_command.items() %}
+          <tr>
+            <td>{{ command }}</td>
+            <td>{{ '%.0f' | format(count) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Total Commands</th>
+            <th>Breakdown</th>
+            <th>Last Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for participant in symposium_participation.players[:15] %}
+          <tr>
+            <td>{{ participant.player_id }}</td>
+            <td>{{ '%.0f' | format(participant.command_count or 0) }}</td>
+            <td>
+              {% for cmd, count in participant.by_command.items() %}
+                {{ cmd }}: {{ '%.0f' | format(count) }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </td>
+            <td>{{ participant.last_command_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p>No symposium command usage recorded in the selected window.</p>
+      {% endif %}
     </div>
 
     <div class="section">

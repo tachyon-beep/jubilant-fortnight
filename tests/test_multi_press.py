@@ -161,6 +161,55 @@ def test_generate_defection_layers():
     assert len(statement_layers) > 0
 
 
+def test_landmark_layers_include_preparation():
+    """Landmark expeditions should schedule a preparation brief."""
+    generator = MultiPressGenerator()
+
+    exp_ctx = ExpeditionContext(
+        code="EXP999",
+        player="TestPlayer",
+        expedition_type="think_tank",
+        objective="Restore the Array",
+        team=["Scholar1", "Scholar2"],
+        funding=["Academic"],
+    )
+
+    result = ExpeditionResult(
+        roll=95,
+        modifier=15,
+        final_score=110,
+        outcome=ExpeditionOutcome.LANDMARK,
+        sideways_discovery="Landmark reveal rehearsed",
+    )
+    outcome_ctx = OutcomeContext(
+        code="EXP999",
+        player="TestPlayer",
+        expedition_type="think_tank",
+        result=result,
+        reputation_change=12,
+        reactions=[],
+    )
+
+    prep_summary = {
+        "strengths": [{"label": "Think tank modelling", "value": 8}],
+        "frictions": [{"label": "Site friction", "value": -3}],
+        "strengths_text": ["Think tank modelling +8"],
+        "frictions_text": ["Site friction -3"],
+    }
+
+    layers = generator.generate_expedition_layers(
+        exp_ctx,
+        outcome_ctx,
+        scholars=[],
+        depth=PressDepth.MINIMAL,
+        prep_depth="deep",
+        preparation_summary=prep_summary,
+        team_names=["Scholar One", "Scholar Two"],
+    )
+
+    assert any(layer.type == "landmark_preparation" for layer in layers)
+
+
 def test_generate_conference_layers():
     """Test generating multi-layer press for conferences."""
     generator = MultiPressGenerator()

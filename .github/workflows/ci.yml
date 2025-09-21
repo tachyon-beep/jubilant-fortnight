@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - sprint2
+  pull_request:
+    branches:
+      - main
+      - sprint2
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-report:
+    name: Test and Upload Coverage
+    runs-on: ubuntu-latest
+    env:
+      CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+      CODACY_ORGANIZATION_PROVIDER: gh
+      CODACY_USERNAME: tachyon-beep
+      CODACY_PROJECT_NAME: jubilant-fortnight
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run tests with coverage
+        run: |
+          set -euo pipefail
+          pytest --cov=great_work --cov=models --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codacy
+        if: env.CODACY_API_TOKEN != ''
+        run: |
+          set -euo pipefail
+          set -a
+          CODACY_API_TOKEN="${CODACY_API_TOKEN}"
+          CODACY_ORGANIZATION_PROVIDER="${CODACY_ORGANIZATION_PROVIDER}"
+          CODACY_USERNAME="${CODACY_USERNAME}"
+          CODACY_PROJECT_NAME="${CODACY_PROJECT_NAME}"
+          set +a
+          bash <(curl -Ls https://coverage.codacy.com/get.sh) report -r coverage.xml
+
+      - name: Skip Codacy upload (token missing)
+        if: env.CODACY_API_TOKEN == ''
+        run: echo "CODACY_API_TOKEN not provided; skipping coverage upload."

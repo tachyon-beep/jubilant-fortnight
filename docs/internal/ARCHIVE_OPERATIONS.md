@@ -1,6 +1,6 @@
 # Archive Snapshot Operations
 
-This note captures the operational workflow for the Gazette archive pipeline. The scheduler now exports the full static archive on every digest tick, syncs the output into the container-served site, and ships a timestamped ZIP snapshot to the admin channel. Operators can use the procedures below to monitor retention, recover artefacts, or perform manual exports when needed.
+This note captures the operational workflow for the Gazette archive pipeline. The Gazette scheduler now exports the full static archive on every digest tick, syncs the output into the container-served site, and ships a timestamped ZIP snapshot to the admin channel. Operators can use the procedures below to monitor retention, recover artefacts, or perform manual exports when needed.
 
 ## Snapshot Locations
 

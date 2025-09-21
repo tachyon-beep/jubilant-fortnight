@@ -1,15 +1,15 @@
 # Requirements Evaluation Report
 
-Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
+Last Updated: 2025-09-21 (Guardian moderation, seasonal telemetry)
 
 ## Executive Summary
 
-- **Fully Implemented:** 55 requirements (71.4%)
-- **Partially Implemented:** 11 requirements (14.3%)
-- **Not Implemented:** 9 requirements (11.7%)
-- **Not Evaluated:** 2 requirements (2.6%)
+- **Fully Implemented:** 34 requirements (75.6%)
+- **Partially Implemented:** 7 requirements (15.6%)
+- **Not Implemented:** 3 requirements (6.7%)
+- **Not Evaluated:** 1 requirement (2.2%)
 
-Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, table-talk updates, sidecasts, and sideways vignettes; Guardian moderation vets both player inputs and generated copy. Digest highlights summarise scheduled drops, telemetry reports include dispatcher backlog stats plus seasonal commitment debt, and digest exports sync the public archive with ZIP snapshots. The telemetry guardrails now capture product KPIs (active player counts, manifesto adoption, archive reach), chart daily trends in Discord + the dashboard, and can fan out alerts to multiple on-call webhooks; remaining gaps centre on tuning mentorship/sidecast outcomes, balancing long-tail influence sinks, and defining KPI targets once live playtest data arrives.
+Core gameplay and community loops function end to end. LLM-enhanced, multi-layer press now stages follow-ups across expeditions, defections, symposiums, mentorship beats, admin flows, recruitment briefs, table-talk updates, sidecasts, and sideways vignettes; Guardian moderation vets both player inputs and generated copy. Digest highlights summarise scheduled drops, telemetry reports include orders dispatcher backlog stats plus seasonal commitment debt, and digest exports sync the public archive with ZIP snapshots. The telemetry guardrails capture product KPIs (active player counts, manifesto adoption, archive reach), surface new-vs-returning engagement cohorts and symposium participation, persist canonical KPI targets in `telemetry.db`, and can fan out alerts to multiple on-call webhooks; remaining gaps centre on tuning mentorship/sidecast outcomes, balancing long-tail influence sinks, and wiring the stored targets into automated alert escalation once live playtest data arrives.
 
 ## Functional Requirements Status
 
@@ -20,7 +20,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 50% |
 | Partially Implemented | 2 | 50% |
 
-**Notes:** All primary moves run through Discord and the shared timeline advances correctly, but player-count guardrails and “all moves are public” remain partial because several actions reply ephemerally rather than posting to shared channels.【F:great_work/discord_bot.py†L209-L637】【F:great_work/service.py†L1700-L2059】
+**Notes:** All primary moves run through Discord and the shared timeline advances correctly. Informational commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror outputs to configured public channels while keeping ephemeral acknowledgements, and players can see faction sentiment derived from mentorship/sidecast history inside `/status`. Player‑count guardrails are now wired into telemetry health checks via configurable thresholds. Operations can pause or resume live play with `/gw_admin pause_game` and `/gw_admin resume_game`, matching the telemetry runbook guidance for maintenance windows.【F:great_work/discord_bot.py†L862-L1325】【F:great_work/service.py†L2429-L6850】【F:great_work/telemetry.py†L1836-L1960】
 
 ### Scholar Management (6 requirements)
 
@@ -61,7 +61,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Fully Implemented | 2 | 33% |
 | Partially Implemented | 4 | 67% |
 
-**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, archive, admin, and long-tail economy artefacts (faction investments/endowments) layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; Guardian moderation now screens player inputs and generated press. Tone packs randomise setting-specific headlines, digest highlights summarise pending drops, sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, component breakdowns (age decay, fresh bonus, repeat penalty), and debt reprisal schedules with faction reprisals. Mentorship activations/progression/completions log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, recruitment odds incorporate the relationship modifier, and seasonal commitments/faction projects/investments/endowments use the same signals for costs, progress, or reputation rewards with admin overrides. Remaining work targets propagating those deltas into poach loyalty and promoting informational commands to public artefacts.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4700】【F:great_work/telemetry.py†L788-L1504】【F:great_work/discord_bot.py†L317-L1607】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L160】【F:great_work/moderation.py†L1-L240】
+**Notes:** Gazette digests and symposium cadence run on schedule. Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, archive, admin, and long-tail economy artefacts (faction investments/endowments) layer in LLM-enhanced gossip, faction statements, and scheduled follow-ups; Guardian moderation now screens player inputs and generated press. Tone packs randomise setting-specific headlines, digest highlights summarise pending drops, sideways vignettes trigger narrative dispatches while `/symposium_status`, `/symposium_backlog`, and telemetry reports surface pledge/grace stakes, scoring weights, component breakdowns (age decay, fresh bonus, repeat penalty), and debt reprisal schedules with faction reprisals. Mentorship activations/progression/completions log relationship history and adjust scholar feelings alongside sidecast phases, `/status` exposes the summary, recruitment odds incorporate the relationship modifier, and seasonal commitments/faction projects/investments/endowments use the same signals for costs, progress, or reputation rewards with admin overrides. Loyalty snapshots now surface those deltas directly in poach/counter-offer press; remaining work focuses on promoting informational commands to public artefacts.【F:great_work/scheduler.py†L20-L200】【F:great_work/service.py†L170-L4700】【F:great_work/telemetry.py†L788-L1504】【F:great_work/discord_bot.py†L317-L1607】【F:great_work/multi_press.py†L320-L1120】【F:docs/WRITING_GUIDE.md†L1-L200】【F:great_work/moderation.py†L1-L240】
 
 ### Discord UX and Commands (10 requirements)
 
@@ -134,7 +134,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 | Not Implemented | 3 | 75% |
 | Not Evaluated | 1 | 25% |
 
-**Notes:** Telemetry now tracks manifesto adoption, nickname adoption, archive lookups, and press shares (with calibration helpers to derive KPI/seasonal/engagement thresholds); iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L320】【F:great_work/tools/recommend_kpi_thresholds.py†L1-L180】【F:great_work/tools/recommend_seasonal_settings.py†L1-L120】
+**Notes:** Telemetry now tracks manifesto adoption, nickname adoption, archive lookups, press shares, engagement cohorts, and symposium participation; canonical KPI targets persist in `telemetry.db`, override alert thresholds, and ship with calibration helpers for seasonal/engagement tuning. Iteration metrics remain undefined pending live playtests.【F:great_work/telemetry.py†L12-L360】【F:great_work/tools/recommend_kpi_thresholds.py†L1-L180】【F:great_work/tools/recommend_seasonal_settings.py†L1-L120】
 
 ### Open-Source Readiness (5 requirements)
 
@@ -151,7 +151,7 @@ Core gameplay and community loops function end to end. LLM-enhanced, multi-layer
 |--------|-------|------------|
 | Fully Implemented | 4 | 100% |
 
-**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, digest ticks ship ZIP snapshots to the admin channel, and the scheduler now mirrors exports into a GitHub Pages repository with documented operator workflow.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L260】
+**Notes:** Press/events persist in SQLite, `/export_log` and `/export_web_archive` expose history, `/archive_link` provides permalinks, digest ticks ship ZIP snapshots to the admin channel, and the scheduler now mirrors exports into a GitHub Pages repository with documented operator workflow. The telemetry dashboard also exposes dispatcher backlog JSON/CSV exports for audits.【F:great_work/discord_bot.py†L577-L737】【F:great_work/web_archive.py†L416-L520】【F:great_work/scheduler.py†L20-L260】【F:ops/telemetry-dashboard/app.py†L86-L144】
 
 ## Key Follow-ups
 

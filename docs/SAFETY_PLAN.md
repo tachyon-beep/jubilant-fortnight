@@ -51,7 +51,7 @@ _Last updated: 2025-09-30_
   - Theory submission flows call the moderation service prior to persisting new theories.
 - **Post-pass hooks:**
   - `MultiPressGenerator` output runs through moderation before enqueuing press releases.
-  - Dispatcher orders re-check press content immediately before sending to Discord in case templates changed while queued.
+- The orders dispatcher re-checks press content immediately before sending to Discord in case templates changed while queued.
 - **Failure handling:**
   - If the sidecar is unreachable, fall back to prefiler-only mode and raise an admin alert. Operators can decide whether to pause the game.
   - Include a `GREAT_WORK_MODERATION_STRICT` flag to decide whether to hard-block on sidecar downtime or allow degraded operation.

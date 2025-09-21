@@ -1112,6 +1112,7 @@ class GameState:
                 "offer_type": offer.offer_type,
                 "influence_offered": offer.influence_offered,
                 "terms": offer.terms,
+                "relationship_snapshot": offer.relationship_snapshot,
                 "parent_offer_id": offer.parent_offer_id,
                 "resolved_at": offer.resolved_at.isoformat() if offer.resolved_at else None,
             }
@@ -1153,6 +1154,7 @@ class GameState:
                 offer_type=payload.get("offer_type", "initial"),
                 influence_offered=payload.get("influence_offered", {}),
                 terms=payload.get("terms", {}),
+                relationship_snapshot=payload.get("relationship_snapshot", {}),
                 status=status,
                 parent_offer_id=payload.get("parent_offer_id"),
                 created_at=datetime.fromisoformat(created_at),
@@ -1184,6 +1186,7 @@ class GameState:
                 offer_type=payload.get("offer_type", "initial"),
                 influence_offered=payload.get("influence_offered", {}),
                 terms=payload.get("terms", {}),
+                relationship_snapshot=payload.get("relationship_snapshot", {}),
                 status=status,
                 parent_offer_id=payload.get("parent_offer_id"),
                 created_at=datetime.fromisoformat(created_at),

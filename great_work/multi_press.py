@@ -10,7 +10,7 @@ from enum import Enum
 
 import yaml
 
-from .models import PressRelease, Scholar
+from .models import PressRelease, Scholar, ExpeditionOutcome
 from .press import (
     BulletinContext,
     ExpeditionContext,
@@ -32,6 +32,7 @@ _RECRUITMENT_TEMPLATES: Optional[Dict[str, Any]] = None
 _TABLE_TALK_TEMPLATES: Optional[Dict[str, Any]] = None
 _SIDECAST_ARCS: Optional[Dict[str, Any]] = None
 _DEFECTION_EPILOGUES: Optional[Dict[str, Any]] = None
+_LANDMARK_PREPARATIONS: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 
 
 def _load_yaml_resource(filename: str) -> Dict[str, Any]:
@@ -78,6 +79,25 @@ def _load_defection_epilogues() -> Dict[str, Any]:
         data = _load_yaml_resource("defection_epilogues.yaml")
         _DEFECTION_EPILOGUES = data.get("epilogues", {}) if isinstance(data, dict) else {}
     return _DEFECTION_EPILOGUES
+
+
+def _load_landmark_preparations() -> Dict[str, Dict[str, Dict[str, Any]]]:
+    global _LANDMARK_PREPARATIONS
+    if _LANDMARK_PREPARATIONS is None:
+        data = _load_yaml_resource("landmark_preparations.yaml")
+        parsed: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        if isinstance(data, dict):
+            root = data.get("landmark_preparations", {})
+            if isinstance(root, dict):
+                for expedition_type, depths in root.items():
+                    if not isinstance(depths, dict):
+                        continue
+                    parsed[expedition_type] = {}
+                    for depth, entry in depths.items():
+                        if isinstance(entry, dict):
+                            parsed[expedition_type][depth] = entry
+        _LANDMARK_PREPARATIONS = parsed
+    return _LANDMARK_PREPARATIONS
 
 
 def mentorship_update(context: Dict[str, Any]) -> PressRelease:
@@ -173,6 +193,17 @@ def table_talk_roundup(context: Dict[str, Any]) -> PressRelease:
 
     return PressRelease(
         type=context.get("type", "table_talk_roundup"),
+        headline=context["headline"],
+        body=context["body"],
+        metadata=context.get("metadata", {}),
+    )
+
+
+def landmark_preparation_brief(context: Dict[str, Any]) -> PressRelease:
+    """Generate a brief detailing landmark preparation highlights."""
+
+    return PressRelease(
+        type=context.get("type", "landmark_preparation"),
         headline=context["headline"],
         body=context["body"],
         metadata=context.get("metadata", {}),
@@ -604,7 +635,11 @@ class MultiPressGenerator:
         expedition_ctx: ExpeditionContext,
         outcome_ctx: OutcomeContext,
         scholars: List[Scholar],
-        depth: PressDepth
+        depth: PressDepth,
+        *,
+        prep_depth: Optional[str] = None,
+        preparation_summary: Optional[Dict[str, Any]] = None,
+        team_names: Optional[List[str]] = None,
     ) -> List[PressLayer]:
         """Generate multi-layer press for an expedition."""
         layers = []
@@ -683,6 +718,16 @@ class MultiPressGenerator:
                     delay_minutes=180,
                     tone_seed=self._tone_seed("expedition_followup"),
                 ))
+
+        if outcome_ctx.result.outcome == ExpeditionOutcome.LANDMARK:
+            landmark_layer = self._generate_landmark_layer(
+                expedition_ctx=expedition_ctx,
+                prep_depth=prep_depth,
+                preparation_summary=preparation_summary or {},
+                team_names=team_names or expedition_ctx.team,
+            )
+            if landmark_layer is not None:
+                layers.append(landmark_layer)
 
         return layers
 
@@ -774,6 +819,89 @@ class MultiPressGenerator:
                 )
 
         return layers
+
+    def _generate_landmark_layer(
+        self,
+        expedition_ctx: ExpeditionContext,
+        prep_depth: Optional[str],
+        preparation_summary: Dict[str, Any],
+        team_names: List[str],
+    ) -> Optional[PressLayer]:
+        entry = self._landmark_entry(expedition_ctx.expedition_type, prep_depth)
+        if not entry:
+            return None
+        briefs = entry.get("briefs")
+        if not isinstance(briefs, list) or not briefs:
+            return None
+
+        template = random.choice(briefs)
+        headline_template = template.get("headline")
+        body_template = template.get("body")
+        if not isinstance(headline_template, str) or not isinstance(body_template, str):
+            return None
+
+        depth_value = (prep_depth or "standard").replace("_", " ")
+        strengths_text = preparation_summary.get("strengths_text", [])
+        frictions_text = preparation_summary.get("frictions_text", [])
+        context = {
+            "player": expedition_ctx.player,
+            "objective": expedition_ctx.objective,
+            "code": expedition_ctx.code,
+            "expedition_type": expedition_ctx.expedition_type,
+            "prep_depth_title": depth_value.title(),
+            "prep_depth_title_lower": depth_value.lower(),
+            "strengths_text": "; ".join(strengths_text) if strengths_text else "none logged",
+            "frictions_text": "; ".join(frictions_text) if frictions_text else "none recorded",
+            "team_summary": ", ".join(team_names) if team_names else "unlisted crew",
+        }
+
+        try:
+            headline = headline_template.format(**context)
+            body = body_template.format(**context)
+        except KeyError:
+            return None
+
+        metadata = {
+            "expedition_code": expedition_ctx.code,
+            "expedition_type": expedition_ctx.expedition_type,
+            "prep_depth": prep_depth,
+            "strengths": preparation_summary.get("strengths", []),
+            "frictions": preparation_summary.get("frictions", []),
+            "team": team_names,
+        }
+
+        return PressLayer(
+            delay_minutes=30,
+            type="landmark_preparation",
+            generator=landmark_preparation_brief,
+            context={
+                "headline": headline,
+                "body": body,
+                "metadata": metadata,
+            },
+            tone_seed=self._tone_seed("expedition_followup"),
+        )
+
+    def _landmark_entry(
+        self,
+        expedition_type: str,
+        prep_depth: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        preparations = _load_landmark_preparations()
+        entry = preparations.get(expedition_type) or preparations.get("default")
+        if not entry:
+            return None
+        if prep_depth and prep_depth in entry:
+            candidate = entry[prep_depth]
+        else:
+            candidate = entry.get("standard")
+        if not candidate:
+            # Fallback to any available depth entry
+            for value in entry.values():
+                if isinstance(value, dict):
+                    candidate = value
+                    break
+        return candidate if isinstance(candidate, dict) else None
 
     def generate_defection_layers(
         self,

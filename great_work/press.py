@@ -1,7 +1,7 @@
 """Press release generation templates."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 from .models import ExpeditionResult, PressRelease
@@ -67,6 +67,9 @@ class ExpeditionContext:
     objective: str
     team: List[str]
     funding: List[str]
+    prep_depth: Optional[str] = None
+    preparation_strengths: List[str] = field(default_factory=list)
+    preparation_frictions: List[str] = field(default_factory=list)
 
 
 async def research_manifesto_async(
@@ -110,6 +113,13 @@ def research_manifesto(ctx: ExpeditionContext) -> PressRelease:
         f"{ctx.player} announces Expedition {ctx.code}. Objective: {ctx.objective}. "
         f"Team: {team}. Funding: {funding}."
     )
+    if ctx.prep_depth:
+        depth_text = ctx.prep_depth.replace("_", " ").title()
+        body += f" Preparation depth: {depth_text}."
+    if ctx.preparation_strengths:
+        body += " Prep highlights: " + "; ".join(ctx.preparation_strengths) + "."
+    if ctx.preparation_frictions:
+        body += " Known risks: " + "; ".join(ctx.preparation_frictions) + "."
     return PressRelease(type="research_manifesto", headline=headline, body=body)
 
 

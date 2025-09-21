@@ -152,6 +152,9 @@ class TestSidewaysEffectGeneration:
             # Landmark should have multiple major effects
             assert len(result.sideways_effects) >= 2
 
+            assert result.sideways_discovery is not None
+            assert "landmark" in result.sideways_discovery.lower()
+
             # Check for major faction shift
             faction_effects = [e for e in result.sideways_effects
                              if e.effect_type == SidewaysEffectType.FACTION_SHIFT]

@@ -68,6 +68,7 @@ def build_context(report: dict) -> dict:
     scoring_top = symposium_scoring.get("top", [])
     symposium_debts = symposium.get("debts", [])
     symposium_reprisal = symposium.get("reprisals", [])
+    symposium_participation = symposium.get("participation", {})
     product_kpis = report.get("product_kpis", {})
     engagement = product_kpis.get("engagement", {})
     manifestos = product_kpis.get("manifestos", {})
@@ -76,6 +77,8 @@ def build_context(report: dict) -> dict:
     shares = product_kpis.get("press_shares", {})
     product_history = report.get("product_kpi_history", {})
     history_summary = product_history.get("summary", {})
+    engagement_cohorts = report.get("engagement_cohorts", {})
+    kpi_targets = report.get("kpi_targets", {})
     context = {
         "report": report,
         "command_stats_sorted": command_stats_sorted,
@@ -89,6 +92,7 @@ def build_context(report: dict) -> dict:
         "symposium_scoring_top": scoring_top,
         "symposium_debts": symposium_debts,
         "symposium_reprisal": symposium_reprisal,
+        "symposium_participation": symposium_participation,
         "order_types": order_types,
         "product_engagement": engagement,
         "product_manifestos": manifestos,
@@ -98,6 +102,8 @@ def build_context(report: dict) -> dict:
         "product_history": product_history.get("daily", []),
         "product_history_window": product_history.get("window_days", 0),
         "product_history_summary": history_summary,
+        "engagement_cohorts": engagement_cohorts,
+        "kpi_targets": kpi_targets,
     }
     return context
 

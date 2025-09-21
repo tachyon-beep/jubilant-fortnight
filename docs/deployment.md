@@ -2,6 +2,10 @@
 
 This guide outlines the configuration required to run The Great Work in production, including Discord channel routing, telemetry alerts, archive hosting, and optional LLM setup.
 
+Terminology:
+- Orders dispatcher — shared delayed-action queue backed by the `orders` table.
+- Gazette scheduler — APScheduler jobs that run digests and weekly symposia.
+
 ## 1. Environment Variables
 
 Create a `.env` (or use your secrets manager) with the following keys:
@@ -15,6 +19,8 @@ GREAT_WORK_CHANNEL_GAZETTE=channel_id_for_digest_posts
 GREAT_WORK_CHANNEL_TABLE_TALK=channel_id_for_table_talk
 GREAT_WORK_CHANNEL_ADMIN=channel_id_for_admin_notifications
 GREAT_WORK_CHANNEL_UPCOMING=channel_id_for_optional_upcoming_highlights
+
+- Informational slash commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) mirror their output to the first available channel in this list: `GREAT_WORK_CHANNEL_TABLE_TALK`, `GREAT_WORK_CHANNEL_GAZETTE`, `GREAT_WORK_CHANNEL_UPCOMING`, `GREAT_WORK_CHANNEL_ORDERS`. Configure at least one of these so transparency requirements are met.
 
 # Telemetry & Alerts (tune per deployment)
 GREAT_WORK_ALERT_MAX_DIGEST_MS=5000          # alert if digest exceeds 5s
@@ -62,20 +68,20 @@ GREAT_WORK_ARCHIVE_PAGES_ENABLED=true               # Toggle GitHub Pages mirror
 GREAT_WORK_ARCHIVE_MAX_STORAGE_MB=512               # Alert threshold for local snapshots
 ```
 
-Adjust the alert numbers to match your cadence; for example, if you expect long digests, raise `GREAT_WORK_ALERT_MAX_DIGEST_MS`. When the queue builds up, the scheduler records depth measurements and admin notifications help the operator intervene.
+Adjust the alert numbers to match your cadence; for example, if you expect long digests, raise `GREAT_WORK_ALERT_MAX_DIGEST_MS`. When the queue builds up, the orders dispatcher metrics and admin notifications help the operator intervene.
 
 ## 2. Running with Docker Compose
 
 The repository ships with a `docker-compose.yml` that includes:
 
-- `bot`: the Discord bot service
+- `qdrant`: vector DB for future embedding features (optional)
 - `archive_server`: nginx serving `web_archive_public/`
-- `telemetry-dashboard` (optional): FastAPI dashboard for telemetry visuals
+- `telemetry_dashboard` (optional): FastAPI dashboard for telemetry visuals
 
 Start everything:
 
 ```bash
-docker compose up -d bot archive_server telemetry-dashboard
+docker compose up -d archive_server telemetry_dashboard
 ```
 
 Mount the `web_archive_public/` volume so the scheduler can sync exports (default path works out of the box). The nginx container listens on port 8080 by default; expose it or reverse proxy it as needed and open firewall access, e.g. `sudo ufw allow 8081/tcp` if you remap ports.
@@ -84,9 +90,9 @@ Mount the `web_archive_public/` volume so the scheduler can sync exports (defaul
 
 The optional `telemetry-dashboard` service reads `telemetry.db` and exposes charts for command usage, layered press cadence, queue depth, digest health, and KPI trend lines (active players, manifestos, archive lookups). It bundles Chart.js via CDN, so allow outbound HTTPS for that asset or vendor the bundle if you need an air-gapped deployment.
 
-- Default port: `8082`
+- Default port: `8081`
 - Environment requirements: same `.env` file (or a subset with `TELEMETRY_DB_PATH`)
-- Access locally at `http://localhost:8082`
+- Access locally at `http://localhost:8081`
 
 If you forgo the dashboard, `/telemetry_report` in Discord prints queue depth, digest stats, and alert thresholds.
 
@@ -121,7 +127,7 @@ The `/telemetry_report` command now opens with a **Health Summary**, mapping key
 - **Press shares** – Monitor how often players broadcast Gazette copy. When shares dip below the floor, spotlight
   notable releases manually or share automated highlights to rekindle engagement.
 
-### Dispatcher Moderation
+### Orders Dispatcher Moderation
 
 - List pending work with `/gw_admin list_orders` (filter by order type and status). Results show the order
   id, actor, subject, and payload preview.

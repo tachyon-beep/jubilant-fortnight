@@ -1,6 +1,6 @@
 # Implementation Plan - Full Design Build
 
-Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
+Last Updated: 2025-09-21 (Guardian moderation, seasonal telemetry)
 
 ## Implementation Status
 
@@ -8,7 +8,7 @@ Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 - LLM-enhanced multi-layer press now powers expeditions, defection negotiations, symposium calls, mentorship beats, recruitment briefs, table-talk digests, and admin interventions while maintaining template fallbacks.
 - Mentorship lifecycles and admin pause/resume flows schedule layered follow-ups, deliver dual-paced fast/long drops, surface “upcoming highlights” to opt-in channels, and publish digest highlight blurbs drawn from the scheduled press queue alongside admin notifications.
 - Tone packs and YAML libraries rotate recruitment/table-talk headlines, blurbs, and callouts; the new sidecast arcs, defection epilogues, sideways vignette catalogue, and narrative writing guide feed dispatcher-scheduled press and orders tagged for operations follow-up while keeping persona alignment in reach.【F:great_work/data/sidecast_arcs.yaml†L1-L90】【F:great_work/data/defection_epilogues.yaml†L1-L48】【F:great_work/data/sideways_vignettes.yaml†L1-L180】【F:docs/WRITING_GUIDE.md†L1-L120】
-- Telemetry dashboards (Discord report + bundled FastAPI dashboard) and containerised archive hosting are in place; the `/telemetry_report` health summary now evaluates digest runtime, release floors, queue depth, dispatcher backlog, LLM latency/failure, and seasonal commitment debt, and digest exports mirror into GitHub Pages alongside local hosting.
+- Telemetry dashboards (Discord report + bundled FastAPI dashboard) and containerised archive hosting are in place; the `/telemetry_report` health summary now evaluates digest runtime, release floors, queue depth, dispatcher backlog, LLM latency/failure, and symposium/seasonal/contract debt, and digest exports mirror into GitHub Pages alongside local hosting.
 - Dispatcher backlog alerts now schedule symposium reprimand follow-ups, post admin notifications, and can be managed through `/gw_admin list_orders` and `/gw_admin cancel_order` for live-ops intervention.
 - Recruitment odds are now exposed via `/recruit_odds`, listing faction modifiers, cooldown penalties, and influence bonuses so players can compare bids before committing.
 - Contract upkeep now drains influence every digest, automatically recording contract debt and reprisals when players fall behind; `/status` surfaces per-faction upkeep and outstanding balances.
@@ -42,7 +42,7 @@ Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 
 ### Phase 3 – Polish & Narrative ⚠️ In Progress
 - LLM persona voice integration ⚠️ core expedition/defection/symposium/admin flows enhanced and theory/table-talk surfaces now route through the LLM enhancer; Guardian moderation is live, with next steps focused on calibration tooling and operator guidance.
-- Multi-layer press rollout ⚠️ layered coverage now spans expeditions/defections/symposium/mentorship/recruitment/table-talk/sidecasts with digest highlight blurbs and opt-in upcoming channels; sideways vignettes dispatch layered follow-ups, with remaining work focused on bespoke landmark prep copy and tuning cadence presets.
+- Multi-layer press rollout ⚠️ layered coverage now spans expeditions/defections/symposium/mentorship/recruitment/table-talk/sidecasts with digest highlight blurbs and opt-in upcoming channels; sideways vignettes dispatch layered follow-ups, bespoke landmark prep briefs now accompany landmark outcomes, and remaining work focuses on cadence tuning.
 - Telemetry coverage & dashboards ⚠️ all slash commands emit telemetry alongside layered-press/digest metrics, queue depth, and dispatcher backlog snapshots; alert thresholds and the operator runbook now ship via the `/telemetry_report` health summary, with remaining work focused on retention windows, external escalation guidance, and richer dispatcher analytics.
 - Archive publishing automation ⚠️ scheduler exports the archive, syncs it to the container-served static host, prunes snapshots, and posts ZIP snapshots to the admin channel; document external hosting extensions and hardening guidance.
 - Documentation pass for deployment/config ⚠️ pending.
@@ -106,7 +106,7 @@ Last Updated: 2025-10-01 (Guardian moderation, seasonal telemetry)
 
 ## 10. Multi-layer Press Integration – **Partial / Template backlog**
    - Expedition, defection, symposium, mentorship, conference, recruitment, table-talk, sidecast, and admin flows invoke `MultiPressGenerator`, queuing delayed gossip, faction statements, and analysis pieces that publish over time via the scheduled press queue, with digest highlights summarising upcoming drops.【F:great_work/service.py†L300-L2470】【F:great_work/multi_press.py†L320-L1120】【F:great_work/state.py†L344-L720】
-   - **Remaining work:** extend layered mentorship beats with stateful consequences (scars, loyalty swings), add bespoke landmark preparation copy, and document cadence presets for the expanded vignette/tag mechanics.
+   - **Remaining work:** extend layered mentorship beats with stateful consequences (scars, loyalty swings) and continue tuning cadence presets for the expanded vignette/tag mechanics.
 
 ## 11. Telemetry and Operational Reporting – **Partial / Runbook backlog**
    - Telemetry collector persists metrics in `telemetry.db`; `/telemetry_report` now includes command usage, LLM latency/failure stats, layered-press cadence summaries, digest runtimes, queue depth, channel-level usage, investment/endowment analytics, and seasonal commitment debt snapshots.【F:great_work/telemetry.py†L72-L1504】【F:great_work/telemetry_decorator.py†L12-L80】【F:great_work/discord_bot.py†L720-L1637】
@@ -129,16 +129,20 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 3. **Extend Coverage to Symposium & Admin Flows** – ⚠️ Partial
    - Symposium announcements, votes, and resolutions ship through `_enhance_press_release`; admin tools, mentorship lifecycle events, recruitment outcomes, table-talk posts, and sidecasts emit LLM-enhanced artefacts with layered follow-ups, and digest highlight summaries cover scheduled drops.
    - `/gw_admin list_orders` and `/gw_admin cancel_order` now expose dispatcher backlogs from Discord, backed by telemetry snapshots.
-   - **Next:** convert remaining informational commands from ephemeral replies to public artefacts and add mentorship/sidecast state updates that persist into scholar memories and faction sentiments.
+   - Informational commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) now publish to the configured channels while preserving ephemeral replies; player status surfaces faction sentiment derived from persisted mentorship/sidecast memories so players and ops can audit relationship deltas.
+   - Narrative validation CLI (`python -m great_work.tools.validate_narrative --all`) enforces structure, and the preview CLI (`python -m great_work.tools.preview_narrative`) renders sample output across tone packs, press modules, sidecasts, epilogues, and vignettes; Makefile & guides document both workflows.
+   - **Next:** optional—extend previews with richer persona permutations or per-surface Markdown exports once contributors request them.
 
 4. **Pause/Resume Infrastructure** – ✅ Complete
-   - `GameService` tracks LLM health with exponential pause windows, admin notification queues, and `/gw_admin resume_game` unpauses once healthy.
+   - `GameService` tracks LLM health with exponential pause windows; repeated failures auto‑pause the game and `/gw_admin resume_game` unpauses once healthy.
    - Scheduler skips digests when paused and forwards status messages to the admin channel.
-   - Manual resume and notification flows verified via tests and Discord command wiring.
+   - `/gw_admin pause_game` now mirrors the resume flow, archiving an admin press release, emitting layered notifications, and tracking telemetry so operators can proactively halt play before resuming. Tests cover manual pause + resume transitions.【F:great_work/service.py†L5197-L5263】【F:great_work/discord_bot.py†L2223-L2255】【F:tests/test_service_edge_cases.py†L120-L147】
 
 5. **Telemetry Expansion** – ⚠️ Partial
    - Decorator shares the bot's `GameService`, emitting command usage with player context, channel metrics, LLM latency/failure telemetry, layered-press cadence, digest health, queue depth, and the new symposium/economy guardrails.
-   - `/telemetry_report` highlights health checks, symposium scoring/debt, long-tail economy summaries, seasonal commitment debt warnings, and the new product KPIs (active players, manifesto adoption, archive reach); alerts now fan out to all configured webhooks/email endpoints with cooldowns, the dashboard adds dispatcher filters plus CSV export, economy summaries surface outstanding commitments, and both surfaces chart daily KPI history for the last month with percentile summaries and sparkline charts via Chart.js. Remaining work: persist canonical KPI targets once product locks them in and expand the dashboard with cohort comparisons.
+   - `/telemetry_report` highlights health checks, symposium scoring/debt, long-tail economy summaries, seasonal commitment debt warnings, and the new product KPIs (active players, manifesto adoption, archive reach); alerts fan out to all configured webhooks/email endpoints with cooldowns, the dashboard adds dispatcher filters plus CSV export, economy summaries surface outstanding commitments, and both surfaces chart daily KPI history for the last month with percentile summaries and sparkline charts via Chart.js.
+   - Canonical KPI targets are now stored in `telemetry.db`, override alert thresholds automatically, and the dashboard presents engagement cohorts (new vs returning players) plus symposium-participation rollups so ops can compare adoption against targets while monitoring live command mixes.
+   - **Next:** add automated exports for cohort summaries and long-term KPI snapshots to support post-playtest analysis.
 
 6. **Archive Automation & Docs** – ✅ Complete
    - Digest scheduler now exports the web archive automatically, syncs the output into the containerised static host, mirrors the build into a configured GitHub Pages repository (dropping `.nojekyll`), posts a timestamped ZIP to the admin channel, prunes old snapshots, and alerts when snapshot storage crosses configurable thresholds. Operator guides describe the Pages workflow and storage runbook.
@@ -149,7 +153,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 
 ## Current Test Coverage
 
-- Repository defines **190** test functions across the `tests/` suite; targeted Phase 3 scenarios pass locally (`pytest tests/test_llm_client.py tests/test_service_edge_cases.py tests/test_symposium.py tests/test_game_service.py tests/test_multi_press.py tests/test_scheduler.py -q`).
+- Repository defines **227** test functions across the `tests/` suite; targeted Phase 3 scenarios pass locally (`pytest tests/test_llm_client.py tests/test_service_edge_cases.py tests/test_symposium.py tests/test_game_service.py tests/test_multi_press.py tests/test_scheduler.py -q`).
 - Tests cover expeditions, mentorship, conferences, offers, sideways effects, telemetry, multi-press, archive scheduling, and state edge cases.
 - **Action:** wire the remaining command integration tests into CI and expand coverage for admin pause/resume plus containerised dashboard smoke tests before release.
 
@@ -165,7 +169,7 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 - Command usage telemetry: ⚠️ partial – instrumentation spans all commands with player/channel context, layered-press counts, and digest metrics; next calibrate the KPI thresholds and ensure dashboards/alert feeds reach the on-call rotation.
 - Press accessibility: ✅ static archive syncs to the container host, mirrors into GitHub Pages, prunes history, and raises alerts when storage pressure mounts.
 - Performance metrics: ✅ scheduler timing and command durations recorded where decorator is applied.
-- Player engagement metrics (symposium participation, archive hits): ⛔ not instrumented.
+- Player engagement metrics (symposium participation, archive lookups, nickname adoption, press shares): ✅ instrumented and visible in `/telemetry_report` and the dashboard.
 
 ## Risks & Mitigations
 
@@ -176,6 +180,6 @@ The remaining Phase 3 work is broad. We will execute it in deliberate slices so 
 ## Upcoming Focus
 
 1. Use the new guardrails to collect telemetry on seasonal commitments, faction projects, investments, and archive endowments; feed real-world observations back into the runbook and dashboard tuning ahead of 1.0 playtests.
-2. Design the next tier of influence sinks (faction investments, archival endowments) and tie symposium debt escalations into those systems.
+2. Tune the new long‑tail sinks (faction investments, archive endowments): balance costs/rewards, wire telemetry guardrails, and tie symposium debt escalation into these systems.
 3. Finalise telemetry/ops guardrails: tune the KPI thresholds, integrate alert webhooks with the on-call tooling, and extend dispatcher dashboards with richer historical comparisons (sparklines, percentile bands).
 4. Tune seasonal commitment and faction project defaults using the new telemetry + calibration helpers; document recommended ranges ahead of playtests.

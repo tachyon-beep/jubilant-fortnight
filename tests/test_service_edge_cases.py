@@ -13,6 +13,8 @@ from great_work.models import (
     ExpeditionPreparation,
     ExpeditionResult,
     PressRelease,
+    Scholar,
+    ScholarStats,
 )
 from great_work.service import ExpeditionOrder
 from great_work.service import GameService
@@ -49,6 +51,8 @@ def test_player_status_returns_complete_info(tmp_path):
     assert status["influence_cap"] > 0
     assert "relationships" in status
     assert isinstance(status["relationships"], list)
+    assert "faction_sentiments" in status
+    assert isinstance(status["faction_sentiments"], dict)
 
 
 def test_player_status_nonexistent_returns_none(tmp_path):
@@ -58,6 +62,52 @@ def test_player_status_nonexistent_returns_none(tmp_path):
 
     status = service.player_status("nonexistent")
     assert status is None
+
+
+def test_player_status_faction_sentiment_accumulates_memories(tmp_path):
+    """player_status reports faction sentiment from scholar memories."""
+
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+
+    service.ensure_player("alex", "Alex")
+    player = service.state.get_player("alex")
+    assert player is not None
+    player.influence["academia"] = 5
+    service.state.upsert_player(player)
+
+    scholar = Scholar(
+        id="s.alex",
+        name="Scholar Alex",
+        seed=123,
+        archetype="Visionary",
+        disciplines=["Philosophy"],
+        methods=["debate"],
+        drives=["Insight"],
+        virtues=["curiosity"],
+        vices=["hubris"],
+        stats=ScholarStats(
+            talent=6,
+            reliability=5,
+            integrity=4,
+            theatrics=7,
+            loyalty=6,
+            risk=3,
+        ),
+        politics={},
+        catchphrase="Let us chart the unknown.",
+        taboos=[],
+    )
+    scholar.contract["faction"] = "academia"
+    scholar.memory.adjust_feeling("alex", 2.5)
+    service.state.save_scholar(scholar)
+
+    status = service.player_status("alex")
+    sentiments = status["faction_sentiments"]
+    assert "academia" in sentiments
+    academia_sentiment = sentiments["academia"]
+    assert academia_sentiment["count"] == 1
+    assert academia_sentiment["average"] == pytest.approx(2.5)
 
 
 def test_player_status_relationship_summary(tmp_path):
@@ -482,6 +532,41 @@ def test_generated_scholar_counter_increments(tmp_path):
     # The counter should be tracked
     assert isinstance(initial_count, int)
     assert initial_count >= 0
+
+
+def test_manual_pause_and_resume(tmp_path):
+    """Manual pause command should halt gameplay until resumed."""
+    db_path = tmp_path / "state.sqlite"
+    service = GameService(db_path=db_path)
+
+    service.ensure_player("alex", "Alex")
+    prep = ExpeditionPreparation()
+
+    pause_press = service.pause_game(reason="maintenance window", admin_id="Admin")
+
+    assert service.is_paused() is True
+    assert pause_press.metadata["admin"] == "Admin"
+    assert pause_press.metadata["reason"] == "maintenance window"
+
+    notifications = service.drain_admin_notifications()
+    assert any("paused" in note.lower() for note in notifications)
+
+    with pytest.raises(GameService.GamePausedError):
+        service.queue_expedition(
+            code="AR-PAUSE",
+            player_id="alex",
+            expedition_type="field",
+            objective="Should be blocked",
+            team=[],
+            funding=[],
+            preparation=prep,
+            prep_depth="standard",
+            confidence=ConfidenceLevel.SUSPECT,
+        )
+
+    resume_press = service.resume_game("Admin")
+    assert service.is_paused() is False
+    assert resume_press.metadata["was_paused"] is True
 
 
 def test_llm_failure_triggers_pause(tmp_path, monkeypatch):

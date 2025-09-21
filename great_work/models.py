@@ -282,6 +282,7 @@ class OfferRecord:
     offer_type: str = "initial"  # initial, counter, final
     influence_offered: Dict[str, int] = field(default_factory=dict)
     terms: Dict[str, object] = field(default_factory=dict)  # Contract terms
+    relationship_snapshot: Dict[str, object] = field(default_factory=dict)
     status: str = "pending"  # pending, accepted, rejected, countered
     parent_offer_id: Optional[int] = None  # For tracking negotiation chains
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

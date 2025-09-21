@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .alerting import get_alert_router
 
@@ -101,7 +101,8 @@ class TelemetryCollector:
     def _init_database(self):
         """Initialize telemetry database schema."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp REAL NOT NULL,
@@ -112,16 +113,80 @@ class TelemetryCollector:
                     metadata TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            conn.execute("""
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_metrics_timestamp
                 ON metrics(timestamp DESC)
-            """)
-            conn.execute("""
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_metrics_type_name
                 ON metrics(metric_type, name)
-            """)
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS kpi_targets (
+                    metric TEXT PRIMARY KEY,
+                    target REAL NOT NULL,
+                    warning REAL,
+                    notes TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
             conn.commit()
+
+    def set_kpi_target(
+        self,
+        metric: str,
+        target: float,
+        *,
+        warning: Optional[float] = None,
+        notes: Optional[str] = None,
+    ) -> None:
+        """Persist canonical KPI targets for dashboards and health checks."""
+
+        metric_key = metric.strip().lower()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO kpi_targets (metric, target, warning, notes, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(metric)
+                DO UPDATE SET
+                    target = excluded.target,
+                    warning = excluded.warning,
+                    notes = excluded.notes,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (metric_key, float(target), warning, notes),
+            )
+            conn.commit()
+
+    def get_kpi_targets(self) -> Dict[str, Dict[str, Any]]:
+        """Return stored KPI targets keyed by metric identifier."""
+
+        results: Dict[str, Dict[str, Any]] = {}
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                SELECT metric, target, warning, notes, updated_at
+                FROM kpi_targets
+                ORDER BY metric
+                """
+            )
+            for metric, target, warning, notes, updated_at in cursor.fetchall():
+                results[metric] = {
+                    "target": float(target),
+                    "warning": float(warning) if warning is not None else None,
+                    "notes": notes,
+                    "updated_at": updated_at,
+                }
+        return results
 
     def _should_emit_alert(self, event: str) -> bool:
         """Return True if the alert should be emitted based on cooldown history."""
@@ -1290,6 +1355,91 @@ class TelemetryCollector:
             },
         }
 
+    def get_engagement_cohorts(self, days: int = 7) -> Dict[str, Any]:
+        """Compare new vs returning player engagement for the recent window."""
+
+        if days <= 0:
+            days = 7
+        window_seconds = days * 86400
+        window_start = time.time() - window_seconds
+
+        with sqlite3.connect(self.db_path) as conn:
+            window_rows = conn.execute(
+                """
+                SELECT
+                    json_extract(tags, '$.player_id') AS player_id,
+                    COUNT(*) AS command_count,
+                    MAX(timestamp) AS last_command_ts
+                FROM metrics
+                WHERE metric_type = ? AND timestamp >= ?
+                GROUP BY player_id
+                HAVING player_id IS NOT NULL
+                """,
+                (MetricType.COMMAND_USAGE.value, window_start),
+            ).fetchall()
+
+            first_rows = conn.execute(
+                """
+                SELECT
+                    json_extract(tags, '$.player_id') AS player_id,
+                    MIN(timestamp) AS first_seen_ts
+                FROM metrics
+                WHERE metric_type = ?
+                GROUP BY player_id
+                HAVING player_id IS NOT NULL
+                """,
+                (MetricType.COMMAND_USAGE.value,),
+            ).fetchall()
+
+        first_seen: Dict[str, float] = {
+            str(row[0]): float(row[1]) for row in first_rows if row[0] is not None and row[1] is not None
+        }
+
+        cohort_totals: Dict[str, Dict[str, Any]] = {
+            "new": {"players": 0, "command_count": 0.0, "details": []},
+            "returning": {"players": 0, "command_count": 0.0, "details": []},
+        }
+
+        for player_id_raw, command_count, last_ts in window_rows:
+            if player_id_raw is None:
+                continue
+            player_id = str(player_id_raw)
+            first_ts = first_seen.get(player_id)
+            cohort_key = "returning"
+            if first_ts is not None and first_ts >= window_start:
+                cohort_key = "new"
+
+            entry = cohort_totals[cohort_key]
+            entry["players"] += 1
+            entry["command_count"] += float(command_count or 0.0)
+            entry["details"].append(
+                {
+                    "player_id": player_id,
+                    "command_count": float(command_count or 0.0),
+                    "first_seen": datetime.fromtimestamp(first_ts).isoformat() if first_ts else None,
+                    "last_command_at": datetime.fromtimestamp(last_ts).isoformat() if last_ts else None,
+                }
+            )
+
+        for cohort in cohort_totals.values():
+            players = cohort["players"] or 1
+            cohort["average_commands"] = cohort["command_count"] / players
+            cohort["details"].sort(key=lambda item: item.get("command_count", 0.0), reverse=True)
+
+        active_players = sum(cohort_totals[key]["players"] for key in cohort_totals)
+        for key, cohort in cohort_totals.items():
+            if active_players > 0:
+                cohort["share"] = cohort["players"] / active_players
+            else:
+                cohort["share"] = 0.0
+
+        return {
+            "window_days": days,
+            "window_start": datetime.fromtimestamp(window_start).isoformat(),
+            "cohorts": cohort_totals,
+            "active_players": active_players,
+        }
+
     def get_product_kpi_history(self, days: int = 30) -> Dict[str, Any]:
         """Return daily KPI history for the given window (UTC)."""
 
@@ -1485,6 +1635,8 @@ class TelemetryCollector:
             "economy": self.get_economy_metrics(24),
             "product_kpis": self.get_product_kpis(),
             "product_kpi_history": self.get_product_kpi_history_summary(),
+            "engagement_cohorts": self.get_engagement_cohorts(),
+            "kpi_targets": self.get_kpi_targets(),
         }
 
         # Add overall statistics
@@ -1536,13 +1688,38 @@ class TelemetryCollector:
             "press_shares": _get_env_float("GREAT_WORK_ALERT_MIN_PRESS_SHARES", 1.0),
         }
 
+        kpi_targets = data.get("kpi_targets") or self.get_kpi_targets()
+
+        target_overrides = {
+            "active_players": "active_players",
+            "manifesto_rate": "manifesto_adoption",
+            "archive_lookups": "archive_usage",
+            "nickname_rate": "nickname_rate",
+            "press_shares": "press_shares",
+        }
+
+        for threshold_key, metric_name in target_overrides.items():
+            target_info = kpi_targets.get(metric_name)
+            if not target_info:
+                continue
+            override_value = target_info.get("target")
+            if override_value is None:
+                override_value = target_info.get("warning")
+            if override_value is None:
+                continue
+            try:
+                thresholds[threshold_key] = float(override_value)
+            except (TypeError, ValueError):
+                continue
+
         checks: List[Dict[str, Any]] = []
         counts = {"ok": 0, "warning": 0, "alert": 0}
 
         def _register(metric: str, label: str, status: Optional[str], detail: str, *,
                       observed: Optional[float] = None,
                       threshold: Optional[float] = None,
-                      window: str = "24h") -> None:
+                      window: str = "24h",
+                      target: Optional[float] = None) -> None:
             if status is None:
                 return
             counts[status] += 1
@@ -1555,6 +1732,7 @@ class TelemetryCollector:
                     "observed": observed,
                     "threshold": threshold,
                     "window": window,
+                    "target": target,
                 }
             )
             if status == "alert":
@@ -1769,6 +1947,7 @@ class TelemetryCollector:
                 thresholds["active_players"],
                 warning_scale=1.15,
             )
+            active_target = (kpi_targets.get("active_players") or {}).get("target")
             _register(
                 "active_players",
                 f"Active players ({window_hours}h)",
@@ -1777,6 +1956,7 @@ class TelemetryCollector:
                 observed=active_players_24h,
                 threshold=thresholds["active_players"],
                 window=f"{window_hours}h",
+                target=active_target,
             )
 
             manifesto = product_kpis.get("manifestos", {})
@@ -1788,6 +1968,7 @@ class TelemetryCollector:
                     thresholds["manifesto_rate"],
                     warning_scale=1.1,
                 )
+                manifesto_target = (kpi_targets.get("manifesto_adoption") or {}).get("target")
                 _register(
                     "manifesto_adoption",
                     "Manifesto adoption (7d)",
@@ -1796,6 +1977,7 @@ class TelemetryCollector:
                     observed=adoption_rate,
                     threshold=thresholds["manifesto_rate"],
                     window=f"{int(manifesto.get('window_days', 7))}d",
+                    target=manifesto_target,
                 )
 
             archive = product_kpis.get("archive", {})
@@ -1809,6 +1991,7 @@ class TelemetryCollector:
             engaged_share = archive.get("engaged_share_7d")
             if engaged_share is not None:
                 detail += f" ({float(engaged_share or 0.0):.0%} of active players)"
+            archive_target = (kpi_targets.get("archive_usage") or {}).get("target")
             _register(
                 "archive_usage",
                 "Archive lookups (7d)",
@@ -1817,6 +2000,7 @@ class TelemetryCollector:
                 observed=lookup_events,
                 threshold=thresholds["archive_lookups"],
                 window=f"{int(archive.get('window_days', 7))}d",
+                target=archive_target,
             )
 
         commitments = economy_summary.get("commitments", {})
@@ -1838,6 +2022,7 @@ class TelemetryCollector:
             thresholds["nickname_rate"],
             warning_scale=1.1,
         )
+        nickname_target = (kpi_targets.get("nickname_rate") or {}).get("target")
         _register(
             "nickname_rate",
             "Nickname adoption (7d)",
@@ -1846,6 +2031,7 @@ class TelemetryCollector:
             observed=nickname_rate,
             threshold=thresholds["nickname_rate"],
             window=f"{int(nicknames.get('window_days', 7))}d",
+            target=nickname_target,
         )
 
         press_shares = product_kpis.get("press_shares", {})
@@ -1855,6 +2041,7 @@ class TelemetryCollector:
             thresholds["press_shares"],
             warning_scale=1.25,
         )
+        press_share_target = (kpi_targets.get("press_shares") or {}).get("target")
         _register(
             "press_shares",
             "Press shares (7d)",
@@ -1863,6 +2050,7 @@ class TelemetryCollector:
             observed=share_events,
             threshold=thresholds["press_shares"],
             window=f"{int(press_shares.get('window_days', 7))}d",
+            target=press_share_target,
         )
 
         return {
@@ -2093,6 +2281,7 @@ class TelemetryCollector:
         scoring_count = 0
         debt_by_player: Dict[str, Dict[str, Any]] = {}
         reprisal_counts: Dict[str, Dict[str, Any]] = {}
+        participation_raw: List[Tuple[str, str, float, float]] = []
 
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
@@ -2196,6 +2385,31 @@ class TelemetryCollector:
                     summary["factions"].add(faction)
                 summary["last_reprisal_at"] = datetime.fromtimestamp(ts).isoformat()
 
+            participation_raw = conn.execute(
+                """
+                SELECT
+                    json_extract(tags, '$.player_id') AS player_id,
+                    name,
+                    COUNT(*) AS usage_count,
+                    MAX(timestamp) AS last_ts
+                FROM metrics
+                WHERE metric_type = ?
+                  AND name IN (?, ?, ?, ?, ?)
+                  AND timestamp >= ?
+                GROUP BY player_id, name
+                HAVING player_id IS NOT NULL
+                """,
+                (
+                    MetricType.COMMAND_USAGE.value,
+                    "symposium_vote",
+                    "symposium_status",
+                    "symposium_backlog",
+                    "symposium_proposals",
+                    "symposium_propose",
+                    start_time,
+                ),
+            ).fetchall()
+
         reprisal_summary: List[Dict[str, Any]] = []
         for player_id, data in reprisal_counts.items():
             reprisal_summary.append(
@@ -2220,6 +2434,8 @@ class TelemetryCollector:
         ]
         debt_list.sort(key=lambda item: item["debt"], reverse=True)
 
+        participation_summary = self._summarise_symposium_participation(participation_raw, hours)
+
         return {
             "scoring": {
                 "average": average_score,
@@ -2228,6 +2444,7 @@ class TelemetryCollector:
             },
             "debts": debt_list,
             "reprisals": reprisal_summary,
+            "participation": participation_summary,
         }
 
     def cleanup_old_data(self, days_to_keep: int = 30):
@@ -2244,6 +2461,63 @@ class TelemetryCollector:
 
         logger.info(f"Cleaned up {deleted} old metric events")
         return deleted
+
+    def _summarise_symposium_participation(
+        self,
+        rows: Iterable[Tuple[str, str, float, float]],
+        hours: int,
+    ) -> Dict[str, Any]:
+        participants: Dict[str, Dict[str, Any]] = {}
+        totals_by_command: Dict[str, float] = defaultdict(float)
+        total_commands = 0.0
+
+        for player_id_raw, command_name, usage_count, last_ts in rows:
+            if player_id_raw is None:
+                continue
+            player_id = str(player_id_raw)
+            count = float(usage_count or 0.0)
+            total_commands += count
+            totals_by_command[command_name] += count
+            entry = participants.setdefault(
+                player_id,
+                {
+                    "commands": 0.0,
+                    "by_command": defaultdict(float),
+                    "last_command_at": None,
+                },
+            )
+            entry["commands"] += count
+            entry["by_command"][command_name] += count
+            if last_ts is not None:
+                last_iso = datetime.fromtimestamp(last_ts).isoformat()
+                entry["last_command_at"] = last_iso
+
+        player_rows: List[Dict[str, Any]] = []
+        for player_id, payload in participants.items():
+            by_command_items = sorted(
+                payload["by_command"].items(),
+                key=lambda item: item[1],
+                reverse=True,
+            )
+            by_command = {name: value for name, value in by_command_items}
+            player_rows.append(
+                {
+                    "player_id": player_id,
+                    "command_count": payload["commands"],
+                    "by_command": by_command,
+                    "last_command_at": payload["last_command_at"],
+                }
+            )
+
+        player_rows.sort(key=lambda item: item["command_count"], reverse=True)
+
+        return {
+            "window_hours": hours,
+            "unique_players": len(participants),
+            "total_commands": total_commands,
+            "by_command": dict(sorted(totals_by_command.items(), key=lambda item: item[1], reverse=True)),
+            "players": player_rows,
+        }
 
 
 # Singleton instance

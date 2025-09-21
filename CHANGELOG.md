@@ -5,6 +5,18 @@ All notable changes to The Great Work Discord game will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Informational commands (`/status`, `/symposium_status`, `/symposium_proposals`, `/symposium_backlog`, `/wager`, `/seasonal_commitments`, `/faction_projects`, `/gazette`, `/export_log`) now publish summaries to the configured public channels while preserving ephemeral confirmations for the caller.
+- `/status` surfaces faction sentiment derived from persisted mentorship and sidecast histories so players and operators can audit relationship shifts.
+- Telemetry now persists KPI targets (which automatically override alert thresholds), reports engagement cohorts (new vs returning players), and surfaces symposium participation mixes in `/telemetry_report` and the dashboard, including updated FastAPI views/templates.
+- Added `python -m great_work.tools.validate_narrative --all` (and `make validate-narrative`) to statically lint tone packs, recruitment/table-talk/mentorship press, sidecast arcs, epilogues, and vignette catalogues before deployment.
+- Added `python -m great_work.tools.preview_narrative` (and `make preview-narrative`) to render sample outputs for narrative surfaces, aiding content review before deploy.
+- Landmark expeditions now draw copy from `great_work/data/landmark_preparations.yaml`, including dedicated follow-up briefs previewable via `python -m great_work.tools.preview_narrative landmark-prep`.
+- Defection negotiations append a loyalty snapshot summarising current feelings toward the rival and patron, with the same snapshot stored on each offer record and echoed in `/view_offers`.
+
+
 ## [1.0.0] - 2025-01-01 (Upcoming)
 
 ### Added

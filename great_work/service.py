@@ -9,7 +9,7 @@ from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import threading
 
 from .config import Settings, get_settings
@@ -1081,6 +1081,7 @@ class GameService:
                 },
             )
         )
+        prep_summary = self._summarize_preparation(preparation)
         ctx = ExpeditionContext(
             code=code,
             player=player_id,
@@ -1088,6 +1089,9 @@ class GameService:
             objective=objective,
             team=team,
             funding=funding,
+            prep_depth=prep_depth,
+            preparation_strengths=prep_summary["strengths_text"],
+            preparation_frictions=prep_summary["frictions_text"],
         )
         press = research_manifesto(ctx)
         base_body = press.body
@@ -1098,6 +1102,9 @@ class GameService:
             "expedition_code": code,
             "objective": objective,
             "expedition_type": expedition_type,
+            "prep_depth": prep_depth,
+            "prep_strengths": prep_summary["strengths_text"],
+            "prep_frictions": prep_summary["frictions_text"],
         }
         press = self._enhance_press_release(
             press,
@@ -1216,6 +1223,8 @@ class GameService:
             releases.append(release)
             now = datetime.now(timezone.utc)
             self._archive_press(release, now)
+            prep_summary = self._summarize_preparation(order.preparation)
+            team_names = self._team_member_names(order.team)
             expedition_ctx = ExpeditionContext(
                 code=order.code,
                 player=order.player_id,
@@ -1223,6 +1232,9 @@ class GameService:
                 objective=order.objective,
                 team=order.team,
                 funding=order.funding,
+                prep_depth=order.prep_depth,
+                preparation_strengths=prep_summary["strengths_text"],
+                preparation_frictions=prep_summary["frictions_text"],
             )
             depth = self._multi_press.determine_depth(
                 event_type=f"expedition_{order.expedition_type}",
@@ -1236,6 +1248,9 @@ class GameService:
                 ctx,
                 scholars,
                 depth,
+                prep_depth=order.prep_depth,
+                preparation_summary=prep_summary,
+                team_names=team_names,
             )
             extra_releases = self._apply_multi_press_layers(
                 layers,
@@ -1930,6 +1945,7 @@ class GameService:
         patron_id = scholar.contract.get("employer", "")
         if not patron_id:
             raise ValueError(f"Scholar {scholar_id} has no current employer")
+        patron_player = self.state.get_player(patron_id)
 
         # Validate rival has enough influence
         for faction, amount in influence_offer.items():
@@ -1937,6 +1953,26 @@ class GameService:
                 raise ValueError(f"Player {rival_id} has insufficient {faction} influence")
 
         # Create the offer record
+        rival_relationship = self._relationship_bonus(scholar, rival_id)
+        patron_relationship = self._relationship_bonus(scholar, patron_id)
+        rival_feeling = scholar.memory.feelings.get(rival_id, 0.0)
+        patron_feeling = scholar.memory.feelings.get(patron_id, 0.0)
+        relationship_snapshot = {
+            "captured_at": timestamp.isoformat(),
+            "rival": {
+                "player_id": rival_id,
+                "display_name": rival.display_name,
+                "feeling": rival_feeling,
+                "modifiers": rival_relationship,
+            },
+            "patron": {
+                "player_id": patron_id,
+                "display_name": patron_player.display_name if patron_player else patron_id,
+                "feeling": patron_feeling,
+                "modifiers": patron_relationship,
+            },
+        }
+
         offer = OfferRecord(
             scholar_id=scholar_id,
             faction=target_faction,
@@ -1945,6 +1981,7 @@ class GameService:
             offer_type="initial",
             influence_offered=influence_offer,
             terms=terms or {},
+            relationship_snapshot=relationship_snapshot,
             status="pending",
             created_at=timestamp,
         )
@@ -1968,7 +2005,14 @@ class GameService:
         body += f"The offer includes: {', '.join(f'{v} {k}' for k, v in influence_offer.items())} influence.\n"
         if terms:
             body += f"Additional terms: {terms}\n"
-        body += f"Current patron {patron_id} has 24 hours to counter."
+        body += f"Current patron {patron_id} has 24 hours to counter.\n"
+        body += (
+            "Loyalty snapshot — "
+            f"rival {rival.display_name}: feeling {rival_feeling:+.1f} "
+            f"(modifier {rival_relationship['total']:+.2f}); "
+            f"patron {(patron_player.display_name if patron_player else patron_id)}: "
+            f"feeling {patron_feeling:+.1f} (modifier {patron_relationship['total']:+.2f})."
+        )
 
         release = PressRelease(
             type="negotiation",
@@ -1979,6 +2023,7 @@ class GameService:
                 "rival": rival_id,
                 "patron": patron_id,
                 "scholar": scholar_id,
+                "relationship_snapshot": relationship_snapshot,
             }
         )
         self._archive_press(release, timestamp)
@@ -1999,6 +2044,7 @@ class GameService:
                     "rival": rival_id,
                     "scholar": scholar_id,
                     "influence": influence_offer,
+                    "relationship_snapshot": relationship_snapshot,
                 }
             )
         )
@@ -2040,6 +2086,32 @@ class GameService:
             if player.influence.get(faction, 0) < amount:
                 raise ValueError(f"Player {player_id} has insufficient {faction} influence")
 
+        scholar = self.state.get_scholar(original.scholar_id)
+        if not scholar:
+            raise ValueError(f"Scholar {original.scholar_id} not found")
+        press = []
+        rival_player = self.state.get_player(original.rival_id)
+
+        rival_relationship = self._relationship_bonus(scholar, original.rival_id)
+        patron_relationship = self._relationship_bonus(scholar, player_id)
+        rival_feeling = scholar.memory.feelings.get(original.rival_id, 0.0)
+        patron_feeling = scholar.memory.feelings.get(player_id, 0.0)
+        relationship_snapshot = {
+            "captured_at": timestamp.isoformat(),
+            "rival": {
+                "player_id": original.rival_id,
+                "display_name": rival_player.display_name if rival_player else original.rival_id,
+                "feeling": rival_feeling,
+                "modifiers": rival_relationship,
+            },
+            "patron": {
+                "player_id": player_id,
+                "display_name": player.display_name,
+                "feeling": patron_feeling,
+                "modifiers": patron_relationship,
+            },
+        }
+
         # Create counter-offer
         counter = OfferRecord(
             scholar_id=original.scholar_id,
@@ -2049,6 +2121,7 @@ class GameService:
             offer_type="counter",
             influence_offered=counter_influence,
             terms=counter_terms or {},
+            relationship_snapshot=relationship_snapshot,
             status="pending",
             parent_offer_id=original_offer_id,
             created_at=timestamp,
@@ -2074,14 +2147,18 @@ class GameService:
             {"counter_offer_id": counter_id},
         )
 
-        # Generate press
-        scholar = self.state.get_scholar(original.scholar_id)
-        press = []
         headline = f"Counter-Offer: {player.display_name} Fights for {scholar.name}"
         body = f"{player.display_name} has countered with: {', '.join(f'{v} {k}' for k, v in counter_influence.items())} influence.\n"
         if counter_terms:
             body += f"Additional terms: {counter_terms}\n"
-        body += "The rival has 12 hours to make a final offer."
+        body += "The rival has 12 hours to make a final offer.\n"
+        body += (
+            "Loyalty snapshot — "
+            f"rival {(rival_player.display_name if rival_player else original.rival_id)}: "
+            f"feeling {rival_feeling:+.1f} (modifier {rival_relationship['total']:+.2f}); "
+            f"patron {player.display_name}: feeling {patron_feeling:+.1f} "
+            f"(modifier {patron_relationship['total']:+.2f})."
+        )
 
         release = PressRelease(
             type="negotiation",
@@ -2090,6 +2167,7 @@ class GameService:
             metadata={
                 "counter_offer_id": counter_id,
                 "original_offer_id": original_offer_id,
+                "relationship_snapshot": relationship_snapshot,
             }
         )
         self._archive_press(release, timestamp)
@@ -2110,6 +2188,7 @@ class GameService:
                     "original_offer_id": original_offer_id,
                     "patron": player_id,
                     "influence": counter_influence,
+                    "relationship_snapshot": relationship_snapshot,
                 }
             )
         )
@@ -2440,6 +2519,7 @@ class GameService:
         commitments = self._player_commitment_summary(player)
         investments = self._player_investment_summary(player)
         endowments = self._player_endowment_summary(player)
+        faction_sentiments = self._player_faction_sentiments(player)
         return {
             "id": player.id,
             "display_name": player.display_name,
@@ -2454,6 +2534,7 @@ class GameService:
             "commitments": commitments,
             "investments": investments,
             "endowments": endowments,
+            "faction_sentiments": faction_sentiments,
         }
 
     def roster_status(self) -> List[Dict[str, object]]:
@@ -5194,6 +5275,89 @@ class GameService:
 
         return summary
 
+    def pause_game(
+        self,
+        reason: Optional[str] = None,
+        admin_id: Optional[str] = None,
+    ) -> PressRelease:
+        """Pause the game manually for maintenance or incident response."""
+
+        actor = admin_id or "system"
+        pause_reason = (reason or "Paused for maintenance").strip()
+        with self._llm_lock:
+            previously_paused = self._paused
+            previous_reason = self._pause_reason
+            previous_source = self._pause_source
+            self._paused = True
+            self._pause_reason = pause_reason
+            self._pause_source = "manual"
+            self._llm_fail_start = None
+
+        if previously_paused:
+            message = (
+                f"ℹ️ Pause requested by {actor}; game already paused."
+                f" (source: {previous_source or 'unknown'})."
+            )
+            if pause_reason and pause_reason != previous_reason:
+                message += f" Updated reason: {pause_reason}"
+        else:
+            message = f"⏸️ Game paused by {actor}."
+            if pause_reason:
+                message += f" Reason: {pause_reason}"
+
+        press = PressRelease(
+            type="admin_action",
+            headline="Game Pause",
+            body=message,
+            metadata={
+                "admin": actor,
+                "reason": pause_reason,
+                "previously_paused": previously_paused,
+                "previous_reason": previous_reason,
+                "previous_source": previous_source,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        self._queue_admin_notification(message)
+        self._archive_press(press, now)
+        self.state.append_event(
+            Event(
+                timestamp=now,
+                action="game_paused",
+                payload={
+                    "admin": actor,
+                    "reason": pause_reason,
+                    "source": "manual",
+                    "previously_paused": previously_paused,
+                    "previous_source": previous_source,
+                },
+            )
+        )
+
+        layers = self._multi_press.generate_admin_layers(
+            event="pause",
+            actor=actor,
+            reason=pause_reason,
+        )
+        self._apply_multi_press_layers(
+            layers,
+            skip_types={press.type},
+            timestamp=now,
+            event_type="admin",
+        )
+
+        try:
+            self._telemetry.track_system_event(
+                "manual_pause",
+                source="admin",
+                reason=pause_reason,
+            )
+        except Exception:
+            logger.debug("Telemetry tracking for manual pause failed", exc_info=True)
+
+        return press
+
     def resume_game(self, admin_id: Optional[str] = None) -> PressRelease:
         """Resume the game after a pause."""
 
@@ -6143,6 +6307,53 @@ class GameService:
         for faction, amount in rewards.items():
             self._apply_influence_change(player, faction, amount)
 
+    def _summarize_preparation(self, preparation: ExpeditionPreparation) -> Dict[str, Any]:
+        mapping = (
+            ("think_tank_bonus", "Think tank modelling"),
+            ("expertise_bonus", "Field expertise"),
+            ("site_friction", "Site friction"),
+            ("political_friction", "Political currents"),
+        )
+        strengths: List[Dict[str, object]] = []
+        frictions: List[Dict[str, object]] = []
+        strengths_text: List[str] = []
+        frictions_text: List[str] = []
+
+        for attr, label in mapping:
+            value = getattr(preparation, attr, 0)
+            if value == 0:
+                continue
+            formatted = f"{label} {value:+d}"
+            entry = {"label": label, "value": value}
+            if attr in {"think_tank_bonus", "expertise_bonus"}:
+                if value > 0:
+                    strengths.append(entry)
+                    strengths_text.append(formatted)
+                else:
+                    frictions.append(entry)
+                    frictions_text.append(formatted)
+            else:
+                if value < 0:
+                    frictions.append(entry)
+                    frictions_text.append(formatted)
+                else:
+                    strengths.append(entry)
+                    strengths_text.append(formatted)
+
+        return {
+            "strengths": strengths,
+            "frictions": frictions,
+            "strengths_text": strengths_text,
+            "frictions_text": frictions_text,
+        }
+
+    def _team_member_names(self, team: List[str]) -> List[str]:
+        names: List[str] = []
+        for member_id in team:
+            scholar = self.state.get_scholar(member_id)
+            names.append(scholar.name if scholar else member_id)
+        return names
+
     def _update_relationships_from_result(self, order: ExpeditionOrder, result) -> None:
         outcome = result.outcome
         for scholar_id in order.team:
@@ -6678,6 +6889,27 @@ class GameService:
         average = total / count
         modifier = average * factor
         return max(-0.25, min(0.25, modifier))
+
+    def _player_faction_sentiments(self, player: Player) -> Dict[str, Dict[str, float]]:
+        aggregates: Dict[str, Dict[str, float]] = {}
+        for scholar in self.state.all_scholars():
+            feeling = scholar.memory.feelings.get(player.id)
+            if feeling is None:
+                continue
+            faction = (scholar.contract.get("faction") or "unaligned").lower()
+            entry = aggregates.setdefault(faction, {"total": 0.0, "count": 0})
+            entry["total"] += feeling
+            entry["count"] += 1
+
+        sentiments: Dict[str, Dict[str, float]] = {}
+        for faction, payload in aggregates.items():
+            count = payload["count"] or 1
+            average = payload["total"] / count
+            sentiments[faction] = {
+                "average": average,
+                "count": payload["count"],
+            }
+        return sentiments
 
     def _player_relationship_summary(self, player: Player, limit: int = 5) -> List[Dict[str, object]]:
         entries: List[Dict[str, object]] = []

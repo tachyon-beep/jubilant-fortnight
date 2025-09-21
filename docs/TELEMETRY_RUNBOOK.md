@@ -19,8 +19,8 @@ This runbook explains how to interpret the `/telemetry_report`, respond to alert
 | Press queue depth | 12 items (`GREAT_WORK_ALERT_MAX_QUEUE`) | Max scheduled press backlog | Investigate stuck follow-ups or manual edits; consider cancelling obsolete orders. |
 | LLM latency | 4000 ms (`GREAT_WORK_ALERT_MAX_LLM_LATENCY_MS`) | Weighted average call latency | Check `/gw_admin pause_game` triggers, failover LLM, or reduce batch sizes. |
 | LLM failure rate | 20 % (`GREAT_WORK_ALERT_LLM_FAILURE_RATE`) | Error ratio by call volume | Inspect `errors_24h` section for root cause; pause high-cost features until clear. |
-| Dispatcher pending | 6 orders (`GREAT_WORK_ALERT_MAX_ORDER_PENDING`) | Highest pending count per order type | Cancel or fast-track the offending order type. |
-| Dispatcher staleness | 8 h (`GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`) | Oldest order age | If repeated, escalate to narrative ops for manual resolution. |
+| Orders dispatcher pending | 6 orders (`GREAT_WORK_ALERT_MAX_ORDER_PENDING`) | Highest pending count per order type | Cancel or fast-track the offending order type. |
+| Orders dispatcher staleness | 8 h (`GREAT_WORK_ALERT_MAX_ORDER_AGE_HOURS`) | Oldest order age | If repeated, escalate to narrative ops for manual resolution. |
 | Symposium debt | 30 influence (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_DEBT`) | Sum of outstanding symposium debt | Alert indicates players falling behind – consider rescheduling pledges or lowering penalties. |
 | Symposium reprisals | 3 per player (`GREAT_WORK_ALERT_MAX_SYMPOSIUM_REPRISALS`) | Highest reprisal count in 24 h | Reach out to the affected player; consider waiving upcoming penalties. |
 | Investment concentration | 60 % share (`GREAT_WORK_ALERT_INVESTMENT_SHARE`) | Share of investments attributed to a single player | If alert, encourage rival factions or seed new long-tail sinks. |
@@ -37,11 +37,22 @@ export GREAT_WORK_ALERT_MAX_QUEUE=8
 
 All thresholds are evaluated as warnings at 75 % of the configured value before escalating to alerts.
 
+Canonical KPI targets live in the `kpi_targets` table inside `telemetry.db`. Use a short Python shell (or `sqlite3`) to upsert new values:
+
+```python
+from great_work.telemetry import TelemetryCollector
+collector = TelemetryCollector("telemetry.db")
+collector.set_kpi_target("active_players", target=6, warning=4, notes="Beta baseline")
+```
+
+Targets appear in `/telemetry_report`, drive the dashboard’s KPI targets table, and are echoed alongside health checks. Stored targets do not yet override environment thresholds automatically—set both when tuning alerts so on-call operators see aligned expectations.
+Stored targets override the corresponding alert thresholds (e.g., `active_players`, `manifesto_adoption`, `archive_usage`, `nickname_rate`, `press_shares`) during health evaluation, so update the database entry whenever product adjusts the baseline. Keep the environment variables aligned for clarity in deployment manifests.
+
 ### Alert Routing
 
 Set `GREAT_WORK_ALERT_WEBHOOK_URL` to forward guardrail breaches to an external destination (Discord webhook, Slack incoming URL, PagerDuty relay, etc.). Alerts are throttled via `GREAT_WORK_ALERT_COOLDOWN_SECONDS` (default 300 s) and you can silence noisy signals temporarily with `GREAT_WORK_ALERT_MUTED_EVENTS` (comma-separated event names such as `alert_health_digest_runtime`). When no webhook is configured the alerts fall back to the bot’s logs so operators still see the notifications. If email is easier to deploy, populate the `GREAT_WORK_ALERT_EMAIL_*` variables—alerts will be mirrored via SMTP in addition to any webhook configured.
 
-Events emitted through `TelemetryCollector.track_system_event` using the `alert_` prefix—including dispatcher backlog warnings, health-check failures, and symposium reprisal spikes—automatically route through the webhook once their cooldown expires.
+Events emitted through `TelemetryCollector.track_system_event` using the `alert_` prefix—including orders dispatcher backlog warnings, health-check failures, and symposium reprisal spikes—automatically route through the webhook once their cooldown expires.
 
 For local testing or demos run the bundled webhook receiver:
 
@@ -61,6 +72,12 @@ The telemetry report now includes:
 - **Seasonal commitments:** per-player upkeep debt, days remaining, and reprisal threshold context. Alerts labeled `alert_commitment_overdue_*` fire when a player nears reprisal—coordinate with ops before penalties stack.
 
 If investments concentrate on one player, consider introducing temporary incentives (e.g., discounted programs) for other factions.
+
+## Engagement Cohorts & Symposium Participation
+
+- `/telemetry_report` and the dashboard now list new vs returning player cohorts over the past seven days, including command volumes and top participants. Use these to validate onboarding/retention experiments and spot shifts in command mix.
+- Symposium participation tables summarise command usage across `/symposium_vote`, `/symposium_status`, `/symposium_backlog`, and proposal commands. Investigate sudden drops (cohort share trending <25 %) before weekly digests to keep deliberations lively.
+- Canonical KPI targets surface in the dashboard alongside each metric; update them via `TelemetryCollector.set_kpi_target` when product commits new engagement goals.
 
 ## Symposium Monitoring Workflow
 
@@ -88,17 +105,17 @@ If investments concentrate on one player, consider introducing temporary incenti
 - `archive_publish_pages_failed` indicates the mirror step hit an exception (usually permissions or an uninitialised Pages directory); check the admin channel alert and repair the working tree.
 - `archive_snapshot_usage` tracks rolling snapshot disk usage. When `archive_snapshot_usage_exceeded` fires, prune `web_archive/snapshots/` or offload older ZIPs before repeated digests fail.
 - Review the Git working tree under `GREAT_WORK_ARCHIVE_PAGES_DIR` after a failure; partially synced content should be committed/pushed only after validation.
-- The telemetry dashboard now exposes dispatcher backlog filters and CSV export—use the controls above the table to select the order type, time window, and download the latest events for moderation review.
+- The telemetry dashboard now exposes orders dispatcher backlog filters and CSV export—use the controls above the table to select the order type, time window, and download the latest events for moderation review.
 
 ## Quick Reference
 
 | Action | Command |
 | --- | --- |
 | Force telemetry flush | `/telemetry_report` (auto flush) |
-| View dispatcher backlog | `/gw_admin list_orders` |
+| View orders dispatcher backlog | `/gw_admin list_orders` |
 | Cancel stuck order | `/gw_admin cancel_order order_id:<id>` |
 | Pause game due to alerts | `/gw_admin pause_game reason:"telemetry alert"` |
 | Resume after fix | `/gw_admin resume_game` |
-| Export dispatcher backlog CSV | Dashboard → Dispatcher Backlog → Export |
+| Export orders dispatcher backlog CSV | Dashboard → Dispatcher Backlog → Export |
 
 Keep this runbook with the other ops docs so every on-call operator understands the guardrails and remediation steps.

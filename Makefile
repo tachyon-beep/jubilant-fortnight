@@ -16,6 +16,8 @@ help:
 	@echo "  make upgrade        Upgrade project deps"
 	@echo "  make test           Run pytest"
 	@echo "  make lint           Run ruff if available"
+	@echo "  make validate-narrative  Run narrative YAML validator"
+	@echo "  make preview-narrative   Print sample narrative previews"
 	@echo "  make seed DB=...    Seed the SQLite DB (default: great_work.db)"
 	@echo "  make run            Run Discord bot (loads .env if present)"
 	@echo "  make env            Create .env from .env.example if missing"
@@ -39,6 +41,12 @@ upgrade: venv
 
 test:
 	$(PYTHON) -m pytest -q
+
+validate-narrative:
+	$(PYTHON) -m great_work.tools.validate_narrative --all
+
+preview-narrative:
+	$(PYTHON) -m great_work.tools.preview_narrative
 
 lint:
 	@if [ -x "$(VENV)/bin/ruff" ]; then \
@@ -65,4 +73,3 @@ clean-venv:
 
 clean-db:
 	rm -f $(DB)
-

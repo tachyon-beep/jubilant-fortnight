@@ -2,10 +2,10 @@
 
 ## TL;DR
 
-- Consolidates the multi-layer press system, dispatcher, telemetry dashboard, and long-tail
+- Consolidates the multi-layer press system, orders dispatcher, telemetry dashboard, and long-tail
   economy (investments, archive endowments, seasonal commitments, faction projects).
 - Adds Guardian moderation guardrails, archive export + snapshots, and admin tools for
-  dispatcher visibility and intervention.
+  orders dispatcher visibility and intervention.
 - Docs for post-1.0 ideas were moved under `docs/post_1_0/`; the 1.0 PR focuses on core
   gameplay, transparency, and observability.
 
@@ -40,7 +40,7 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 - Implemented pause/resume infrastructure for handling LLM failures
 - Created telemetry dashboard (Docker-based) for real-time monitoring
 - Added telemetry decorators to all Discord commands
-- Exposed dispatcher telemetry with order snapshots and backlog metrics
+- Exposed orders dispatcher telemetry with order snapshots and backlog metrics
 - Added symposium scoring telemetry with reprisal tracking
 - Integrated seasonal commitments and faction project metrics
 
@@ -50,7 +50,7 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 - Centralized management of scheduled game events
 - Improved reliability of asynchronous game mechanics
 - Added `/gw_admin list_orders` and `cancel_order` for operator intervention
-- Exposed dispatcher metrics in telemetry dashboard
+- Exposed orders dispatcher metrics in telemetry dashboard
 - Automated migration from legacy followups table
 
 ### 4. LLM Integration Enhancements
@@ -87,28 +87,30 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 
 ## Compatibility & Migrations
 
-- Legacy `followups` table is automatically migrated to the dispatcher `orders` queue on
+- Legacy `followups` table is automatically migrated to the orders dispatcher `orders` queue on
   first run. No manual action required. great_work/state.py:510
 - Some documentation and conceptual work that is post-1.0 has been moved to
   `docs/post_1_0/` to reduce churn in the release PR.
 
 ## Documentation Updates
 
-- Added comprehensive SYSTEM_ARCHITECTURE.md (1500+ lines)
-- Created `post_1_0/GAME_ENHANCEMENTS.md` with feature proposals (including Qdrant integration proposal)
-- Updated README for 1.0.0 release with full installation/deployment guides
-- Added CHANGELOG.md documenting all features
-- Created RELEASE_1.0_CHECKLIST.md for release preparation
+- Added comprehensive [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) (1500+ lines)
+- Created [GAME_ENHANCEMENTS.md](GAME_ENHANCEMENTS.md) with feature proposals (including Qdrant integration)
+- Updated [README.md](../README.md) for 1.0.0 with install/deploy guides
+- Added [CHANGELOG.md](../CHANGELOG.md) documenting all features
+- Created [RELEASE_1.0_CHECKLIST.md](../RELEASE_1.0_CHECKLIST.md) for release preparation
 - Reorganized documentation structure (moved internal docs to docs/internal/)
-- Authored TELEMETRY_RUNBOOK.md explaining health checks, thresholds, and incident response workflows
-- **Comprehensive Writing Guide Update**: Fixed all gaps identified in ISSUE-2025-01-21-001
+- Authored [TELEMETRY_RUNBOOK.md](TELEMETRY_RUNBOOK.md) with health checks, thresholds, incident response
+- **Comprehensive Writing Guide Update**: see [WRITING_GUIDE.md](WRITING_GUIDE.md)
 - Created issue tracking system with template and resolved first issue
-- Added deployment documentation with systemd examples
-- Created `docs/post_1_0/` and moved post-1.0 concepts there
+- Added deployment documentation with systemd examples in [deployment.md](deployment.md)
+- Created `docs/post_1_0/` and moved post‑1.0 concepts there (e.g.,
+  [USER_TELEMETRY.md](post_1_0/USER_TELEMETRY.md),
+  [TELEMETRY_COHORT_COMPARISONS.md](post_1_0/TELEMETRY_COHORT_COMPARISONS.md))
 
 ## Testing Improvements
 
-- Expanded test coverage for telemetry, LLM, dispatcher, and multi-press features
+- Expanded test coverage for telemetry, LLM, orders dispatcher, and multi-press features
 - Added tests for scheduler, table talk, and digest highlights
 - Updated tests to support channel_id parameters
 - Verified layered press scheduling and release mechanisms
@@ -117,7 +119,7 @@ Scope is sized for playtests and operational trial; guardrails and runbooks incl
 - Relationship modifier testing for recruitment and commitments
 - Expanded symposium tests with scoring and reprisal validation
 
-See CI for the current test count and runtime.
+Tests also run in CI for enforcement.
 
 ## Infrastructure & DevOps
 
@@ -136,7 +138,7 @@ See CI for the current test count and runtime.
 
 ## Files Changed Summary
 
-- 123 files changed, 24,985 insertions, 4,255 deletions (current)
+- 125 files changed, 25,909 insertions, 4,231 deletions (current)
 - Major refactoring of agent documentation
 - Complete overhaul of multi-press and service modules
 - Significant expansion of telemetry and monitoring capabilities
@@ -146,7 +148,7 @@ See CI for the current test count and runtime.
 ## Key Metrics
 
 - Implementation progress: 71.4% of requirements fully implemented (55 of 77)
-- Tests expanded across new features (see CI for totals)
+- 255 tests passed, 1 skipped in 21.98s (local)
 - Linting passes locally; CI enforces Ruff and pytest
 - New Discord commands: `/invest`, `/endow_archive`, `/seasonal_commitments`, `/faction_projects`, `/recruit_odds`
 - Enhanced Admin Tools: `/gw_admin list_orders`, `/gw_admin cancel_order`, `/gw_admin resume_game`
@@ -154,14 +156,14 @@ See CI for the current test count and runtime.
 ## Commit Highlights (oldest → newest)
 
 1. `39abb28` Update documentation and add contributor guide
-2. `cec69a6` Major Phase 3 improvements: telemetry, dispatcher, multi-layer press
+2. `cec69a6` Major Phase 3 improvements: telemetry, orders dispatcher, multi-layer press
 3. `423b277` Apply project updates
 4. `6b2db32` Layer recruitment and table talk press
 5. `c7e8eea` Expose symposium scoring telemetry and reprisal handling
 6. `f54839d` Add recruitment odds preview and contract upkeep sinks
 7. `529ab35` Enrich layered press for recruitment and table talk
 8. `1512f44` Layer recruitment followups
-9. `9083430` Expose dispatcher telemetry
+9. `9083430` Expose orders dispatcher telemetry
 10. `292dbd2` Complete narrative arcs
 11. `6f605a9` Expand vignette catalogue
 12. `44ad824` Tie seasonal commitments and faction projects to relationship history
@@ -191,7 +193,7 @@ See CI for the current test count and runtime.
 
 ## Risk & Rollback
 
-- Risks: slow digests, dispatcher backlog, archive publish failures, debt reprisal loops
+- Risks: slow digests, orders dispatcher backlog, archive publish failures, debt reprisal loops
 - Mitigations: telemetry dashboard, admin `/gw_admin list_orders` and cancel tools, alerts
 - Rollback: disable publishing, set `LLM_MODE=mock`, pause/resume game, revert container; schema
   additions are backward compatible and safe to leave in place
@@ -202,3 +204,5 @@ See CI for the current test count and runtime.
 - Use `/export_web_archive` and confirm ZIP snapshot publishes during digest
 - Check `/gw_admin list_orders` and cancel a test follow-up; verify telemetry reflects changes
 - Open telemetry dashboard (Compose service) and verify digest, queue, and debt guardrails
+
+<!-- Screenshots moved to README.md for visibility -->

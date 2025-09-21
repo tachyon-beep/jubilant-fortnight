@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import discord
 from discord import app_commands
@@ -99,6 +99,24 @@ async def _post_file_to_channel(
         logger.exception("Failed to send %s file message", purpose)
 
 
+_MAX_MESSAGE_LENGTH = 1900
+
+
+def _clamp_text(text: str) -> str:
+    """Ensure Discord-compatible message length."""
+
+    if len(text) <= _MAX_MESSAGE_LENGTH:
+        return text
+    return text[: _MAX_MESSAGE_LENGTH - 1].rstrip() + "…"
+
+
+def _format_message(lines: Iterable[str]) -> str:
+    """Join message lines and clamp to Discord limits."""
+
+    message = "\n".join(line for line in lines if line is not None)
+    return _clamp_text(message)
+
+
 def _format_press(press: PressRelease) -> str:
     return f"**{press.headline}**\n{press.body}"
 
@@ -117,6 +135,37 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     setattr(bot, "state_service", service)
     router = ChannelRouter.from_env()
     scheduler: Optional[GazetteScheduler] = None
+
+    def _info_channel() -> Optional[int]:
+        """Prefer table-talk for informational posts, fall back to gazette/orders."""
+
+        return (
+            router.table_talk
+            or router.gazette
+            or router.upcoming
+            or router.orders
+        )
+
+    async def _respond_and_broadcast(
+        interaction: discord.Interaction,
+        lines: Iterable[str],
+        *,
+        purpose: str,
+        header: Optional[str] = None,
+        channel: Optional[int] = None,
+        ephemeral: bool = True,
+    ) -> None:
+        """Send an ephemeral response and mirror it to a public channel."""
+
+        message = _format_message(lines)
+        await interaction.response.send_message(message, ephemeral=ephemeral)
+        target_channel = channel if channel is not None else _info_channel()
+        if target_channel is None:
+            return
+        public_message = message if not header else _clamp_text(f"{header}\n{message}")
+        if not public_message.strip():
+            return
+        await _post_to_channel(bot, target_channel, public_message, purpose=purpose)
 
     def _shutdown_scheduler() -> None:  # pragma: no cover - process shutdown hook
         if scheduler is not None:
@@ -389,7 +438,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 )
             )
 
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/symposium_backlog requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="symposium-backlog",
+            header=header,
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="recruit", description="Attempt to recruit a scholar")
@@ -721,7 +777,21 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 if offer.terms:
                     message += f"Terms: {offer.terms}\n"
                 message += f"Created: {offer.created_at.strftime('%Y-%m-%d %H:%M')}\n"
-
+                snapshot = offer.relationship_snapshot or {}
+                rival_snap = snapshot.get("rival", {})
+                patron_snap = snapshot.get("patron", {})
+                if rival_snap or patron_snap:
+                    rival_name = rival_snap.get("display_name") or offer.rival_id
+                    patron_name = patron_snap.get("display_name") or offer.patron_id
+                    rival_feeling = rival_snap.get("feeling")
+                    patron_feeling = patron_snap.get("feeling")
+                    if rival_feeling is not None and patron_feeling is not None:
+                        message += (
+                            "Loyalty snapshot: "
+                            f"rival {rival_name} {rival_feeling:+.1f}, "
+                            f"patron {patron_name} {patron_feeling:+.1f}\n"
+                        )
+                
             await interaction.response.send_message(message, ephemeral=True)
             await _flush_admin_notifications()
         except Exception as exc:
@@ -877,7 +947,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             lines.append(
                 f"• [{proposal['id']}] {proposal['topic']} — proposed by {proposal['proposer']} ({created_str}; {expires_display})"
             )
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/symposium_proposals requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="symposium-proposals",
+            header=header,
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="symposium_backlog", description="Show scoring details for pending symposium proposals")
@@ -964,7 +1041,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                         )
                     )
 
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/symposium_status requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="symposium-status",
+            header=header,
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="symposium_status", description="Show your symposium pledge status and history")
@@ -1038,7 +1122,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             lines.append("")
             lines.append("No prior symposium pledges on record.")
 
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/symposium_status requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="symposium-status",
+            header=header,
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="status", description="Show your current influence and cooldowns")
@@ -1046,7 +1137,8 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     async def status(interaction: discord.Interaction) -> None:
         service.ensure_player(str(interaction.user.display_name), interaction.user.display_name)
         data = service.player_status(str(interaction.user.display_name))
-        lines = [f"Reputation: {data['reputation']} (cap {data['influence_cap']})"]
+        lines = [f"**Status Snapshot — {data['display_name']}**"]
+        lines.append(f"Reputation: {data['reputation']} (cap {data['influence_cap']})")
         lines.append("Influence:")
         for faction, value in sorted(data["influence"].items()):
             lines.append(f" - {faction}: {value}")
@@ -1097,6 +1189,22 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     detail_parts.append(f"sidecast {sidecast} ({phase})")
                 summary = "; ".join(detail_parts) if detail_parts else "relationship"
                 lines.append(f" - {entry['scholar']} (Δ {feeling_text}) — {summary}")
+        sentiments = data.get("faction_sentiments") or {}
+        if sentiments:
+            lines.append("")
+            lines.append("Faction Sentiment:")
+            for faction, payload in sorted(sentiments.items()):
+                avg = payload.get("average", 0.0)
+                count = payload.get("count", 0)
+                label = faction.capitalize()
+                lines.append(
+                    " - {faction}: Δ {avg:+.2f} ({count} scholar{plural})".format(
+                        faction=label,
+                        avg=avg,
+                        count=count,
+                        plural="s" if count != 1 else "",
+                    )
+                )
         commitments = data.get("commitments") or []
         if commitments:
             lines.append("")
@@ -1152,7 +1260,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                 programs = entry.get("programs") or []
                 if programs:
                     lines.append("   Initiatives: " + ", ".join(programs))
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/status requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="status",
+            header=header,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="invest", description="Invest influence into faction infrastructure")
     @track_command
@@ -1220,7 +1335,7 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
     @track_command
     async def wager(interaction: discord.Interaction) -> None:
         reference = service.wager_reference()
-        lines = ["Confidence wagers:"]
+        lines = ["**Confidence Wagers Reference**", "Confidence wagers:"]
         for level, payload in reference["wagers"].items():
             suffix = " (triggers recruitment cooldown)" if payload["triggers_recruitment_cooldown"] else ""
             lines.append(
@@ -1233,7 +1348,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         bounds = reference["reputation_bounds"]
         lines.append("")
         lines.append(f"Reputation bounds: {bounds['min']} to {bounds['max']}")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/wager requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="wager-reference",
+            header=header,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="seasonal_commitments", description="View your seasonal commitments")
     @track_command
@@ -1261,7 +1383,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     end=end_text,
                 )
             )
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/seasonal_commitments requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="seasonal-commitments",
+            header=header,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="faction_projects", description="Show active faction projects")
     @track_command
@@ -1284,7 +1413,14 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
                     pct=progress_pct,
                 )
             )
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/faction_projects requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="faction-projects",
+            header=header,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="gazette", description="Show recent Gazette headlines")
     @track_command
@@ -1296,11 +1432,18 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         if not records:
             await interaction.response.send_message("No Gazette entries recorded yet.", ephemeral=True)
             return
-        lines = ["Recent Gazette entries:"]
+        lines = ["**Recent Gazette Entries**"]
         for record in records:
             timestamp = record.timestamp.strftime("%Y-%m-%d %H:%M")
             lines.append(f" - {timestamp} | {record.release.headline}")
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        header = f"**/gazette requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="gazette-summary",
+            header=header,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="export_log", description="Export recent events and press")
     @track_command
@@ -1315,7 +1458,15 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
         event_lines = [f"Events ({len(log['events'])} entries):"]
         for event in log["events"]:
             event_lines.append(f" - {event.timestamp.isoformat()} {event.action}")
-        await interaction.response.send_message("\n".join(press_lines + [""] + event_lines), ephemeral=True)
+        lines = ["**Archive Log Extract**"] + press_lines + [""] + event_lines
+        header = f"**/export_log requested by {interaction.user.display_name}**"
+        await _respond_and_broadcast(
+            interaction,
+            lines,
+            purpose="export-log",
+            header=header,
+            ephemeral=True,
+        )
         await _flush_admin_notifications()
 
     @app_commands.command(name="export_web_archive", description="Generate static HTML archive of game history")
@@ -2218,6 +2369,30 @@ def build_bot(db_path: Path, intents: Optional[discord.Intents] = None) -> comma
             + (f" Reason: {reason}" if reason else "")
         )
         await interaction.response.send_message(response, ephemeral=True)
+        await _flush_admin_notifications()
+
+    @gw_admin.command(
+        name="pause_game",
+        description="Pause the game for maintenance or incident response",
+    )
+    @track_command
+    @app_commands.describe(reason="Optional reason for pausing the game")
+    async def admin_pause(
+        interaction: discord.Interaction,
+        reason: Optional[str] = None,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "This command requires administrator permissions.",
+                ephemeral=True,
+            )
+            return
+
+        admin_id = str(interaction.user.display_name)
+        press = service.pause_game(reason=reason, admin_id=admin_id)
+        message = f"{press.headline}\n{press.body}"
+        await interaction.response.send_message(message, ephemeral=True)
+        await _post_to_channel(bot, router.gazette, message, purpose="admin action")
         await _flush_admin_notifications()
 
     @gw_admin.command(name="resume_game", description="Resume the game if it is paused")

@@ -1,0 +1,180 @@
+landmark_preparations:
+  field:
+    shallow:
+      discoveries:
+        - >-
+          Field crews choreograph supply skiffs and hush rival couriers before
+          {objective}'s landmark reveal.
+        - >-
+          Survey captains triple-check ballast anchors so the landmark briefing on
+          {objective} lands without scandal.
+      briefs:
+        - headline: "Field Prep Ledger — Expedition {code}"
+          body: |
+            Coordinators for {player} log a {prep_depth_title_lower} preparation sweep ahead of
+            {objective}. Strengths recorded: {strengths_text}. Outstanding risks: {frictions_text}.
+            Crew manifest: {team_summary}.
+        - headline: "Field Drill Chronicle — Expedition {code}"
+          body: |
+            {player}'s field teams rehearse the landmark extraction plan around {objective},
+            spotlighting {strengths_text}. Dispatchers flag {frictions_text} as the remaining drag
+            before the reveal led by {team_summary}.
+    standard:
+      discoveries:
+        - >-
+          Logistics pits layer reinforced gantries so the landmark unveiling of
+          {objective} can withstand faction crowds.
+        - >-
+          Perimeter advocates broker ceasefires to let the {objective} landmark forum proceed under
+          guarded banners.
+      briefs:
+        - headline: "Field Vanguard Brief — Expedition {code}"
+          body: |
+            Ahead of the landmark forum on {objective}, {player}'s envoys finish a
+            {prep_depth_title_lower} readiness lap. Strengths: {strengths_text}. Pressure points:
+            {frictions_text}. Lead operators: {team_summary}.
+        - headline: "Assembly Notes — Expedition {code}"
+          body: |
+            Landmark prep for {objective} wraps with {player}'s quartermasters citing
+            {strengths_text}. Risk auditors warn that {frictions_text} still threaten the ceremony
+            stewarded by {team_summary}.
+    deep:
+      discoveries:
+        - >-
+          Field marshals choreograph faction cordons and midnight briefings so
+          {objective}'s landmark rites land intact.
+        - >-
+          Night crews weld stabilisers and archive drones rehearse capture angles for
+          {objective}'s landmark proclamation.
+      briefs:
+        - headline: "Deep Field Dossier — Expedition {code}"
+          body: |
+            The deep preparation slate for {objective} lists {strengths_text} as the decisive
+            leverage. Moderators record {frictions_text} as the remaining choke points while
+            {team_summary} finalise runbooks for {player}.
+        - headline: "Landmark Watch — Expedition {code}"
+          body: |
+            After exhaustive deep drills around {objective}, {player}'s stewards highlight
+            {strengths_text}. They caution that {frictions_text} could still upset the landmark
+            reveal fronted by {team_summary}.
+  think_tank:
+    shallow:
+      discoveries:
+        - >-
+          Think tank scribes circulate rehearsal decks so {objective}'s landmark thesis can debut
+          without rebuttal chaos.
+        - >-
+          Modelers polish consensus notes, promising {objective}'s landmark colloquium will open
+          with a unified voice.
+      briefs:
+        - headline: "Think Tank Bulletin — Expedition {code}"
+          body: |
+            Scholars under {player} outline a {prep_depth_title_lower} preparation cycle for
+            {objective}. Boosts include {strengths_text}. Watchers cite {frictions_text} as debate
+            risks. Presenting cohort: {team_summary}.
+        - headline: "Briefing Packet — Expedition {code}"
+          body: |
+            Landmark rehearsal memos for {objective} spotlight {strengths_text}. Facilitators warn
+            {frictions_text} could derail the opening salvo steered by {team_summary}.
+    standard:
+      discoveries:
+        - >-
+          Deliberation chains rehearse cross-examination scripts, framing {objective}'s landmark
+          defense as airtight.
+        - >-
+          Archival librarians extract precedent scrolls so the landmark argument for {objective}
+          can cite every lineage.
+      briefs:
+        - headline: "Colloquium Slate — Expedition {code}"
+          body: |
+            {player}'s think tank completes a {prep_depth_title_lower} readiness matrix for
+            {objective}. Highlighted advantages: {strengths_text}. Contested assumptions:
+            {frictions_text}. Speaker bench: {team_summary}.
+        - headline: "Landmark Primer — Expedition {code}"
+          body: |
+            Prep synthesis for {objective} lists {strengths_text} as the through line. Risk officers
+            flag {frictions_text} during the landmark session curated by {team_summary}.
+    deep:
+      discoveries:
+        - >-
+          Simulators stage night-long runs so {objective}'s landmark proof can survive every
+          hostile interrogation.
+        - >-
+          Chairs convene secret salons to choreograph a cascading reveal of {objective}'s landmark
+          methodology.
+      briefs:
+        - headline: "Deep Prep Ledger — Expedition {code}"
+          body: |
+            After deep preparation, {player}'s analysts tout {strengths_text}. They document
+            {frictions_text} as final debate traps while {team_summary} script the landmark reveal.
+        - headline: "Summit Blueprint — Expedition {code}"
+          body: |
+            The landmark symposium for {objective} moves forward with {strengths_text}.
+            Moderators caution {frictions_text} could still redraw the agenda shepherded by
+            {team_summary}.
+  great_project:
+    shallow:
+      discoveries:
+        - >-
+          Charter envoys lock committee quorums so {objective}'s landmark funding vote cannot be
+          filibustered.
+        - >-
+          Design bureaus prototype scale models to dramatise {objective}'s landmark promise in the
+          guild forum.
+      briefs:
+        - headline: "Project Preface — Expedition {code}"
+          body: |
+            The great project caucus under {player} completes a {prep_depth_title_lower}
+            orientation for {objective}, citing {strengths_text}. Budget custodians warn
+            {frictions_text} could sour the vote marshalled by {team_summary}.
+        - headline: "Council Program — Expedition {code}"
+          body: |
+            Landmark staging for {objective} leans on {strengths_text}. Procedural clerks note
+            {frictions_text} remain on the docket as {team_summary} brief the guild chambers.
+    standard:
+      discoveries:
+        - >-
+          Stewards stage coalition rehearsals so {objective}'s landmark motion cruises through the
+          charter assembly.
+        - >-
+          Contract envoys renegotiate risk pools to present {objective} as a landmark safe bet for
+          foreign patrons.
+      briefs:
+        - headline: "Assembly Ledger — Expedition {code}"
+          body: |
+            Coalition whips under {player} tick off the {prep_depth_title_lower} checklist for
+            {objective}. Strengths logged: {strengths_text}. Remaining liabilities:
+            {frictions_text}. Floor captains: {team_summary}.
+        - headline: "Mandate Brief — Expedition {code}"
+          body: |
+            Landmark prep memos for {objective} praise {strengths_text}. Opposition trackers
+            highlight {frictions_text} before {team_summary} shepherd the motion across the dais.
+    deep:
+      discoveries:
+        - >-
+          Guild vaults pledge emergency reserves so {objective}'s landmark charter can launch
+          without fiscal panic.
+        - >-
+          Envoys script midnight treaties binding every faction to {objective}'s landmark programme
+          unveiling.
+      briefs:
+        - headline: "Grand Design Ledger — Expedition {code}"
+          body: |
+            Deep preparations for {objective} celebrate {strengths_text}. The charter office lists
+            {frictions_text} as the last obstacles while {team_summary} assemble the landmark decree
+            for {player}.
+        - headline: "Executive Chronicle — Expedition {code}"
+          body: |
+            Landmark launch protocols around {objective} lean on {strengths_text}. Diplomats caution
+            {frictions_text} could still fracture consensus as {team_summary} prime the floor.
+  default:
+    standard:
+      discoveries:
+        - >-
+          Preparatory teams codify staggered reveals so the landmark briefing on {objective}
+          lands with precision.
+      briefs:
+        - headline: "Landmark Prep Notes — Expedition {code}"
+          body: |
+            {player}'s crews finalise preparations for {objective}, highlighting {strengths_text}.
+            They still track {frictions_text} before {team_summary} take the stage.

@@ -8,6 +8,18 @@
 
 The Great Work is an asynchronous, fully public research drama played through Discord. Players direct scholars, make proclamations, and resolve expeditions that can succeed spectacularly or fail into sideways discoveries.
 
+## Terminology
+
+- Orders dispatcher: shared delayed-action queue backed by the `orders` table; powers follow-ups
+  (mentorship activations, reminders, narrative beats). Admin tools: `/gw_admin list_orders`,
+  `/gw_admin cancel_order`.
+- Gazette scheduler: APScheduler jobs that advance digests and host the weekly symposium; also
+  exports the web archive and posts ZIP snapshots to the admin channel.
+- Telemetry dashboard: optional FastAPI app (port 8081 by default) that reads `telemetry.db` and
+  charts command usage, queue depth, and health signals.
+- Web archive: static HTML export under `web_archive_public/` served by the `archive_server`
+  container (default port 8080) and optionally mirrored to GitHub Pages.
+
 ## Features
 
 ### Core Gameplay
@@ -39,6 +51,14 @@ The Great Work is an asynchronous, fully public research drama played through Di
 * **Automated Digests**: Twice-daily game advancement via APScheduler
 * **SQLite Persistence**: Efficient local storage with JSON serialization
 * **Vector Database**: Qdrant integration for semantic knowledge management
+
+## Screenshots
+
+A quick glimpse of the built-in observability and narrative surfaces:
+
+![Telemetry Dashboard — Health & Backlog](docs/images/telemetry_dashboard.png)
+
+![Gazette Digest — Layered Press](docs/images/gazette_digest.png)
 
 ## Installation
 
@@ -365,6 +385,8 @@ make install
 # Run tests before committing
 make test
 make lint
+make validate-narrative
+make preview-narrative
 
 # Seed test database
 make seed

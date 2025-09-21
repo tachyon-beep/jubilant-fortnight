@@ -506,3 +506,81 @@ def test_wager_reference_exposes_thresholds_and_bounds(tmp_path):
     bounds = reference["reputation_bounds"]
     assert bounds["min"] == service.settings.reputation_bounds["min"]
     assert bounds["max"] == service.settings.reputation_bounds["max"]
+
+
+def test_create_offer_includes_relationship_snapshot(tmp_path):
+    service = build_service(tmp_path)
+    service.ensure_player("poacher", "Poacher")
+
+    scholar = service.state.get_scholar("s.ironquill")
+    assert scholar is not None
+    patron_id = scholar.contract.get("employer")
+    if not patron_id:
+        patron_id = "Archivist"
+        scholar.contract["employer"] = patron_id
+        service.state.save_scholar(scholar)
+    service.ensure_player(patron_id, patron_id)
+
+    rival = service.state.get_player("poacher")
+    rival.influence["industry"] = 5
+    service.state.upsert_player(rival)
+
+    offer_id, press = service.create_defection_offer(
+        scholar_id=scholar.id,
+        rival_id="poacher",
+        target_faction="Industry",
+        influence_offer={"industry": 3},
+    )
+
+    assert press
+    body = press[0].body
+    assert "Loyalty snapshot" in body
+    meta_snapshot = press[0].metadata.get("relationship_snapshot")
+    assert meta_snapshot
+    assert meta_snapshot["rival"]["display_name"] == "Poacher"
+
+    stored_offer = service.state.get_offer(offer_id)
+    assert stored_offer is not None
+    assert stored_offer.relationship_snapshot.get("rival", {}).get("feeling") is not None
+
+
+def test_counter_offer_carries_relationship_snapshot(tmp_path):
+    service = build_service(tmp_path)
+    service.ensure_player("poacher", "Poacher")
+
+    scholar = service.state.get_scholar("s.ironquill")
+    assert scholar is not None
+    patron_id = scholar.contract.get("employer")
+    if not patron_id:
+        patron_id = "Archivist"
+        scholar.contract["employer"] = patron_id
+        service.state.save_scholar(scholar)
+    service.ensure_player(patron_id, patron_id)
+
+    rival = service.state.get_player("poacher")
+    rival.influence.update({"industry": 5})
+    service.state.upsert_player(rival)
+
+    offer_id, _ = service.create_defection_offer(
+        scholar_id=scholar.id,
+        rival_id="poacher",
+        target_faction="Industry",
+        influence_offer={"industry": 3},
+    )
+
+    patron = service.state.get_player(patron_id)
+    patron.influence.update({"industry": 4})
+    service.state.upsert_player(patron)
+
+    counter_id, press = service.counter_offer(
+        player_id=patron_id,
+        original_offer_id=offer_id,
+        counter_influence={"industry": 2},
+    )
+
+    assert counter_id
+    assert press
+    assert "Loyalty snapshot" in press[0].body
+    snapshot = press[0].metadata.get("relationship_snapshot")
+    assert snapshot
+    assert snapshot["patron"]["display_name"] == patron.display_name
