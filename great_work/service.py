@@ -84,6 +84,10 @@ from .services.defection import (
     choose_outcome as _choose_defection_outcome,
     offer_acceptance_probability as _offer_acceptance_probability,
 )
+from .services.expeditions import (
+    make_manifesto as _make_manifesto,
+    make_result_release as _make_result_release,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -1140,9 +1144,9 @@ class GameService:
             )
         )
         prep_summary = self._summarize_preparation(preparation)
-        ctx = ExpeditionContext(
+        press = _make_manifesto(
             code=code,
-            player=player_id,
+            player_id=player_id,
             expedition_type=expedition_type,
             objective=objective,
             team=team,
@@ -1151,7 +1155,6 @@ class GameService:
             preparation_strengths=prep_summary["strengths_text"],
             preparation_frictions=prep_summary["frictions_text"],
         )
-        press = research_manifesto(ctx)
         base_body = press.body
         persona_name = player.display_name
         persona_traits = None
@@ -1259,10 +1262,7 @@ class GameService:
                 reputation_change=delta,
                 reactions=reactions,
             )
-            if result.outcome == ExpeditionOutcome.FAILURE:
-                release = retraction_notice(ctx)
-            else:
-                release = discovery_report(ctx)
+            release = _make_result_release(ctx=ctx)
             base_body = release.body
             persona_name = player.display_name
             context_payload = {
