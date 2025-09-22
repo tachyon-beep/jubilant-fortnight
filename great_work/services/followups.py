@@ -36,3 +36,41 @@ def build_symposium_reminder_body(
 
 __all__ = ["build_symposium_reminder_body"]
 
+from ..models import PressRelease
+
+
+def build_symposium_reprimand_press(
+    *,
+    display_name: str,
+    faction: str,
+    penalty_influence: int,
+    penalty_reputation: int,
+    reprisal_level: int,
+    remaining: int,
+    player_id: str,
+) -> PressRelease:
+    headline = f"Symposium Reprimand: {display_name}".rstrip()
+    impacts = []
+    if penalty_influence:
+        impacts.append(f"{penalty_influence} influence seized by {faction}")
+    if penalty_reputation:
+        impacts.append(f"{penalty_reputation} reputation deducted")
+    impact_text = "; ".join(impacts) if impacts else "Public reprimand issued"
+    body = (
+        f"{display_name} faces a symposium reprisal from {faction}. {impact_text}. "
+        f"Outstanding debt: {remaining}. Reprisal level now {reprisal_level}."
+    )
+    return PressRelease(
+        type="symposium_reprimand",
+        headline=headline,
+        body=body,
+        metadata={
+            "player_id": player_id,
+            "faction": faction,
+            "reprisal_level": reprisal_level,
+            "remaining": remaining,
+            "penalty_influence": penalty_influence,
+            "penalty_reputation": penalty_reputation,
+        },
+    )
+

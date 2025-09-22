@@ -107,7 +107,10 @@ from .services.sideways import (
     build_reputation_shift_press as _build_reputation_shift_press,
     build_opportunity_press as _build_opportunity_press,
 )
-from .services.followups import build_symposium_reminder_body as _build_symp_reminder
+from .services.followups import (
+    build_symposium_reminder_body as _build_symp_reminder,
+    build_symposium_reprimand_press as _build_symp_reprimand,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -6293,31 +6296,14 @@ class GameService:
                 penalty_reputation = int(payload.get("penalty_reputation", 0))
                 reprisal_level = int(payload.get("reprisal_level", 1))
                 remaining = int(payload.get("remaining", 0))
-                headline = f"Symposium Reprimand: {display_name}".rstrip()
-                impacts = []
-                if penalty_influence:
-                    impacts.append(f"{penalty_influence} influence seized by {faction}")
-                if penalty_reputation:
-                    impacts.append(f"{penalty_reputation} reputation deducted")
-                impact_text = (
-                    "; ".join(impacts) if impacts else "Public reprimand issued"
-                )
-                body = (
-                    f"{display_name} faces a symposium reprisal from {faction}. {impact_text}. "
-                    f"Outstanding debt: {remaining}. Reprisal level now {reprisal_level}."
-                )
-                press = PressRelease(
-                    type="symposium_reprimand",
-                    headline=headline,
-                    body=body,
-                    metadata={
-                        "player_id": payload.get("player_id") or scholar_id,
-                        "faction": faction,
-                        "reprisal_level": reprisal_level,
-                        "remaining": remaining,
-                        "penalty_influence": penalty_influence,
-                        "penalty_reputation": penalty_reputation,
-                    },
+                press = _build_symp_reprimand(
+                    display_name=display_name,
+                    faction=faction,
+                    penalty_influence=penalty_influence,
+                    penalty_reputation=penalty_reputation,
+                    reprisal_level=reprisal_level,
+                    remaining=remaining,
+                    player_id=str(payload.get("player_id") or scholar_id),
                 )
                 self._archive_press(press, now)
                 releases.append(press)
