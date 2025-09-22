@@ -21,7 +21,14 @@ from .llm_client import (
     LLMGenerationError,
     LLMNotEnabledError,
 )
-from .services.narrative import enhance_press_release_sync
+from .services.narrative import (
+    enhance_press_release_sync,
+    determine_depth as _mp_determine_depth,
+    generate_expedition_layers as _mp_expedition_layers,
+    generate_defection_layers as _mp_defection_layers,
+    generate_symposium_layers as _mp_symposium_layers,
+    generate_sidecast_layers as _mp_sidecast_layers,
+)
 from .models import (
     ConfidenceLevel,
     Event,
@@ -1330,14 +1337,16 @@ class GameService:
                 preparation_strengths=prep_summary["strengths_text"],
                 preparation_frictions=prep_summary["frictions_text"],
             )
-            depth = self._multi_press.determine_depth(
+            depth = _mp_determine_depth(
+                self._multi_press,
                 event_type=f"expedition_{order.expedition_type}",
                 reputation_change=delta,
                 confidence_level=order.confidence.value,
                 is_first_time=result.outcome == ExpeditionOutcome.LANDMARK,
             )
             scholars = list(self.state.all_scholars())
-            layers = self._multi_press.generate_expedition_layers(
+            layers = _mp_expedition_layers(
+                self._multi_press,
                 expedition_ctx,
                 ctx,
                 scholars,
@@ -1993,11 +2002,11 @@ class GameService:
         )
         self.state.save_scholar(scholar)
         self._archive_press(press, timestamp)
-        depth = self._multi_press.determine_depth(
-            event_type="defection",
-            is_first_time=outcome == "defected",
+        depth = _mp_determine_depth(
+            self._multi_press, event_type="defection", is_first_time=outcome == "defected"
         )
-        layers = self._multi_press.generate_defection_layers(
+        layers = _mp_defection_layers(
+            self._multi_press,
             DefectionContext(
                 scholar=scholar.name,
                 outcome=outcome,
@@ -2469,11 +2478,13 @@ class GameService:
                 if best_offer.offer_type == "initial"
                 else old_employer
             )
-            depth = self._multi_press.determine_depth(
+            depth = _mp_determine_depth(
+                self._multi_press,
                 event_type="defection",
                 is_first_time=best_offer.offer_type == "initial",
             )
-            layers = self._multi_press.generate_defection_layers(
+            layers = _mp_defection_layers(
+                self._multi_press,
                 DefectionContext(
                     scholar=scholar.name,
                     outcome=(
@@ -2566,8 +2577,9 @@ class GameService:
             )
             self._archive_press(release, timestamp)
             press.append(release)
-            depth = self._multi_press.determine_depth(event_type="defection")
-            layers = self._multi_press.generate_defection_layers(
+            depth = _mp_determine_depth(self._multi_press, event_type="defection")
+            layers = _mp_defection_layers(
+                self._multi_press,
                 DefectionContext(
                     scholar=scholar.name,
                     outcome="refused",
@@ -3699,9 +3711,10 @@ class GameService:
             )
         )
 
-        layers = self._multi_press.generate_symposium_layers(
-            topic,
-            description,
+        layers = _mp_symposium_layers(
+            self._multi_press,
+            topic=topic,
+            description=description,
             phase="launch",
             scholars=list(self.state.all_scholars()),
         )
@@ -3958,12 +3971,12 @@ class GameService:
             )
         )
 
-        layers = self._multi_press.generate_symposium_layers(
-            topic,
-            description,
+        layers = _mp_symposium_layers(
+            self._multi_press,
+            topic=topic,
+            description=description,
             phase="resolution",
             scholars=list(self.state.all_scholars()),
-            votes=votes,
         )
         self._apply_multi_press_layers(
             layers,
