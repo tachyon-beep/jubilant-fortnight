@@ -47,7 +47,6 @@ jobs:
           GREAT_WORK_GUARDIAN_MODE: sidecar
           GREAT_WORK_GUARDIAN_URL: http://localhost:8085/score
           GREAT_WORK_ALERT_WEBHOOK_URL: https://example/webhook
-          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         run: |
           set -euo pipefail
           python -m great_work.tools.deployment_smoke
