@@ -99,6 +99,14 @@ from .services.symposium import (
     build_announcement_body as _symp_build_announcement_body,
     build_resolution_body as _symp_build_resolution_body,
 )
+from .services.sideways import (
+    build_faction_shift_press as _build_faction_shift_press,
+    build_spawn_theory_press as _build_spawn_theory_press,
+    build_scholar_grudge_press as _build_scholar_grudge_press,
+    build_conference_scheduled_press as _build_conference_scheduled_press,
+    build_reputation_shift_press as _build_reputation_shift_press,
+    build_opportunity_press as _build_opportunity_press,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -6893,15 +6901,13 @@ class GameService:
                 old_influence = player.influence.get(faction, 0)
                 self._apply_influence_change(player, faction, amount)
                 releases.append(
-                    PressRelease(
-                        type="faction_shift",
-                        headline=f"Expedition Discovery Shifts {faction} Relations",
-                        body=f"{effect.description}. {player.display_name}'s {faction} influence changes by {amount} (from {old_influence} to {player.influence[faction]}).",
-                        metadata={
-                            "player": player.display_name,
-                            "faction": faction,
-                            "change": amount,
-                        },
+                    _build_faction_shift_press(
+                        player_name=player.display_name,
+                        faction=faction,
+                        amount=amount,
+                        old=old_influence,
+                        new=player.influence[faction],
+                        description=effect.description,
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
@@ -6923,11 +6929,11 @@ class GameService:
                 )
                 self.state.record_theory(theory_record)
                 releases.append(
-                    PressRelease(
-                        type="discovery_theory",
-                        headline="Discovery Spawns New Theory",
-                        body=f"{effect.description}. {player.display_name} proposes: '{theory_text}' with {confidence.value} confidence.",
-                        metadata={"player": player.display_name, "theory": theory_text},
+                    _build_spawn_theory_press(
+                        player_name=player.display_name,
+                        theory_text=theory_text,
+                        confidence_value=confidence.value,
+                        description=effect.description,
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
@@ -6949,14 +6955,10 @@ class GameService:
                         target.memory.adjust_feeling(order.player_id, -intensity)
                         self.state.save_scholar(target)
                         releases.append(
-                            PressRelease(
-                                type="scholar_grudge",
-                                headline=f"{target.name} Objects to Expedition Approach",
-                                body=f"{effect.description}. {target.name} expresses concerns about {player.display_name}'s expedition methods.",
-                                metadata={
-                                    "scholar": target.name,
-                                    "player": player.display_name,
-                                },
+                            _build_scholar_grudge_press(
+                                target_name=target.name,
+                                player_name=player.display_name,
+                                description=effect.description,
                             )
                         )
                         self._attach_tags_to_release(releases[-1], tags)
@@ -6999,11 +7001,9 @@ class GameService:
                             opposition,
                         )
                         releases.append(
-                            PressRelease(
-                                type="conference_scheduled",
-                                headline="Emergency Colloquium Scheduled",
-                                body=f"{effect.description}. Conference scheduled to discuss expedition findings.",
-                                metadata={"player": player.display_name},
+                            _build_conference_scheduled_press(
+                                player_name=player.display_name,
+                                description=effect.description,
                             )
                         )
                         self._attach_tags_to_release(releases[-1], tags)
@@ -7020,11 +7020,12 @@ class GameService:
                     ),
                 )
                 releases.append(
-                    PressRelease(
-                        type="reputation_shift",
-                        headline="Discovery Affects Academic Standing",
-                        body=f"{effect.description}. {player.display_name}'s reputation changes by {amount} (from {old_rep} to {player.reputation}).",
-                        metadata={"player": player.display_name, "change": amount},
+                    _build_reputation_shift_press(
+                        player_name=player.display_name,
+                        amount=amount,
+                        old=old_rep,
+                        new=player.reputation,
+                        description=effect.description,
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
@@ -7048,14 +7049,11 @@ class GameService:
                     },
                 )
                 releases.append(
-                    PressRelease(
-                        type="opportunity_unlocked",
-                        headline="New Opportunity Emerges",
-                        body=f"{effect.description}. Opportunity expires in {details.get('expires_in_days', 3)} days.",
-                        metadata={
-                            "player": player.display_name,
-                            "opportunity": opportunity_type,
-                        },
+                    _build_opportunity_press(
+                        player_name=player.display_name,
+                        opportunity_type=opportunity_type,
+                        expires_days=int(details.get("expires_in_days", 3)),
+                        description=effect.description,
                     )
                 )
                 self._attach_tags_to_release(releases[-1], tags)
