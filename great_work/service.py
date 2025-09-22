@@ -118,6 +118,10 @@ from .services.conferences import (
     build_conference_announcement_press as _conf_build_announcement,
     build_conference_resolution_press as _conf_build_resolution,
 )
+from .services.sidecast import (
+    phase_delta as _sidecast_phase_delta,
+    build_spawn_press as _sidecast_build_spawn_press,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -7205,12 +7209,9 @@ class GameService:
             },
         )
         self.state.save_scholar(scholar)
-        ctx = GossipContext(
-            scholar=scholar.name,
-            quote="I saw the expedition and could not resist joining.",
-            trigger=f"Expedition {order.code}",
+        press = _sidecast_build_spawn_press(
+            scholar_name=scholar.name, expedition_code=order.code
         )
-        press = academic_gossip(ctx)
         self.state.append_event(
             Event(
                 timestamp=now,
