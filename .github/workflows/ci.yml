@@ -17,6 +17,8 @@ jobs:
   test-and-report:
     name: Test and Upload Coverage
     runs-on: ubuntu-latest
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,14 +47,15 @@ jobs:
           GREAT_WORK_GUARDIAN_MODE: sidecar
           GREAT_WORK_GUARDIAN_URL: http://localhost:8085/score
           GREAT_WORK_ALERT_WEBHOOK_URL: https://example/webhook
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         run: |
           set -euo pipefail
           python -m great_work.tools.deployment_smoke
 
       - name: Upload coverage to Codacy
-        if: ${{ github.event_name == 'push' }}
-        uses: codacy/codacy-coverage-reporter-action@v1
+        if: ${{ github.event_name == 'push' && env.CODACY_PROJECT_TOKEN != '' }}
+        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
-          api-token: ${{ secrets.CODACY_API_TOKEN }}
+          project-token: ${{ env.CODACY_PROJECT_TOKEN }}
           coverage-reports: coverage.xml
         continue-on-error: true
