@@ -36,8 +36,13 @@ def build_symposium_reminder_body(
 
 __all__ = ["build_symposium_reminder_body"]
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from ..models import PressRelease, Event
+from ..press import GossipContext, academic_gossip
+from ..services.narrative import (
+    generate_defection_epilogue_layers as _mp_defection_epilogue_layers,
+    generate_sidecast_layers as _mp_sidecast_layers,
+)
 
 
 def build_symposium_reprimand_press(
@@ -155,4 +160,240 @@ def dispatch_followup(service, now, followup_id: int, scholar_id: str, kind: str
         return _handle_offer_resolution(service, now, followup_id, scholar_id, payload, key="offer_id")
     if kind == "evaluate_counter":
         return _handle_offer_resolution(service, now, followup_id, scholar_id, payload, key="counter_offer_id")
+    if kind in {"defection_grudge", "defection_return"}:
+        return _handle_defection_epilogue(service, now, followup_id, scholar_id, kind, payload)
+    if kind.startswith("sidecast_"):
+        return _handle_sidecast_phase(service, now, followup_id, scholar_id, kind, payload)
+    if kind == "sideways_vignette":
+        return _handle_sideways_vignette(service, now, followup_id, scholar_id, payload)
+    if kind == "recruitment_grudge":
+        return _handle_recruitment_grudge(service, now, followup_id, scholar_id, payload)
     return None
+
+
+def _handle_defection_epilogue(service, now, followup_id: int, scholar_id: str, kind: str, payload: Dict[str, Any]) -> Optional[List[PressRelease]]:
+    scholar = service.state.get_scholar(scholar_id)
+    if not scholar:
+        service.state.clear_followup(followup_id, status="cancelled", result={"reason": "scholar_missing"})
+        return []
+    scenario = payload.get("scenario")
+    if kind == "defection_grudge":
+        scenario = scenario or "rivalry"
+    else:
+        scenario = scenario or "reconciliation"
+
+    former_employer_id = (
+        payload.get("former_employer")
+        or scholar.contract.get("sidecast_sponsor")
+        or scholar.contract.get("employer")
+    )
+    former_employer = service.state.get_player(former_employer_id)
+    former_name = former_employer.display_name if former_employer else (former_employer_id or "their patron")
+
+    if scenario == "reconciliation":
+        scholar.memory.adjust_feeling(former_employer_id or "patron", 1.5)
+        if former_employer_id:
+            scholar.contract["employer"] = former_employer_id
+    else:
+        new_faction = (
+            payload.get("new_faction")
+            or payload.get("faction")
+            or scholar.contract.get("employer", "Unknown")
+        )
+        scholar.memory.adjust_feeling(new_faction, -1.5)
+
+    new_faction_name = (
+        payload.get("new_faction")
+        or payload.get("faction")
+        or scholar.contract.get("employer", "Unknown")
+    )
+
+    layers = _mp_defection_epilogue_layers(
+        service._multi_press,
+        scenario=scenario,
+        scholar_name=scholar.name,
+        former_faction=former_name,
+        new_faction=new_faction_name,
+        former_employer=former_name,
+    )
+    immediate_layers = service._apply_multi_press_layers(
+        layers,
+        skip_types=set(),
+        timestamp=now,
+        event_type="defection_epilogue",
+    )
+    releases = list(immediate_layers)
+    service.state.append_event(
+        Event(
+            timestamp=now,
+            action="defection_epilogue",
+            payload={
+                "scholar": scholar.id,
+                "scenario": scenario,
+                "former_faction": former_name,
+                "new_faction": new_faction_name,
+            },
+        )
+    )
+    service.state.save_scholar(scholar)
+    service.state.clear_followup(
+        followup_id,
+        result={"resolution": f"defection_{scenario}"},
+    )
+    return releases
+
+
+def _handle_sidecast_phase(service, now, followup_id: int, scholar_id: str, kind: str, payload: Dict[str, Any]) -> Optional[List[PressRelease]]:
+    scholar = service.state.get_scholar(scholar_id)
+    if not scholar:
+        service.state.clear_followup(
+            followup_id,
+            status="cancelled",
+            result={"reason": "scholar_missing"},
+        )
+        return []
+    arc_key = payload.get("arc") or scholar.contract.get("sidecast_arc") or service._multi_press.pick_sidecast_arc()
+    phase = payload.get("phase") or kind.split("_", 1)[1]
+    sponsor_id = payload.get("sponsor") or scholar.contract.get("sidecast_sponsor")
+    sponsor_player = service.state.get_player(sponsor_id) if sponsor_id else None
+    sponsor_display = sponsor_player.display_name if sponsor_player else (sponsor_id or "Patron")
+    expedition_type = payload.get("expedition_type")
+    expedition_code = payload.get("expedition_code")
+
+    plan = _mp_sidecast_layers(
+        service._multi_press,
+        arc_key=arc_key,
+        phase=phase,
+        scholar=scholar,
+        sponsor=sponsor_display,
+        expedition_type=expedition_type,
+        expedition_code=expedition_code,
+    )
+
+    service._record_sidecast_memory(
+        scholar,
+        sponsor_id,
+        arc=arc_key,
+        phase=phase,
+        timestamp=now,
+        extra={
+            "expedition_code": expedition_code,
+            "expedition_type": expedition_type,
+        },
+    )
+    service.state.save_scholar(scholar)
+
+    immediate_layers = service._apply_multi_press_layers(
+        plan.layers, skip_types=set(), timestamp=now, event_type="sidecast"
+    )
+    releases = list(immediate_layers)
+
+    service.state.append_event(
+        Event(
+            timestamp=now,
+            action="sidecast_followup",
+            payload={
+                "scholar": scholar.id,
+                "arc": arc_key,
+                "phase": phase,
+                "sponsor": sponsor_id,
+            },
+        )
+    )
+    service.state.clear_followup(
+        followup_id,
+        result={"resolution": f"sidecast_{phase}"},
+    )
+
+    if getattr(plan, "next_phase", None):
+        next_delay = getattr(plan, "next_delay_hours", None)
+        if next_delay is None:
+            next_delay = service._multi_press.sidecast_phase_delay(
+                arc_key, plan.next_phase, default_hours=36.0
+            )
+        from datetime import timedelta as _td
+        scheduled_at = now + _td(hours=next_delay)
+        service.state.enqueue_order(
+            f"followup:sidecast_{plan.next_phase}",
+            actor_id=scholar.id,
+            subject_id=sponsor_id,
+            payload={
+                "arc": arc_key,
+                "phase": plan.next_phase,
+                "sponsor": sponsor_id,
+                "expedition_code": expedition_code,
+                "expedition_type": expedition_type,
+            },
+            scheduled_at=scheduled_at,
+        )
+    return releases
+
+
+def _handle_sideways_vignette(service, now, followup_id: int, scholar_id: str, payload: Dict[str, Any]) -> Optional[List[PressRelease]]:
+    scholar = service.state.get_scholar(scholar_id)
+    if not scholar:
+        service.state.clear_followup(
+            followup_id,
+            status="cancelled",
+            result={"reason": "scholar_missing"},
+        )
+        return []
+    headline = payload.get("headline", f"Sideways Vignette — {scholar.name}")
+    body = payload.get("body", "")
+    tags = payload.get("tags", [])
+    base_press = PressRelease(
+        type="sideways_vignette",
+        headline=headline,
+        body=body,
+        metadata={
+            "scholar": scholar.id,
+            "tags": tags,
+            "discovery": payload.get("discovery"),
+        },
+    )
+    service._archive_press(base_press, now)
+    releases: List[PressRelease] = [base_press]
+    for quote in payload.get("gossip") or []:
+        ctx = GossipContext(scholar=scholar.name, quote=quote, trigger="Sideways Discovery")
+        gossip_press = academic_gossip(ctx)
+        service._archive_press(gossip_press, now)
+        releases.append(gossip_press)
+    service.state.append_event(
+        Event(
+            timestamp=now,
+            action="sideways_vignette",
+            payload={"scholar": scholar.id, "headline": headline, "tags": tags},
+        )
+    )
+    service.state.clear_followup(
+        followup_id,
+        result={"resolution": "sideways_vignette"},
+    )
+    return releases
+
+
+def _handle_recruitment_grudge(service, now, followup_id: int, scholar_id: str, payload: Dict[str, Any]) -> Optional[List[PressRelease]]:
+    scholar = service.state.get_scholar(scholar_id)
+    if not scholar:
+        service.state.clear_followup(
+            followup_id,
+            status="cancelled",
+            result={"reason": "scholar_missing"},
+        )
+        return []
+    player_id = payload.get("player", "Unknown")
+    scholar.memory.adjust_feeling(player_id, -1.0)
+    quote = _FOLLOWUP_QUOTES.get("recruitment_grudge", "The slighted scholar sharpens their public retort.")
+    ctx = GossipContext(scholar=scholar.name, quote=quote, trigger="Recruitment Grudge")
+    press = academic_gossip(ctx)
+    service._archive_press(press, now)
+    service.state.append_event(
+        Event(
+            timestamp=now,
+            action="followup_resolved",
+            payload={"scholar": scholar.id, "kind": "recruitment_grudge", "order_id": followup_id},
+        )
+    )
+    service.state.save_scholar(scholar)
+    service.state.clear_followup(followup_id, result={"resolution": "recruitment_grudge"})
+    return [press]
