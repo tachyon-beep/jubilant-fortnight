@@ -89,7 +89,11 @@ from .services.expeditions import (
     make_result_release as _make_result_release,
     summarize_preparation as _summarize_preparation,
 )
-from .services.relationships import faction_sentiments as _faction_sentiments
+from .services.relationships import (
+    faction_sentiments as _faction_sentiments,
+    relationship_summary as _rel_summary,
+    commitment_summary as _commit_summary,
+)
 from .services.moderation import (
     compute_text_hash as _mod_text_hash,
     snippet as _mod_snippet,
@@ -7311,124 +7315,23 @@ class GameService:
     def _player_relationship_summary(
         self, player: Player, limit: int = 5
     ) -> List[Dict[str, object]]:
-        entries: List[Dict[str, object]] = []
-        for scholar in self.state.all_scholars():
-            feeling = scholar.memory.feelings.get(player.id)
-            mentorship_history = scholar.contract.get("mentorship_history")
-            mentorship_entries = []
-            if isinstance(mentorship_history, list):
-                mentorship_entries = [
-                    entry
-                    for entry in mentorship_history
-                    if entry.get("mentor_id") == player.id
-                ]
-
-            sidecast_history = scholar.contract.get("sidecast_history")
-            sidecast_entries = []
-            if isinstance(sidecast_history, list):
-                sidecast_entries = [
-                    entry
-                    for entry in sidecast_history
-                    if entry.get("sponsor_id") == player.id
-                ]
-
-            if feeling is None and not mentorship_entries and not sidecast_entries:
-                continue
-
-            active = self.state.get_active_mentorship(scholar.id)
-            active_for_player = bool(active and active[1] == player.id)
-
-            last_mentorship_event = None
-            last_mentorship_at = None
-            if mentorship_entries:
-                last_entry = mentorship_entries[-1]
-                last_mentorship_event = last_entry.get("event")
-                last_mentorship_at = last_entry.get("timestamp") or last_entry.get(
-                    "resolved_at"
-                )
-
-            last_sidecast_phase = None
-            last_sidecast_at = None
-            if sidecast_entries:
-                last_sidecast = sidecast_entries[-1]
-                last_sidecast_phase = last_sidecast.get("phase")
-                last_sidecast_at = last_sidecast.get("timestamp")
-
-            sidecast_arc = None
-            if sidecast_entries:
-                sidecast_arc = sidecast_entries[-1].get("arc") or scholar.contract.get(
-                    "sidecast_arc"
-                )
-
-            history: List[Dict[str, object]] = []
-            for entry in mentorship_entries[-3:]:
-                history.append(
-                    {
-                        "type": "mentorship",
-                        "event": entry.get("event"),
-                        "timestamp": entry.get("timestamp"),
-                    }
-                )
-            for entry in sidecast_entries[-3:]:
-                history.append(
-                    {
-                        "type": "sidecast",
-                        "phase": entry.get("phase"),
-                        "timestamp": entry.get("timestamp"),
-                        "arc": entry.get("arc"),
-                    }
-                )
-            history.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
-
-            entries.append(
-                {
-                    "scholar": scholar.name,
-                    "scholar_id": scholar.id,
-                    "feeling": feeling or 0.0,
-                    "active_mentorship": active_for_player,
-                    "track": scholar.career.get("track"),
-                    "tier": scholar.career.get("tier"),
-                    "last_mentorship_event": last_mentorship_event,
-                    "last_mentorship_at": last_mentorship_at,
-                    "sidecast_arc": sidecast_arc,
-                    "last_sidecast_phase": last_sidecast_phase,
-                    "last_sidecast_at": last_sidecast_at,
-                    "history": history[:5],
-                }
-            )
-
-        entries.sort(key=lambda item: item["feeling"], reverse=True)
-        if limit > 0:
-            entries = entries[:limit]
-        return entries
+        return _rel_summary(
+            scholars=list(self.state.all_scholars()),
+            player_id=player.id,
+            get_active_mentorship=self.state.get_active_mentorship,
+            limit=limit,
+        )
 
     def _player_commitment_summary(
         self, player: Player, limit: int = 10
     ) -> List[Dict[str, object]]:
         commitments = self.state.list_player_commitments(player.id)
-        summary: List[Dict[str, object]] = []
-        for entry in commitments:
-            relationship = self._player_faction_relationship(
-                player,
-                entry.get("faction", ""),
-            )
-            summary.append(
-                {
-                    "id": entry.get("id"),
-                    "faction": entry.get("faction"),
-                    "tier": entry.get("tier"),
-                    "base_cost": entry.get("base_cost"),
-                    "start_at": entry.get("start_at"),
-                    "end_at": entry.get("end_at"),
-                    "status": entry.get("status"),
-                    "relationship_modifier": relationship,
-                    "last_processed_at": entry.get("last_processed_at"),
-                }
-            )
-        summary.sort(key=lambda item: item.get("end_at") or datetime.max)
-        if limit > 0:
-            summary = summary[:limit]
-        return summary
+        return _commit_summary(
+            commitments=commitments,
+            player=player,
+            relationship_fn=lambda p, f: self._player_faction_relationship(p, f),
+            limit=limit,
+        )
 
     def _player_investment_summary(self, player: Player) -> List[Dict[str, object]]:
         records = self.state.list_faction_investments(player.id)
