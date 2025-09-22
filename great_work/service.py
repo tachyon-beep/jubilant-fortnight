@@ -66,6 +66,15 @@ from .press import (
 )
 from .press_tone import get_tone_seed
 from .services.press import press_badges as _press_badges
+from .services.digest import (
+    upcoming_items_from_queue as _upcoming_items_from_queue,
+    format_digest_highlights as _format_digest_highlights,
+)
+from .services.orders import (
+    summarize_orders as _summarize_orders,
+    cancellation_summary as _order_cancellation_summary,
+    cancellation_notice as _order_cancellation_notice,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -444,24 +453,10 @@ class GameService:
         """Provide a snapshot of scheduled press due within the time horizon."""
 
         now = datetime.now(timezone.utc)
-        horizon = now + timedelta(hours=within_hours)
-        upcoming: List[Dict[str, object]] = []
-        for _, release_at, payload in self.state.list_queued_press():
-            if release_at > horizon:
-                continue
-            metadata = payload.get("metadata", {}) or {}
-            badges = self._press_badges(metadata)
-            upcoming.append(
-                {
-                    "headline": payload.get("headline", "Scheduled Update"),
-                    "type": payload.get("type", "scheduled_press"),
-                    "release_at": release_at,
-                    "metadata": metadata,
-                    "badges": badges,
-                }
-            )
-        upcoming.sort(key=lambda item: item["release_at"])
-        return upcoming[:limit]
+        queue = list(self.state.list_queued_press())
+        return _upcoming_items_from_queue(
+            queue, now=now, horizon_hours=within_hours, limit=limit
+        )
 
     def create_digest_highlights(
         self,
@@ -495,61 +490,9 @@ class GameService:
         tone_seed = get_tone_seed(
             "digest_highlight", getattr(self._multi_press, "setting", None)
         )
-        headline_template = None
-        callout = None
-        blurb_template = None
-        if tone_seed:
-            headline_template = tone_seed.get("headline")
-            callout = tone_seed.get("callout")
-            blurb_template = tone_seed.get("blurb_template")
-        headline = (
-            headline_template.format(count=len(items))
-            if headline_template
-            else f"Upcoming Highlights ({len(items)})"
+        headline, base_body, metadata_items = _format_digest_highlights(
+            items, now=now, within_hours=within_hours, tone_seed=tone_seed
         )
-
-        lines: List[str] = []
-        metadata_items: List[Dict[str, object]] = []
-        for item in items:
-            release_at = item["release_at"]
-            delta_minutes = max(0, int((release_at - now).total_seconds() // 60))
-            if delta_minutes >= 60:
-                hours = delta_minutes // 60
-                minutes = delta_minutes % 60
-                relative = f"{hours}h {minutes}m"
-            else:
-                relative = f"{delta_minutes}m"
-            absolute = release_at.strftime("%Y-%m-%d %H:%M UTC")
-            metadata = item.get("metadata", {})
-            badges = self._press_badges(metadata)
-            label_prefix = f"[{" | ".join(badges)}] " if badges else ""
-            summary = f"{item['headline']} — {absolute} (in {relative})"
-            if blurb_template:
-                blurb = blurb_template.format(
-                    headline=item["headline"],
-                    relative_time=relative,
-                    call_to_action=callout or "",
-                )
-            else:
-                blurb = summary
-            if label_prefix:
-                blurb = f"{label_prefix}{blurb}"
-            lines.append(f"• {blurb}")
-            metadata_items.append(
-                {
-                    "headline": item["headline"],
-                    "type": item["type"],
-                    "release_at": release_at.isoformat(),
-                    "relative_minutes": delta_minutes,
-                    "badges": badges,
-                    "source": metadata.get("source"),
-                }
-            )
-
-        if callout:
-            lines.append(callout)
-
-        base_body = "\n".join(lines)
         release = PressRelease(
             type="digest_highlights",
             headline=headline,
@@ -5566,32 +5509,8 @@ class GameService:
     ) -> List[Dict[str, object]]:
         """Return dispatcher orders for moderator review."""
 
-        limit = max(1, min(limit, 50))
         orders = self.state.list_orders(order_type=order_type, status=status)
-        trimmed = orders[:limit]
-        summaries: List[Dict[str, object]] = []
-        for order in trimmed:
-            summaries.append(
-                {
-                    "id": order["id"],
-                    "order_type": order.get("order_type"),
-                    "status": order.get("status"),
-                    "actor_id": order.get("actor_id"),
-                    "subject_id": order.get("subject_id"),
-                    "scheduled_at": (
-                        order.get("scheduled_at").isoformat()
-                        if isinstance(order.get("scheduled_at"), datetime)
-                        else None
-                    ),
-                    "created_at": (
-                        order.get("created_at").isoformat()
-                        if isinstance(order.get("created_at"), datetime)
-                        else None
-                    ),
-                    "payload": order.get("payload", {}),
-                }
-            )
-        return summaries
+        return _summarize_orders(orders, limit=limit)
 
     def admin_cancel_order(
         self,
@@ -5616,17 +5535,8 @@ class GameService:
         if not updated:
             raise ValueError(f"Failed to cancel order {order_id}")
 
-        summary = {
-            "id": order_id,
-            "order_type": order.get("order_type"),
-            "actor_id": order.get("actor_id"),
-            "subject_id": order.get("subject_id"),
-            "reason": reason,
-        }
-
-        notice = f"🧾 Cancelled order #{order_id} ({summary['order_type']})" + (
-            f" – {reason}" if reason else ""
-        )
+        summary = _order_cancellation_summary(order, order_id=order_id, reason=reason)
+        notice = _order_cancellation_notice(summary)
         self._queue_admin_notification(notice)
         now = datetime.now(timezone.utc)
         self.state.append_event(
