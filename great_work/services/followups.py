@@ -36,6 +36,7 @@ def build_symposium_reminder_body(
 
 __all__ = ["build_symposium_reminder_body"]
 
+from typing import Dict, Any
 from ..models import PressRelease
 
 
@@ -74,3 +75,19 @@ def build_symposium_reprimand_press(
         },
     )
 
+
+# Simple follow-up message registry ------------------------------------------
+
+_FOLLOWUP_QUOTES = {
+    "evaluate_offer": "The negotiation deadline has arrived.",
+    "evaluate_counter": "The counter-offer awaits final resolution.",
+}
+
+
+def followup_quote(kind: str, payload: Dict[str, Any]) -> str:
+    """Return a default quote/message for a follow-up kind.
+
+    Payload is available for future handlers that want to format richer messages.
+    """
+
+    return _FOLLOWUP_QUOTES.get(kind, "An unresolved thread lingers in the archives.")

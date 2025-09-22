@@ -28,6 +28,7 @@ from .services.narrative import (
     generate_defection_layers as _mp_defection_layers,
     generate_symposium_layers as _mp_symposium_layers,
     generate_sidecast_layers as _mp_sidecast_layers,
+    generate_defection_epilogue_layers as _mp_defection_epilogue_layers,
 )
 from .models import (
     ConfidenceLevel,
@@ -123,6 +124,7 @@ from .services.sideways import (
 from .services.followups import (
     build_symposium_reminder_body as _build_symp_reminder,
     build_symposium_reprimand_press as _build_symp_reprimand,
+    followup_quote as _followup_quote,
 )
 from .services.conferences import (
     compute_conference_outcome as _conf_compute_outcome,
@@ -6376,7 +6378,8 @@ class GameService:
                     or scholar.contract.get("employer", "Unknown")
                 )
 
-                layers = self._multi_press.generate_defection_epilogue_layers(
+                layers = _mp_defection_epilogue_layers(
+                    self._multi_press,
                     scenario=scenario,
                     scholar_name=scholar.name,
                     former_faction=former_name,
@@ -6557,7 +6560,7 @@ class GameService:
                         result={"resolution": "offer_negotiation"},
                     )
                     continue  # Skip the normal gossip generation
-                quote = "The negotiation deadline has arrived."
+                quote = _followup_quote(kind, payload)
             elif kind == "evaluate_counter":
                 # Resolve counter-offer negotiation
                 counter_offer_id = payload.get("counter_offer_id")
@@ -6569,9 +6572,9 @@ class GameService:
                         result={"resolution": "counter_negotiation"},
                     )
                     continue  # Skip the normal gossip generation
-                quote = "The counter-offer awaits final resolution."
+                quote = _followup_quote(kind, payload)
             else:
-                quote = "An unresolved thread lingers in the archives."
+                quote = _followup_quote(kind, payload)
             press = academic_gossip(
                 GossipContext(
                     scholar=scholar.name,

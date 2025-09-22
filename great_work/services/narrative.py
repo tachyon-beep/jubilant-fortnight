@@ -129,3 +129,20 @@ def generate_sidecast_layers(
         expedition_code=expedition_code,
     )
 
+
+def generate_defection_epilogue_layers(
+    multi: MultiPressGenerator,
+    *,
+    scenario: str,
+    scholar_name: str,
+    former_faction: str,
+    new_faction: str,
+    former_employer: str,
+):
+    return multi.generate_defection_epilogue_layers(
+        scenario=scenario,
+        scholar_name=scholar_name,
+        former_faction=former_faction,
+        new_faction=new_faction,
+        former_employer=former_employer,
+    )
