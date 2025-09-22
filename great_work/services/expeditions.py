@@ -12,6 +12,7 @@ from ..press import (
     discovery_report,
     retraction_notice,
 )
+from ..models import ExpeditionPreparation
 
 
 def make_manifesto(
@@ -57,3 +58,46 @@ def make_result_release(*, ctx: OutcomeContext) -> PressRelease:
 
 
 __all__ = ["make_manifesto", "make_result_release"]
+
+
+def summarize_preparation(preparation: ExpeditionPreparation):
+    """Summarize preparation bonuses/frictions into structured and text lists."""
+
+    mapping = (
+        ("think_tank_bonus", "Think tank modelling"),
+        ("expertise_bonus", "Field expertise"),
+        ("site_friction", "Site friction"),
+        ("political_friction", "Political currents"),
+    )
+    strengths = []
+    frictions = []
+    strengths_text = []
+    frictions_text = []
+
+    for attr, label in mapping:
+        value = getattr(preparation, attr, 0)
+        if value == 0:
+            continue
+        formatted = f"{label} {value:+d}"
+        entry = {"label": label, "value": value}
+        if attr in {"think_tank_bonus", "expertise_bonus"}:
+            if value > 0:
+                strengths.append(entry)
+                strengths_text.append(formatted)
+            else:
+                frictions.append(entry)
+                frictions_text.append(formatted)
+        else:
+            if value < 0:
+                frictions.append(entry)
+                frictions_text.append(formatted)
+            else:
+                strengths.append(entry)
+                strengths_text.append(formatted)
+
+    return {
+        "strengths": strengths,
+        "frictions": frictions,
+        "strengths_text": strengths_text,
+        "frictions_text": frictions_text,
+    }

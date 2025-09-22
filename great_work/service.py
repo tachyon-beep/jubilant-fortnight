@@ -87,6 +87,7 @@ from .services.defection import (
 from .services.expeditions import (
     make_manifesto as _make_manifesto,
     make_result_release as _make_result_release,
+    summarize_preparation as _summarize_preparation,
 )
 from .services.moderation import (
     compute_text_hash as _mod_text_hash,
@@ -6768,47 +6769,8 @@ class GameService:
         for faction, amount in rewards.items():
             self._apply_influence_change(player, faction, amount)
 
-    def _summarize_preparation(
-        self, preparation: ExpeditionPreparation
-    ) -> Dict[str, Any]:
-        mapping = (
-            ("think_tank_bonus", "Think tank modelling"),
-            ("expertise_bonus", "Field expertise"),
-            ("site_friction", "Site friction"),
-            ("political_friction", "Political currents"),
-        )
-        strengths: List[Dict[str, object]] = []
-        frictions: List[Dict[str, object]] = []
-        strengths_text: List[str] = []
-        frictions_text: List[str] = []
-
-        for attr, label in mapping:
-            value = getattr(preparation, attr, 0)
-            if value == 0:
-                continue
-            formatted = f"{label} {value:+d}"
-            entry = {"label": label, "value": value}
-            if attr in {"think_tank_bonus", "expertise_bonus"}:
-                if value > 0:
-                    strengths.append(entry)
-                    strengths_text.append(formatted)
-                else:
-                    frictions.append(entry)
-                    frictions_text.append(formatted)
-            else:
-                if value < 0:
-                    frictions.append(entry)
-                    frictions_text.append(formatted)
-                else:
-                    strengths.append(entry)
-                    strengths_text.append(formatted)
-
-        return {
-            "strengths": strengths,
-            "frictions": frictions,
-            "strengths_text": strengths_text,
-            "frictions_text": frictions_text,
-        }
+    def _summarize_preparation(self, preparation: ExpeditionPreparation) -> Dict[str, Any]:
+        return _summarize_preparation(preparation)
 
     def _team_member_names(self, team: List[str]) -> List[str]:
         names: List[str] = []
