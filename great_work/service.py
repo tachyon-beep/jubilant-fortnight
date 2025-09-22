@@ -125,6 +125,7 @@ from .services.followups import (
     build_symposium_reminder_body as _build_symp_reminder,
     build_symposium_reprimand_press as _build_symp_reprimand,
     followup_quote as _followup_quote,
+    dispatch_followup as _dispatch_followup,
 )
 from .services.conferences import (
     compute_conference_outcome as _conf_compute_outcome,
@@ -6293,6 +6294,11 @@ class GameService:
         releases: List[PressRelease] = []
         now = datetime.now(timezone.utc)
         for followup_id, scholar_id, kind, payload in self.state.due_followups(now):
+            # Registry-based dispatch: if handled, skip legacy branches
+            handled = _dispatch_followup(self, now, followup_id, scholar_id, kind, payload)
+            if handled is not None:
+                releases.extend(handled)
+                continue
             if kind == "symposium_reprimand":
                 player_record = self.state.get_player(scholar_id)
                 display_name = payload.get("display_name") or (
