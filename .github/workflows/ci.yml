@@ -55,7 +55,4 @@ jobs:
         with:
           api-token: ${{ secrets.CODACY_API_TOKEN }}
           coverage-reports: coverage.xml
-          organization-provider: gh
-          username: ${{ github.repository_owner }}
-          project-name: ${{ github.event.repository.name }}
         continue-on-error: true

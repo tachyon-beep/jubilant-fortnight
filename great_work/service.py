@@ -65,6 +65,7 @@ from .press import (
     seasonal_commitment_update,
 )
 from .press_tone import get_tone_seed
+from .services.press import press_badges as _press_badges
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -590,20 +591,9 @@ class GameService:
 
     @staticmethod
     def _press_badges(metadata: Dict[str, object]) -> List[str]:
-        """Derive descriptive badges for scheduled press metadata."""
+        """Compatibility shim; delegates to services.press.press_badges."""
 
-        if not isinstance(metadata, dict):
-            return []
-        badges: List[str] = []
-        source = metadata.get("source")
-        if source == "sideways_followup":
-            badges.append("Follow-Up")
-        tags = metadata.get("tags")
-        if isinstance(tags, (list, tuple)):
-            badges.extend(str(tag) for tag in tags if tag)
-        elif isinstance(tags, str) and tags:
-            badges.append(tags)
-        return badges
+        return _press_badges(metadata)
 
     def _ensure_not_paused(self) -> None:
         if self._paused:
