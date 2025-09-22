@@ -89,6 +89,7 @@ from .services.expeditions import (
     make_result_release as _make_result_release,
     summarize_preparation as _summarize_preparation,
 )
+from .services.relationships import faction_sentiments as _faction_sentiments
 from .services.moderation import (
     compute_text_hash as _mod_text_hash,
     snippet as _mod_snippet,
@@ -7304,25 +7305,7 @@ class GameService:
         return max(-0.25, min(0.25, modifier))
 
     def _player_faction_sentiments(self, player: Player) -> Dict[str, Dict[str, float]]:
-        aggregates: Dict[str, Dict[str, float]] = {}
-        for scholar in self.state.all_scholars():
-            feeling = scholar.memory.feelings.get(player.id)
-            if feeling is None:
-                continue
-            faction = (scholar.contract.get("faction") or "unaligned").lower()
-            entry = aggregates.setdefault(faction, {"total": 0.0, "count": 0})
-            entry["total"] += feeling
-            entry["count"] += 1
-
-        sentiments: Dict[str, Dict[str, float]] = {}
-        for faction, payload in aggregates.items():
-            count = payload["count"] or 1
-            average = payload["total"] / count
-            sentiments[faction] = {
-                "average": average,
-                "count": payload["count"],
-            }
-        return sentiments
+        return _faction_sentiments(self.state.all_scholars(), player_id=player.id)
 
     def _player_relationship_summary(
         self, player: Player, limit: int = 5
