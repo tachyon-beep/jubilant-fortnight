@@ -79,6 +79,11 @@ from .services.recruitment import (
     compute_recruitment_chance as _compute_recruitment_chance_svc,
     relationship_bonus as _relationship_bonus_svc,
 )
+from .services.defection import (
+    adjusted_defection_probability as _adjusted_defection_probability,
+    choose_outcome as _choose_defection_outcome,
+    offer_acceptance_probability as _offer_acceptance_probability,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -1864,18 +1869,23 @@ class GameService:
             scholar, scholar.contract.get("employer", "") or ""
         )
         relationship_effect = -relationship["total"]
-        probability = defection_probability(
-            scholar, offer_quality, mistreatment, alignment, plateau
+        probability = _adjusted_defection_probability(
+            scholar,
+            offer_quality=offer_quality,
+            mistreatment=mistreatment,
+            alignment=alignment,
+            plateau=plateau,
+            relationship_effect=relationship_effect,
         )
-        probability = self._clamp_probability(probability + relationship_effect)
-        roll = self._rng.uniform(0.0, 1.0)
+        roll, outcome = _choose_defection_outcome(
+            probability, random_uniform=self._rng.uniform
+        )
         timestamp = datetime.now(timezone.utc)
         former_employer = scholar.contract.get("employer", "their patron")
-        if roll < probability:
+        if outcome == "defected":
             apply_scar(scholar, "defection", former_employer, timestamp)
             scholar.contract["employer"] = new_faction
             scholar.memory.adjust_feeling(former_employer, -4.0)
-            outcome = "defected"
             press = defection_notice(
                 DefectionContext(
                     scholar=scholar.name,
@@ -1897,7 +1907,6 @@ class GameService:
             )
         else:
             scholar.memory.adjust_feeling(new_faction, -2.0)
-            outcome = "refused"
             press = defection_notice(
                 DefectionContext(
                     scholar=scholar.name,
@@ -2286,58 +2295,16 @@ class GameService:
         if not scholar:
             raise ValueError(f"Scholar {offer.scholar_id} not found")
 
-        # Base probability from offer quality (influence amount)
-        total_influence = sum(offer.influence_offered.values())
-        offer_quality = min(10.0, total_influence / 10.0)  # Scale to 0-10
-
         # Relationship adjustments from mentorship/sidecasts and feelings
         rival_relationship = self._relationship_bonus(scholar, offer.rival_id)
         patron_relationship = self._relationship_bonus(scholar, offer.patron_id)
 
         rival_feeling = scholar.memory.feelings.get(offer.rival_id, 0.0)
         patron_feeling = scholar.memory.feelings.get(offer.patron_id, 0.0)
-
-        # Mistreatment factor (negative feelings toward current patron)
-        mistreatment = max(0.0, -patron_feeling) / 5.0  # Scale negative feelings
-
-        # Alignment factor (positive feelings toward rival)
-        alignment = max(0.0, rival_feeling) / 5.0
-
-        # Check for plateau (no recent discoveries)
-        recent_discoveries = [
-            fact
-            for fact in scholar.memory.facts
-            if fact.kind == "discovery"
-            and (datetime.now(timezone.utc) - fact.when).days < 90
-        ]
-        plateau = 0.0 if recent_discoveries else 0.2
-
-        # Use existing defection probability calculation
-        from .scholars import defection_probability
-
-        probability = defection_probability(
-            scholar, offer_quality, mistreatment, alignment, plateau
-        )
-
-        # Apply relationship bonuses: rival increases, patron decreases
+        probability = _offer_acceptance_probability(offer, scholar, now=datetime.now(timezone.utc))
         probability += rival_relationship["total"]
         probability -= patron_relationship["total"]
-
-        # Adjust for contract terms
-        if "exclusive_research" in offer.terms:
-            probability += 0.1
-        if "guaranteed_funding" in offer.terms:
-            probability += 0.15
-        if "leadership_role" in offer.terms:
-            probability += 0.2
-
-        # Adjust for offer type (counters have slight advantage)
-        if offer.offer_type == "counter":
-            probability -= 0.1  # Loyalty bonus to current patron
-
-        probability = self._clamp_probability(probability)
-
-        return probability
+        return self._clamp_probability(probability)
 
     def resolve_offer_negotiation(
         self,
