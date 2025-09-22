@@ -94,6 +94,11 @@ from .services.moderation import (
     blocked_note as _mod_blocked_note,
     build_moderation_event as _mod_event,
 )
+from .services.symposium import (
+    compute_winner as _symp_compute_winner,
+    build_announcement_body as _symp_build_announcement_body,
+    build_resolution_body as _symp_build_resolution_body,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -3598,27 +3603,15 @@ class GameService:
         grace_misses = self.settings.symposium_grace_misses
         grace_window_days = self.settings.symposium_grace_window_days
 
-        body_lines = [
-            f"The Academy announces this week's symposium topic: {topic}",
-            "",
-            description,
-            "",
-            "Cast your votes with /symposium_vote:",
-            "Option 1: Support the proposition",
-            "Option 2: Oppose the proposition",
-            "Option 3: Call for further study",
-            "",
-            (
-                f"Silent scholars risk forfeiting {pledge_base} influence plus 1 per consecutive miss "
-                f"(up to {pledge_base + pledge_cap})."
-            ),
-            (
-                f"Everyone receives {grace_misses} grace miss per {grace_window_days}-day window; "
-                "voting refreshes your grace."
-            ),
-        ]
-        if proposer_display:
-            body_lines.insert(1, f"Proposed by {proposer_display}.")
+        body_lines = _symp_build_announcement_body(
+            topic=topic,
+            description=description,
+            proposer_display=proposer_display,
+            pledge_base=pledge_base,
+            pledge_cap=pledge_cap,
+            grace_misses=grace_misses,
+            grace_window_days=grace_window_days,
+        )
         pending_count = self.state.count_pending_symposium_proposals(now=now)
         total_pledged = sum(data["amount"] for data in pledges.values())
         slots_remaining = max(0, self.settings.symposium_max_backlog - pending_count)
@@ -3843,19 +3836,7 @@ class GameService:
         votes = self.state.get_symposium_votes(topic_id)
 
         # Determine winner
-        if not votes:
-            winner_text = "No consensus (no votes received)"
-            winner = "none"
-        else:
-            winner_option = max(votes.keys(), key=lambda x: votes.get(x, 0))
-            winner_count = votes[winner_option]
-            total_votes = sum(votes.values())
-            winner_text = {
-                1: f"The proposition is supported ({winner_count}/{total_votes} votes)",
-                2: f"The proposition is opposed ({winner_count}/{total_votes} votes)",
-                3: f"Further study is required ({winner_count}/{total_votes} votes)",
-            }[winner_option]
-            winner = str(winner_option)
+        winner, winner_text = _symp_compute_winner(votes)
 
         # Resolve the topic
         self.state.resolve_symposium_topic(topic_id, winner)
@@ -3905,39 +3886,12 @@ class GameService:
                     )
 
         non_voters = [player.display_name for player in non_voter_players]
-        body_lines = [
-            f"The symposium on '{topic}' has concluded.",
-            "",
-            f"Result: {winner_text}",
-            "",
-            "The Academy thanks all participants for their thoughtful contributions.",
-        ]
-        if non_voters:
-            body_lines.append("")
-            body_lines.append(
-                "Outstanding responses required from: " + ", ".join(non_voters)
-            )
-        if penalty_records:
-            body_lines.append("")
-            body_lines.append("Participation stakes:")
-            for record in penalty_records:
-                if record["status"] == "waived":
-                    body_lines.append(
-                        f"- {record['display_name']} invoked grace; no influence forfeited."
-                    )
-                elif record["deducted"] > 0 and record["faction"]:
-                    body_lines.append(
-                        f"- {record['display_name']} forfeits {record['deducted']} {record['faction']} influence."
-                    )
-                else:
-                    body_lines.append(
-                        f"- {record['display_name']} lacked influence to cover the {record['pledge_amount']} pledge."
-                    )
-                remaining = record.get("remaining_debt", 0)
-                if remaining:
-                    body_lines.append(
-                        f"  Outstanding debt recorded: {remaining} influence."
-                    )
+        body_lines = _symp_build_resolution_body(
+            topic=topic,
+            winner_text=winner_text,
+            non_voters=non_voter_players and [p.display_name for p in non_voter_players] or [],
+            penalty_records=penalty_records,
+        )
         forfeited_total = sum(
             record.get("deducted", 0)
             for record in penalty_records
