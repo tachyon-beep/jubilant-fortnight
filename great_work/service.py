@@ -111,6 +111,11 @@ from .services.followups import (
     build_symposium_reminder_body as _build_symp_reminder,
     build_symposium_reprimand_press as _build_symp_reprimand,
 )
+from .services.conferences import (
+    compute_conference_outcome as _conf_compute_outcome,
+    build_conference_announcement_press as _conf_build_announcement,
+    build_conference_resolution_press as _conf_build_resolution,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -3014,13 +3019,8 @@ class GameService:
         )
 
         # Generate press release
-        quote = f"Conference {code} announced to debate: {theory.theory}"
-        press = academic_gossip(
-            GossipContext(
-                scholar=player.display_name,
-                quote=quote,
-                trigger=f"Conference on theory #{theory_id}",
-            )
+        press = _conf_build_announcement(
+            player_display=player.display_name, code=code, theory_text=theory.theory
         )
 
         now = datetime.now(timezone.utc)
@@ -3088,16 +3088,9 @@ class GameService:
             confidence = ConfidenceLevel(confidence_str)
 
             base_roll = self._rng.randint(1, 100)
-            support_modifier = len(supporters) * 5
-            opposition_modifier = len(opposition) * 5
-            final_roll = base_roll + support_modifier - opposition_modifier
-
-            if final_roll >= 60:
-                outcome = ExpeditionOutcome.SUCCESS
-            elif final_roll >= 40:
-                outcome = ExpeditionOutcome.PARTIAL
-            else:
-                outcome = ExpeditionOutcome.FAILURE
+            outcome, final_roll, support_modifier, opposition_modifier = _conf_compute_outcome(
+                base_roll, supporters=len(supporters), opposition=len(opposition)
+            )
 
             reputation_delta = self._confidence_delta(confidence, outcome)
             player.adjust_reputation(
@@ -3119,19 +3112,8 @@ class GameService:
                 },
             )
 
-            outcome_text = {
-                ExpeditionOutcome.SUCCESS: "The conference concluded with resounding support for the theory",
-                ExpeditionOutcome.PARTIAL: "The conference ended with mixed opinions",
-                ExpeditionOutcome.FAILURE: "The conference thoroughly rejected the theory",
-            }[outcome]
-
-            quote = f"Conference {code} result: {outcome_text}. Reputation change: {reputation_delta:+d}"
-            press = academic_gossip(
-                GossipContext(
-                    scholar="The Academy",
-                    quote=quote,
-                    trigger=f"Conference {code} resolution",
-                )
+            press = _conf_build_resolution(
+                code=code, outcome=outcome, reputation_delta=reputation_delta
             )
 
             releases.append(press)
