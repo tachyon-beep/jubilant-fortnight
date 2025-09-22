@@ -107,6 +107,7 @@ from .services.sideways import (
     build_reputation_shift_press as _build_reputation_shift_press,
     build_opportunity_press as _build_opportunity_press,
 )
+from .services.followups import build_symposium_reminder_body as _build_symp_reminder
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -6718,22 +6719,13 @@ class GameService:
                 int(participation.get("grace_miss_consumed", 0)) if participation else 0
             )
             grace_remaining = max(0, grace_limit - grace_used)
-            if reminder_level == "escalation":
-                body = (
-                    f"{player.display_name}, the Academy notes you have not yet cast a vote on "
-                    f"'{topic}'. Missing this symposium will forfeit {pledged_amount} influence. "
-                    "Use /symposium_vote before resolution to keep your pledge intact."
-                )
-            else:
-                if grace_remaining > 0:
-                    plural = "s" if grace_remaining != 1 else ""
-                    grace_text = f"You have {grace_remaining} grace miss{plural} remaining; voting preserves it."
-                else:
-                    grace_text = f"You are out of grace—silence will cost {pledged_amount} influence."
-                body = (
-                    f"{player.display_name} is requested to cast a vote on '{topic}'. "
-                    f"{grace_text} Use /symposium_vote to weigh in."
-                )
+            body = _build_symp_reminder(
+                player_display=player.display_name,
+                topic=topic,
+                reminder_level=reminder_level,
+                pledged_amount=pledged_amount,
+                grace_remaining=grace_remaining,
+            )
 
             press = PressRelease(
                 type="symposium_reminder",
