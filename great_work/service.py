@@ -88,6 +88,12 @@ from .services.expeditions import (
     make_manifesto as _make_manifesto,
     make_result_release as _make_result_release,
 )
+from .services.moderation import (
+    compute_text_hash as _mod_text_hash,
+    snippet as _mod_snippet,
+    blocked_note as _mod_blocked_note,
+    build_moderation_event as _mod_event,
+)
 from .rng import DeterministicRNG
 from .scholars import ScholarRepository, apply_scar, defection_probability
 from .state import GameState
@@ -263,11 +269,15 @@ class GameService:
     ) -> None:
         detail = decision.reason or "Content blocked by moderation"
         actor_label = actor or "unknown actor"
-        text_hash = decision.text_hash or GuardianModerator.compute_hash(text)
-        snippet = text.strip().replace("\n", " ")[:140]
-        note = (
-            f"🛡️ Moderation blocked {surface} from {actor_label}: {detail}\n"
-            f'hash={text_hash[:12]} stage={stage} snippet="{snippet}"'
+        text_hash = decision.text_hash or _mod_text_hash(text)
+        snippet = _mod_snippet(text)
+        note = _mod_blocked_note(
+            surface=surface,
+            actor_label=actor_label,
+            detail=detail,
+            text_hash=text_hash,
+            short_text=snippet,
+            stage=stage,
         )
         self._queue_admin_notification(note)
         self._record_moderation_event(
@@ -303,21 +313,15 @@ class GameService:
         stage: str,
         text: str,
     ) -> None:
-        timestamp = datetime.now(timezone.utc)
-        snippet = text.strip().replace("\n", " ")[:140]
-        metadata = decision.metadata or {}
-        event = {
-            "timestamp": timestamp,
-            "severity": severity,
-            "surface": surface,
-            "actor": actor,
-            "stage": stage,
-            "category": decision.category,
-            "reason": decision.reason,
-            "text_hash": text_hash,
-            "metadata": metadata,
-            "snippet": snippet,
-        }
+        event = _mod_event(
+            severity=severity,
+            decision=decision,
+            text_hash=text_hash,
+            surface=surface,
+            actor=actor,
+            stage=stage,
+            text=text,
+        )
         self._moderation_log.appendleft(event)
         try:
             self._telemetry.track_moderation_event(
@@ -327,7 +331,7 @@ class GameService:
                 severity=severity,
                 actor=actor,
                 text_hash=text_hash,
-                source=metadata.get("source"),
+                source=(decision.metadata or {}).get("source"),
             )
         except Exception:  # pragma: no cover - telemetry failure should not block flow
             logger.debug(
